@@ -1,5 +1,5 @@
 import emblem from "./logo.png";
-import type { NationPack } from "../types";
+import { DEFAULT_TERRAIN_VARIANT, type NationPack } from "../types";
 
 export const nation = {
   id: "rina",
@@ -11,6 +11,7 @@ export const nation = {
   description: "东方山海间的青绿文明。",
   images: { emblem },
   modelSet: "rina",
+  terrainVariant: DEFAULT_TERRAIN_VARIANT,
   opening: {
     technologies: ["fishing"],
     unit: "warrior",

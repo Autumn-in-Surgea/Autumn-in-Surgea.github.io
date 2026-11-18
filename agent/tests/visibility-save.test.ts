@@ -8,6 +8,7 @@ import {
   runAiTurn,
 } from "../../src/game";
 import type {
+  Action,
   BuildingId,
   CivilizationId,
   GameState,
@@ -21,7 +22,8 @@ import {
   MAX_SAVE_BYTES,
   serializeGame,
 } from "../../src/store/save";
-import { addUnit, battlefield, newGame } from "./helpers";
+import { DEFAULT_TERRAIN_VARIANT } from "../../src/nations/registry";
+import { addCity, addUnit, battlefield, newGame } from "./helpers";
 
 describe("independent fog, stealth and resource discovery", () => {
   it("keeps other capitals and their units outside the initial human visibility", () => {
@@ -96,6 +98,55 @@ describe("version-two snapshot validation", () => {
     expect(restored).toEqual(game);
     expect(restored).not.toBe(game);
     expect(applyAction(restored, { type: "END_TURN" }).ok).toBe(true);
+  });
+  it("migrates missing terrain variants to the imperial pack regardless of tile owner", () => {
+    const game = newGame({ civilization: "rina" });
+    const snapshot = JSON.parse(serializeGame(game));
+    const city = game.cities[0];
+    const capitalId = city.y * game.options.size + city.x;
+    for (const tile of snapshot.game.tiles) delete tile.terrainVariant;
+
+    const restored = deserializeGame(JSON.stringify(snapshot));
+    expect(restored.players[0].civilization).toBe("rina");
+    expect(restored.tiles[capitalId].owner).toBe(0);
+    expect(restored.tiles.every((tile) => tile.terrainVariant === DEFAULT_TERRAIN_VARIANT)).toBe(true);
+  });
+  it.each(["neutral", "unknown", null, 42])("rejects an explicit invalid terrain variant (%s)", (terrainVariant) => {
+    const snapshot = JSON.parse(serializeGame(newGame()));
+    snapshot.game.tiles[0].terrainVariant = terrainVariant;
+    expect(() => deserializeGame(JSON.stringify(snapshot))).toThrow(/地块资产变体/);
+  });
+  it("preserves terrain variants through capture, new claims, terrain edits and save round-trips", () => {
+    let game = battlefield();
+    const town = addCity(game, 5, 5, 1);
+    const townId = town.y * game.options.size + town.x;
+    const fieldId = townId + 1;
+    const unclaimedId = townId - 1;
+    game.tiles[townId] = { ...game.tiles[townId], terrainVariant: "nosta" };
+    game.tiles[fieldId] = { ...game.tiles[fieldId], terrainVariant: "rina" };
+    game.tiles[unclaimedId] = { ...game.tiles[unclaimedId], terrainVariant: "determia", owner: null };
+    town.territory = town.territory.filter((id) => id !== unclaimedId);
+    game.round = 2;
+    const occupier = addUnit(game, 0, "warrior", town.x, town.y);
+    occupier.capturedTurn = 1;
+    const variants = game.tiles.map((tile) => tile.terrainVariant);
+    game = deserializeGame(serializeGame(game));
+    expect(game.tiles.map((tile) => tile.terrainVariant)).toEqual(variants);
+
+    function apply(action: Action) {
+      const result = applyAction(game, action);
+      expect(result.ok, result.error).toBe(true);
+      game = result.state;
+      expect(game.tiles.map((tile) => tile.terrainVariant)).toEqual(variants);
+    }
+    apply({ type: "CAPTURE", unitId: occupier.id });
+    expect(game.tiles[townId]).toMatchObject({ owner: 0, terrainVariant: "nosta" });
+    expect(game.tiles[unclaimedId]).toMatchObject({ owner: 0, terrainVariant: "determia" });
+    apply({ type: "GROW_FOREST", tileId: fieldId });
+    expect(game.tiles[fieldId]).toMatchObject({ terrain: "forest", terrainVariant: "rina" });
+    apply({ type: "CLEAR_FOREST", tileId: fieldId });
+    expect(game.tiles[fieldId]).toMatchObject({ terrain: "plain", terrainVariant: "rina" });
+    expect(deserializeGame(serializeGame(game))).toEqual(game);
   });
   it("rejects old rules, unknown formats and invalid JSON clearly", () => {
     expect(() => deserializeGame("not-json")).toThrow(/JSON/);

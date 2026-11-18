@@ -1,5 +1,5 @@
 import emblem from "./logo.png";
-import type { NationPack } from "../types";
+import { DEFAULT_TERRAIN_VARIANT, type NationPack } from "../types";
 
 export const nation = {
   id: "nosta",
@@ -11,6 +11,7 @@ export const nation = {
   description: "北方枯金的自治国度。",
   images: { emblem },
   modelSet: "nosta",
+  terrainVariant: DEFAULT_TERRAIN_VARIANT,
   opening: {
     technologies: [],
     unit: "warrior",

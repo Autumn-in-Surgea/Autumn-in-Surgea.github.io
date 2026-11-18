@@ -1,4 +1,5 @@
 import { UNITS } from "../data/config";
+import { DEFAULT_TERRAIN_VARIANT } from "../../nations/registry";
 import { distance, neighbors } from "../map/generate";
 import { getReachableTiles, getTerrainDefense } from "../rules/engine";
 import type { City, GameState, Tile, Unit } from "../types";
@@ -38,6 +39,7 @@ export function simulationState(s: GameState, k: Knowledge): GameState {
     ...k.view,
     tiles: s.tiles.map((t): Tile => k.known.has(t.id) ? t : {
       id: t.id, x: t.x, y: t.y, terrain: "plain", resource: null,
+      terrainVariant: DEFAULT_TERRAIN_VARIANT,
       owner: null, cityId: null, building: null, road: false, ruin: false,
     }),
     // Keep city bookkeeping for the rules victory check; removing unknown

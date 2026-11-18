@@ -1,21 +1,29 @@
 import type { BuildingId } from "../../../game/types";
 import { bridgeDeckHeight, type BuildingVisualTier } from "../../../scene/buildingVisualTier";
 import { Miniature } from "../../../scene/miniature";
+import { architecturalEnamel, brass, brick, cobalt, copper, ink as dark, ivory, masonry as stone, terracotta } from "../../../scene/architecturalPalette";
 
-const stone = "#d6c29c",
-  ivory = "#efe2bd",
-  foundation = "#8b8876";
-const brass = "#deb670",
-  bronze = "#9e8155",
-  timber = "#886047",
-  dark = "#415657";
-const copper = "#659488",
-  slate = "#516a68",
-  brick = "#af7156",
-  glass = "#72938b";
+const foundation = "#79838f";
+const bronze = "#ad7640";
+const timber = "#864635";
+const slate = "#394c69";
+const glass = "#63b8d2";
 // Land sculptures are drawn about this datum and placed flush on the tile when baked.
 const ground = 0.067;
 type Tier = BuildingVisualTier;
+const enlargement: Partial<Record<BuildingId, readonly [footprint: number, height: number]>> = {
+  farm: [1.18, 1.27],
+  lumberHut: [1.28, 1.30],
+  sawmill: [1.31, 1.25],
+  mine: [1.20, 1.19],
+  windmill: [1.37, 1.15],
+  forge: [1.41, 1.20],
+  market: [1.35, 1.17],
+  temple: [1.39, 1.20],
+  forestTemple: [1.26, 1.20],
+  mountainTemple: [1.31, 1.19],
+  waterTemple: [1.37, 1.20],
+};
 
 // Keep windows inset flush with two façades facing the camera. The projecting
 // eaves and truncated roof make even the small workshops read at board zoom.
@@ -69,13 +77,16 @@ function farm(m: Miniature, roof: string, tier: Tier) {
   const rows = tier + 3;
   for (let i = 0; i < rows; i++) {
     const x = -0.342 + i * 0.084;
-    cropDrill(m, x, -0.175 + 0.011 * i, 0.239 + i * 0.014, i % 2 ? "#cda654" : "#dabb68");
+    cropDrill(m, x, -0.175 + 0.011 * i, 0.239 + i * 0.014, i % 2 ? "#dda746" : "#f0c16b");
   }
-  grainSilo(m, 0.156, -0.083, 0.100 + tier*0.053, 0.110, roof);
+  // A red barn anchors the drills and silo even before the farm expands.
+  hall(m, 0.193, -0.218, 0.193 + tier * 0.016, 0.122, 0.102 + tier * 0.025, terracotta);
+  m.box(roof, 0.193, ground + 0.066, -0.154, 0.065, 0.093, 0.010);
+  grainSilo(m, 0.156, -0.037, 0.154 + tier * 0.04, 0.122, cobalt);
   if (tier >= 2) hall(m, -0.120, -0.233, 0.203, 0.103, 0.145, roof);
   if (tier === 3) {
-    grainSilo(m, 0.287, -0.102, 0.187, 0.102, copper);
-    m.beam(bronze, [0.156,0.312,-0.083], [0.287,0.247,-0.102], 0.021);
+    grainSilo(m, 0.287, -0.048, 0.208, 0.102, copper);
+    m.beam(bronze, [0.156,0.352,-0.037], [0.287,0.27,-0.048], 0.021);
     hall(m, 0.249, 0.100, 0.131, 0.092, 0.082, slate);
   }
 }
@@ -88,16 +99,16 @@ function wheel(m: Miniature, x: number, y: number, z: number, size: number) {
       b = ((i + 1) * 2 * Math.PI) / count;
     const dx = Math.sin(a) * size,
       dy = Math.cos(a) * size;
-    m.beam(bronze, [x + dx, y + dy, z], [x + Math.sin(b) * size, y + Math.cos(b) * size, z], 0.022, 0.034);
-    if (i % 2 === 0) m.beam(timber, [x, y, z], [x + dx, y + dy, z], 0.016, 0.023);
+    m.beam(brass, [x + dx, y + dy, z], [x + Math.sin(b) * size, y + Math.cos(b) * size, z], 0.025, 0.034);
+    if (i % 2 === 0) m.beam(bronze, [x, y, z], [x + dx, y + dy, z], 0.019, 0.023);
   }
   m.part("octagon", brass, x, y, z + 0.014, size * 0.4, 0.043, size * 0.4, Math.PI / 2);
 }
 
 function tree(m: Miniature, x: number, z: number, size: number) {
   m.part("octagon", timber, x, ground + 0.09 * size, z, 0.051 * size, 0.18 * size, 0.051 * size);
-  m.part("crown", slate, x, ground + 0.22 * size, z, 0.19 * size, 0.19 * size, 0.18 * size);
-  m.part("crown", copper, x - 0.015 * size, ground + 0.307 * size, z - 0.011 * size, 0.146 * size, 0.12 * size, 0.141 * size);
+  m.part("crown", "#486157", x, ground + 0.22 * size, z, 0.19 * size, 0.19 * size, 0.18 * size);
+  m.part("crown", "#759887", x - 0.015 * size, ground + 0.307 * size, z - 0.011 * size, 0.146 * size, 0.12 * size, 0.141 * size);
 }
 
 function log(m: Miniature, x: number, y: number, z: number, d: number, length: number) {
@@ -118,14 +129,15 @@ function stump(m: Miniature, x: number, z: number, width: number, height: number
 
 function timberWorks(m: Miniature, roof: string, tier: Tier, mill: boolean) {
   const h = 0.09 + tier * 0.045 + (mill ? 0.03 : 0);
-  hall(m, -0.072, -0.063, 0.195 + tier * 0.038, 0.166, h, roof);
+  hall(m, -0.072, -0.047, 0.222 + tier * 0.036, 0.172, h, mill ? cobalt : terracotta);
+  m.box(roof, -0.073, ground + h * 0.79, 0.041, 0.112, 0.024, 0.011);
   const count = tier + 2;
   for (let i = 0; i < count; i++) {
     const x = 0.023 + i * 0.058;
     log(m, x,ground+0.032,0.164+(i%2)*0.012,0.064,0.216+(i%3)*0.013);
     if (tier > 1 && i > 0 && i < count-1) log(m, x-0.029,ground+0.085,0.162,0.059,0.224);
   }
-  if (mill) wheel(m, -0.129, ground+0.083+tier*0.021, 0.052, 0.069+tier*0.021);
+  if (mill) wheel(m, -0.136, ground+0.101+tier*0.021, 0.057, 0.084+tier*0.022);
   else {
     stump(m, 0.190, -0.049, 0.098, 0.047);
     stump(m, -0.115, 0.191, 0.072, 0.032);
@@ -168,13 +180,13 @@ function mine(m: Miniature, roof: string, tier: Tier) {
     m.face(rock[(i+2)%rock.length], [ledge[i],ledge[j],top]);
   }
   // The doorway projects from the cut. Its tie beams and ore seam stay legible at board zoom.
-  m.box(dark,-0.052,ground+0.066,0.123,0.128,0.132,0.035);
+  m.box(dark,-0.052,ground+0.077,0.123,0.145,0.154,0.035);
   for (const side of [-1,1]) {
-    m.box(timber,-0.054+side*0.080,ground+0.079,0.132,0.033,0.158,0.052);
+    m.box(timber,-0.054+side*0.090,ground+0.083,0.132,0.042,0.166,0.052);
     m.box(bronze,-0.054+side*0.044,ground+0.016,0.213,0.012,0.012,0.220);
   }
-  m.box(timber,-0.054,ground+0.157,0.134,0.210,0.030,0.063);
-  m.box(roof,-0.052,ground+0.158,0.167,0.051,0.020,0.006);
+  m.box(brass,-0.054,ground+0.169,0.134,0.248,0.041,0.063);
+  m.box(roof,-0.052,ground+0.170,0.168,0.085,0.027,0.007);
   for (const z of [0.114,0.164,0.214,0.264,0.314]) m.box(timber,-0.054,ground+0.006,z,0.136,0.012,0.022);
   m.beam("#c1a564",[-0.279,0.132,-0.027],[-0.216,0.177,0.067],0.012);
   m.beam("#d5b86f",[-0.216,0.177,0.067],[-0.167,0.207,0.089],0.010);
@@ -182,16 +194,14 @@ function mine(m: Miniature, roof: string, tier: Tier) {
     m.part("crown",foundation,x,ground+h/2,z,h*1.21,h,h);
     m.part("gem","#b8a16b",x+0.004,ground+h*0.73,z+0.004,h*0.69,h*0.68,h*0.60);
   }
-  if (tier >= 2) {
-    const h = tier === 2 ? 0.373 : 0.498;
-    for (const side of [-1, 1]) {
-      m.beam(dark, [0.165 + side * 0.071, ground+0.009, -0.16], [0.165 + side * 0.037, h, -0.121], 0.029);
-      m.beam(dark, [0.165 + side * 0.075, ground+0.009, 0.018], [0.165 + side * 0.037, h, -0.107], 0.029);
-    }
-    m.box(bronze, 0.165, h, -0.116, 0.164, 0.035, 0.12);
-    wheel(m, 0.165, h + 0.044, -0.077, 0.055);
-    m.part("hip", roof, 0.165, h + 0.129, -0.119, 0.195, 0.048, 0.151);
+  const h = 0.168 + tier * 0.113;
+  for (const side of [-1, 1]) {
+    m.beam(dark, [0.165 + side * 0.071, ground+0.014, -0.16], [0.165 + side * 0.044, h, -0.121], 0.034);
+    m.beam(brick, [0.165 + side * 0.079, ground+0.014, 0.018], [0.165 + side * 0.044, h, -0.107], 0.036);
   }
+  m.box(bronze, 0.165, h, -0.116, 0.171, 0.039, 0.126);
+  wheel(m, 0.165, h + 0.046, -0.077, 0.057);
+  if (tier >= 2) m.part("hip", terracotta, 0.165, h + 0.126, -0.119, 0.217, 0.052, 0.167);
   if (tier === 3) {
     hall(m, -0.135, -0.191, 0.217, 0.103, 0.197, copper);
     m.beam(bronze, [-0.046,0.269,-0.167],[0.165,0.543,-0.092],0.019);
@@ -206,7 +216,7 @@ function windmill(m: Miniature, roof: string, tier: Tier) {
     x = -0.027,
     z = -0.039;
   const hub = h + 0.018,
-    radius = 0.159 + tier * 0.019;
+    radius = 0.174 + tier * 0.019;
   m.part("octagon", ivory, x, ground + h / 2, z, 0.172, h, 0.172);
   m.part("disc", bronze, x, h * 0.64, z, 0.193, 0.022, 0.193);
   m.part("spire", roof, x, ground + h + 0.044, z, 0.214, 0.097, 0.214);
@@ -214,11 +224,11 @@ function windmill(m: Miniature, roof: string, tier: Tier) {
     const a = (i * Math.PI) / 2 + 0.33;
     m.box(timber, x + (Math.sin(a) * radius) / 2, hub + (Math.cos(a) * radius) / 2, 0.075, 0.022, radius, 0.023, 0, 0, -a);
     m.box(
-      stone,
+      ivory,
       x + Math.sin(a) * radius * 0.78 + Math.cos(a) * 0.019,
       hub + Math.cos(a) * radius * 0.78 - Math.sin(a) * 0.019,
       0.078,
-      0.06,
+      0.080,
       radius * 0.49,
       0.019,
       0,
@@ -237,8 +247,8 @@ function windmill(m: Miniature, roof: string, tier: Tier) {
 
 function forge(m: Miniature, roof: string, tier: Tier) {
   hall(m, -0.043, 0.022, 0.244 + tier * 0.026, 0.21, 0.1 + tier * 0.032, roof);
-  m.part("hip", brick, -0.045, ground+0.072, 0.148, 0.154, 0.144, 0.071);
-  m.box("#cf8050", -0.045, 0.121, 0.184, 0.082, 0.086, 0.009);
+  m.part("hip", terracotta, -0.045, ground+0.079, 0.148, 0.169, 0.158, 0.074);
+  m.box("#f89d3b", -0.045, 0.128, 0.186, 0.089, 0.092, 0.009);
   for (let i = 0; i < tier; i++) {
     const x = 0.136 - i * 0.15,
       h = 0.225 + tier * 0.095 - i * 0.048;
@@ -256,10 +266,11 @@ function forge(m: Miniature, roof: string, tier: Tier) {
 function market(m: Miniature, roof: string, tier: Tier, bazaar: boolean) {
   const width = 0.237 + tier * 0.046,
     h = 0.106 + tier * 0.053 + (bazaar ? 0.049 : 0);
-  hall(m, 0, -0.091, width, 0.154, h, roof);
+  hall(m, 0, -0.091, width, 0.154, h, bazaar ? "#75558a" : "#ac6643");
   const eave = h + 0.036;
   for (const side of [-1, 1]) m.box(bronze, side * width * 0.49, ground + (eave - ground) / 2, 0.166, 0.023, eave - ground, 0.024);
-  for (let i = 0; i < 5; i++) m.box(i % 2 ? ivory : roof, ((i - 2) * width) / 5, eave, 0.102, width / 5, 0.032, 0.171, 0.15);
+  for (let i = 0; i < 5; i++) m.box(i % 2 ? ivory : roof, ((i - 2) * width) / 5, eave, 0.102, width / 5, 0.034, 0.184, 0.15);
+  m.box(brass, 0, eave - 0.014, 0.193, width, 0.014, 0.013);
   m.box(timber, 0, 0.113, 0.145, width, 0.084, 0.086);
   if (tier >= 2)
     for (const side of [-1, 1]) {
@@ -285,19 +296,21 @@ function wharf(m: Miniature, x: number, z: number, w: number, d: number) {
 }
 
 function port(m: Miniature, roof: string, tier: Tier) {
-  wharf(m, 0, -0.071, 0.394 + tier * 0.103, 0.176);
-  wharf(m, -0.139 - tier * 0.032, 0.104, 0.114, 0.281 + tier * 0.023);
-  hall(m, 0.067, -0.071, 0.144 + tier * 0.026, 0.140, 0.096 + tier * 0.039, roof, 0.141);
+  wharf(m, 0, -0.071, 0.500 + tier * 0.115, 0.188);
+  wharf(m, -0.181 - tier * 0.029, 0.117, 0.128, 0.290 + tier * 0.036);
+  hall(m, 0.115, -0.059, 0.180 + tier * 0.028, 0.161, 0.126 + tier * 0.044, cobalt, 0.141);
+  m.box(roof, 0.116, 0.211 + tier * 0.039, 0.024, 0.114, 0.022, 0.013);
   if (tier === 1) {
-    m.part("octagon", bronze, -0.144, 0.216, -0.03, 0.034, 0.149, 0.034);
-    m.beam(timber, [-0.144, 0.28, -0.03], [-0.057, 0.3, 0.056], 0.022);
+    m.part("octagon", dark, -0.201, 0.253, -0.03, 0.055, 0.224, 0.055);
+    m.beam(brass, [-0.201, 0.353, -0.03], [-0.098, 0.396, 0.083], 0.032);
+    m.beam(dark, [-0.098, 0.396, 0.083], [-0.098, 0.290, 0.083], 0.012);
     return;
   }
-  const crane = tier === 3 ? 0.533 : 0.383;
+  const crane = tier === 3 ? 0.608 : 0.443;
   for (const side of [-1, 1]) {
     m.beam(dark, [-0.154 + side * 0.062, 0.141, -0.062], [-0.154 + side * 0.022, crane, -0.05], 0.028);
   }
-  m.beam(bronze, [-0.154, crane, -0.05], [0.015, crane + 0.061, 0.111], 0.036);
+  m.beam(brass, [-0.154, crane, -0.05], [0.015, crane + 0.061, 0.111], 0.039);
   m.beam(bronze, [-0.154, crane - 0.081, -0.05], [-0.01, crane + 0.049, 0.091], 0.016);
   m.beam(dark, [0.015, crane + 0.061, 0.111], [0.015, crane - 0.11, 0.111], 0.012);
   m.box(timber, 0.015, crane - 0.135, 0.111, 0.058, 0.046, 0.061);
@@ -350,6 +363,7 @@ function temple(m: Miniature, roof: string, tier: Tier, type: BuildingId) {
     d = 0.219 + 0.034 * tier,
     h = 0.18 + 0.048 * tier;
   const water = type === "waterTemple";
+  const tile = water ? cobalt : type === "forestTemple" ? "#bf8636" : terracotta;
   for (const side of [-1, 1])
     for (let i = 0; i < tier + 1; i++) {
       const x = w * (i / tier - 0.5) * 0.84, z = side * d * 0.39;
@@ -368,8 +382,9 @@ function temple(m: Miniature, roof: string, tier: Tier, type: BuildingId) {
   const statueFoot = ground + (water ? 0.055 : 0);
   m.part("octagon", stone,0,(statueFoot+0.132)/2,0,0.096,0.132-statueFoot,0.096);
   m.box(bronze, 0, 0.13 + h, 0, w + 0.034, 0.034, d + 0.046);
-  m.part("hip", roof, 0, 0.181 + h, 0, w + 0.067, 0.08, d + 0.073);
-  m.part("gem", brass, 0, 0.188, 0, 0.082, 0.132, 0.082);
+  m.part("hip", tile, 0, 0.186 + h, 0, w + 0.076, 0.091, d + 0.081);
+  m.box(roof, 0, 0.139 + h, (d + 0.051) / 2, 0.133, 0.022, 0.011);
+  m.part("gem", brass, 0, 0.200, 0, 0.095, 0.156, 0.095);
   if (type === "forestTemple") {
     tree(m, w / 2 + 0.024, -0.014, 0.91 + tier * 0.074);
     if (tier >= 2) tree(m, -w / 2 - 0.005, 0.131, 0.7);
@@ -416,9 +431,10 @@ function monument(m: Miniature, roof: string, tier: Tier, type: BuildingId) {
     case "emperorTomb":
       for (let i = 0; i <= tier; i++) {
         const w = 0.387 + tier * 0.049 - i * 0.073;
-        m.part("hip", i % 2 ? stone : foundation, 0, ground+0.0465 + i * 0.081, 0, w, 0.093, w * 0.78);
+        m.part("hip", i % 2 ? stone : "#b88860", 0, ground+0.0465 + i * 0.081, 0, w, 0.093, w * 0.78);
         m.box(ivory, 0, 0.156 + i * 0.081, 0, w * 0.73, 0.02, w * 0.59);
       }
+      m.box(dark, 0, 0.119, 0.13 + tier * 0.016, 0.134, 0.091, 0.028);
       m.box(roof,0,0.123,0.127+tier*0.018,0.092,0.069,0.032);
       if (tier >= 2) lantern(m, 0, 0.173 + tier * 0.081, 0, 0.107 + tier * 0.015, roof);
       break;
@@ -457,10 +473,15 @@ function monument(m: Miniature, roof: string, tier: Tier, type: BuildingId) {
       if (tier === 3) lantern(m, 0, ground + h + 0.091, 0, 0.106, copper);
       break;
     }
-    case "parkOfFortune":
+    case "parkOfFortune": {
       tree(m, -0.082, -0.063, 0.78 + tier * 0.162);
-      m.part("disc", roof, 0.094, ground+0.03, 0.086, 0.14 + tier * 0.039, 0.06, 0.14 + tier * 0.039);
-      m.part("disc", glass, 0.094, 0.129, 0.086, 0.108 + tier * 0.039, 0.014, 0.108 + tier * 0.039);
+      // The frontage is a broad, colour-banded fountain with a glazed blue basin.
+      const basin = 0.175 + tier * 0.045;
+      m.part("disc", ivory, 0.094, ground+0.026, 0.086, basin, 0.052, basin);
+      m.part("disc", roof, 0.094, ground+0.049, 0.086, basin * 1.02, 0.022, basin * 1.02);
+      m.part("disc", glass, 0.094, ground+0.064, 0.086, basin * 0.85, 0.014, basin * 0.85);
+      m.part("octagon", ivory, 0.094, ground+0.095, 0.086, 0.044, 0.060, 0.044);
+      m.part("gem", glass, 0.094, ground+0.151, 0.086, 0.048, 0.085, 0.048);
       if (tier >= 2) {
         tree(m, 0.156, -0.158, 0.87);
         m.part("octagon", stone, 0.094, 0.164, 0.086, 0.035, 0.07, 0.035);
@@ -471,6 +492,7 @@ function monument(m: Miniature, roof: string, tier: Tier, type: BuildingId) {
         m.part("hip", roof, -0.176, 0.274, 0.13, 0.217, 0.073, 0.22);
       }
       break;
+    }
     case "towerOfWisdom":
       for (let i = 0; i < tier + 1; i++) {
         const w = 0.193 + tier * 0.044 - i * 0.037,
@@ -484,8 +506,9 @@ function monument(m: Miniature, roof: string, tier: Tier, type: BuildingId) {
   }
 }
 
-export function danubianBuilding(type: BuildingId, roof: string, tier: Tier) {
+export function danubianBuilding(type: BuildingId, color: string, tier: Tier) {
   const m = new Miniature();
+  const roof = architecturalEnamel(color);
   switch (type) {
     case "farm":
       farm(m, roof, tier);
@@ -525,5 +548,7 @@ export function danubianBuilding(type: BuildingId, roof: string, tier: Tier) {
   const geometry = m.finish();
   // Marine piers and the shore-fitted bridge already use the waterline as zero.
   if (type === "port" || type === "bridge") return geometry;
-  return geometry.translate(0, -ground, 0);
+  const [footprint, height] = enlargement[type] ?? [1, 1.19];
+  // Monuments share footprints with their shore-matched foundations.
+  return geometry.translate(0, -ground, 0).scale(footprint, height, footprint);
 }

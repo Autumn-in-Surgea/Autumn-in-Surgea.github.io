@@ -4,6 +4,28 @@ import { terrainInlay } from "../../src/scene/TerrainInlays";
 import { Mesh, MeshBasicMaterial, Raycaster, Vector3 } from "three";
 import { tileCap, tilePlinth } from "../../src/scene/BoardFrame";
 import { developedLandscape, grove, mountain, resourceModel, siteLandscape } from "../../src/scene/landscape";
+import { getTerrainAssets } from "../../src/nations/models";
+import { DEFAULT_TERRAIN_VARIANT, NATIONS } from "../../src/nations/registry";
+
+it("resolves each configured tile variant to a complete terrain asset pack", () => {
+  const imperial = getTerrainAssets(DEFAULT_TERRAIN_VARIANT);
+  expect(imperial.details.forest).toBe(grove);
+  expect(imperial.details.mountain).toBe(mountain);
+  expect(imperial.developed).toBe(developedLandscape);
+  expect(imperial.resource).toBe(resourceModel);
+  for (const nation of NATIONS) {
+    const assets = getTerrainAssets(nation.terrainVariant);
+    for (const terrain of ["plain", "forest", "mountain", "shallow", "deep"] as const) {
+      const shell = assets.shells[terrain];
+      expect(shell.cap.getAttribute("position").count).toBeGreaterThan(0);
+      expect(shell.plinth.getAttribute("position").count).toBeGreaterThan(0);
+      expect(shell.color).toBeTruthy();
+      expect(shell.plinthColor).toBeTruthy();
+    }
+    expect(assets.ruin).toBeTypeOf("function");
+    expect(assets.lighthouse).toBeTypeOf("function");
+  }
+});
 
 describe("carved terrain tiles", () => {
   it("keeps the cap pickable across its full playing face and bevel", () => {

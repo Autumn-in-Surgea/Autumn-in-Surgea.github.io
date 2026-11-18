@@ -21,8 +21,8 @@ export default defineConfig({
         start_url: "./",
         scope: "./",
         display: "standalone",
-        background_color: "#d5dcd6",
-        theme_color: "#254d5a",
+        background_color: "#101f32",
+        theme_color: "#101f32",
         categories: ["games", "strategy"],
         icons: [
           {

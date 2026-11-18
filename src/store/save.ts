@@ -6,6 +6,7 @@ import {
   UNITS,
 } from "../game/data/config";
 import type { EventNotice, GameState, UnitType } from "../game/types";
+import { DEFAULT_TERRAIN_VARIANT, getNation } from "../nations/registry";
 
 export const MAX_SAVE_BYTES = 8_000_000;
 const civilizationIds = new Set([
@@ -339,6 +340,8 @@ export function deserializeGame(raw: string): GameState {
         (tile.resource === null || oneOf(tile.resource, resources)),
       "地形或资源",
     );
+    if (!Object.hasOwn(tile, "terrainVariant")) tile.terrainVariant = DEFAULT_TERRAIN_VARIANT;
+    check(text(tile.terrainVariant) && getNation(tile.terrainVariant), "地块资产变体");
     check(
       owner(tile.owner) &&
         (tile.cityId === null || text(tile.cityId)) &&

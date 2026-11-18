@@ -54,6 +54,11 @@ describe("Danubian cities", () => {
       if (level >= 5) expect(max.x - min.x).toBeGreaterThan(0.93);
       expect(Math.max(-min.x, -min.z, max.x, max.z)).toBeLessThan(0.50);
       expect(geometry.getAttribute("color").count).toBe(geometry.getAttribute("position").count);
+      const fortified = MODEL_SETS.danubian.city("#705868", level, true, true);
+      fortified.computeBoundingBox();
+      const { min: wallMin, max: wallMax } = fortified.boundingBox!;
+      expect(Math.max(-wallMin.x, -wallMin.z, wallMax.x, wallMax.z)).toBeLessThan(0.5);
+      fortified.dispose();
       previousHeight = max.y;
       previousWidth = max.x - min.x;
       geometry.dispose();

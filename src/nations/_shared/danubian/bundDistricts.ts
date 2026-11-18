@@ -1,16 +1,10 @@
 import { Miniature } from "../../../scene/miniature";
 import { facade, cityStreetDatum as pavement } from "./cityMasonry";
+import { brick, cobalt as slate, copper, ink as glass, ivory as cream, masonry as limestone, terracotta } from "../../../scene/architecturalPalette";
 
-const limestone = "#d9cbb0";
-const sandstone = "#c2a788";
-const brick = "#ac715c";
-const paleBrick = "#cf9778";
-const cream = "#ede0bf";
-const terracotta = "#9e5747";
-const slate = "#515e65";
-const copper = "#528779";
-const bronze = "#b4935f";
-const glass = "#405559";
+const sandstone = "#d0a37b";
+const paleBrick = "#df9c83";
+const bronze = "#c99a4c";
 type Point = [number, number, number];
 
 // Ridged terrace roofs meet above the party walls. Turn both slopes together
@@ -228,7 +222,7 @@ function commercialBlock(m: Miniature, x: number, z: number, w: number, d: numbe
       return [x+along, y+rise*Math.sin(a), z+span*0.5*Math.cos(a)];
     };
     for (let i = 0; i < panels; i++)
-      m.face(i < 2 || i > 4 ? copper : "#8caaac",
+      m.face(i < 2 || i > 4 ? copper : "#83b9c6",
         [rib(-length/2,i), rib(length/2,i), rib(length/2,i+1), rib(-length/2,i+1)]);
     const endFace: Point[] = [];
     for (let i = panels; i >= 0; i--) endFace.push(rib(length/2+0.001,i));
@@ -340,7 +334,7 @@ function shippingExchange(m: Miniature, x: number, z: number) {
   for (let floor = 0; floor < 3; floor++) {
     const y = shoulder + floor*0.061, width = 1-floor*0.14;
     masonryCourse(m, outline, x, z, y, y+0.010, width, cream);
-    masonryCourse(m, outline, x, z, y+0.010, y+0.061, width-0.07, "#778e8e", 1);
+    masonryCourse(m, outline, x, z, y+0.010, y+0.061, width-0.07, "#5d91ad", 1);
   }
   masonryCourse(m, outline, x, z, shoulder+0.183, shoulder+0.198, 0.70, cream);
   m.part("drum", bronze, x-w*0.21, shoulder+0.231, z, 0.039, 0.07, 0.039);

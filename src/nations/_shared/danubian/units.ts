@@ -1,5 +1,7 @@
 import type { UnitType } from "../../../game/types";
 import { Miniature } from "../../../scene/miniature";
+import { carveDreadnoughtDeck } from "./dreadnought";
+import { carveLightVessel } from "./lightVessels";
 
 // Sculpt the walnut, ivory and metal once. A second mesh carries the enamel
 // inlay so every faction shares the same carving, including exhausted pieces.
@@ -16,11 +18,11 @@ const enamelShade = "#bcbcb5";
 type Sculpture = { body: Miniature; enamel: Miniature };
 type Infantry = "warrior" | "defender" | "archer" | "swordsman" | "mindBender" | "cloak" | "dagger";
 
-function plinth({ body, enamel }: Sculpture, width: number, depth = width) {
-  body.part("octagon", walnut, 0, .025, 0, width, .05, depth);
-  body.part("octagon", brass, 0, .056, 0, width * .99, .022, depth * .99);
-  enamel.part("octagon", enamelLight, 0, .083, 0, width * .94, .047, depth * .94);
-  body.part("octagon", ivory, 0, .109, 0, width * .83, .018, depth * .83);
+function plinth({ enamel }: Sculpture, width: number, depth = width) {
+  enamel.part("drum", "#ffffff", 0, .025, 0, width, .05, depth);
+  enamel.part("drum", "#ffffff", 0, .055, 0, width * .99, .014, depth * .99);
+  enamel.part("drum", "#ffffff", 0, .082, 0, width * .94, .042, depth * .94);
+  enamel.part("drum", "#ffffff", 0, .109, 0, width * .83, .018, depth * .83);
 }
 
 function pavise({ body, enamel }: Sculpture) {
@@ -256,41 +258,43 @@ function giant(sculpt: Sculpture) {
 
 type Vessel = "raft" | "dinghy" | "scout" | "bomber" | "rammer" | "juggernaut" | "pirate";
 type HullSection = [number, number, number][];
+type HullStation = readonly [beam: number, length: number, rise: number];
 
-// Width, length and deck height in tiles. The two capital ships deliberately
-// share a weight class; small craft keep a lower silhouette at board scale.
+const bomberProfile: readonly HullStation[] = [
+  [.24, -.5, .011], [.54, -.487, .010], [.79, -.440, .006], [.97, -.312, .002],
+  [1, -.165, 0], [1, .205, 0], [.92, .362, .002], [.71, .465, .004], [.41, .5, .004],
+];
+const dreadnoughtProfile: readonly HullStation[] = [
+  [.36, -.5, .021], [.66, -.475, .017], [.91, -.386, .010],
+  [1, -.210, 0], [1, .254, 0], [.95, .385, .002], [.75, .473, .008], [.47, .5, .010],
+];
+const openBoatProfile: readonly HullStation[] = [
+  [.16, -.5, .027], [.51, -.447, .015], [.81, -.324, .008],
+  [1, -.117, 0], [.96, .169, .002], [.75, .393, .012], [.53, .5, .017],
+];
+const cutterProfile: readonly HullStation[] = [
+  [.12, -.5, .028], [.42, -.438, .019], [.73, -.319, .006],
+  [1, -.093, 0], [.97, .236, .004], [.84, .399, .016], [.70, .5, .030],
+];
+
 const vesselHulls = {
-  dinghy: { width: .175, length: .426, deck: .103 },
-  pirate: { width: .211, length: .563, deck: .127 },
-  rammer: { width: .160, length: .683, deck: .112 },
-  scout: { width: .206, length: .735, deck: .153 },
-  bomber: { width: .339, length: .972, deck: .226 },
-  juggernaut: { width: .350, length: .994, deck: .239 },
+  dinghy: { width: .175, length: .426, deck: .097, stations: openBoatProfile },
+  pirate: { width: .211, length: .563, deck: .127, stations: cutterProfile },
+  bomber: { width: .270, length: .972, deck: .226, stations: bomberProfile },
+  juggernaut: { width: .350, length: .994, deck: .239, stations: dreadnoughtProfile },
 };
 
 const armor = "#48585e";
 const armorLight = "#83908d";
-const cabin = "#dbd1b8";
 const teak = "#aa9270";
 
 function navalHull({ body, enamel }: Sculpture, type: keyof typeof vesselHulls) {
-  const {width, length, deck} = vesselHulls[type];
-  const paddle = type === "scout" || type === "rammer";
-  const wooden = paddle || type === "dinghy" || type === "pirate";
-  // The lighter sailboats taper to a narrow stem. Keep a separate hull profile
-  // for the other ships, with paired corners defining their rounded bow.
-  const stations = paddle ? [
-    [.035, -.5, .036], [.29, -.433, .023], [.59, -.329, .013],
-    [.84, -.211, .006], [1, -.09, 0], [1, .15, 0],
-    [.91, .31, .003], [.69, .444, .009], [.47, .5, .014],
-  ] : [
-    [.24, -.5, .011], [.54, -.487, .010], [.79, -.440, .006], [.97, -.312, .002],
-    [1, -.165, 0], [1, .205, 0], [.92, .362, .002], [.71, .465, .004], [.41, .5, .004],
-  ];
+  const { width, length, deck, stations } = vesselHulls[type];
+  const wooden = type === "dinghy" || type === "pirate";
   function section(beam: number, keelLength: number, y: number, sheer: number): HullSection {
-    const half: HullSection = stations.map(([w,z,rise]) =>
+    const half: HullSection = stations.map(([w, z, rise]) =>
       [beam * w * width / 2, y + rise * sheer, z * length * keelLength]);
-    return [...half, ...half.map(([x,h,z]): [number,number,number] => [-x,h,z]).reverse()];
+    return [...half, ...half.map(([x, h, z]): [number, number, number] => [-x, h, z]).reverse()];
   }
   function band(target: Miniature, lower: HullSection, upper: HullSection, tone: string) {
     for (let i = 0; i < lower.length; i++) {
@@ -300,13 +304,15 @@ function navalHull({ body, enamel }: Sculpture, type: keyof typeof vesselHulls) 
   }
   const sole = section(.62, .89, .016, .15);
   const bilge = section(.93, .977, deck * .36, .28);
-  const waterline = section(1, 1, deck * .5, .4);
-  const side = section(.99, 1, deck * .86, .82);
+  const waterline = section(1, 1, deck * .50, .4);
+  const upperSide = section(.99, 1, deck * .83, .82);
+  const gunwale = section(.98, .999, deck * .92, .95);
   const rail = section(.94, .999, deck, 1);
-  band(body, sole, bilge, wooden ? walnut : "#915e4c");
-  band(body, bilge, waterline, wooden ? wood : "#374448");
-  band(body, waterline, side, wooden ? walnut : armor);
-  band(enamel, side, rail, enamelLight);
+  band(body, sole, bilge, wooden ? walnut : "#794936");
+  band(body, bilge, waterline, wooden ? wood : "#293b47");
+  band(body, waterline, upperSide, wooden ? walnut : type === "juggernaut" ? "#445d6b" : armor);
+  band(enamel, upperSide, gunwale, enamelLight);
+  band(body, gunwale, rail, wooden ? "#c09b63" : "#9eadae");
   body.face(ink, sole);
   const floor: [number, number, number] = [0, deck, 0];
   for (let i = 0; i < rail.length; i++)
@@ -314,185 +320,121 @@ function navalHull({ body, enamel }: Sculpture, type: keyof typeof vesselHulls) 
   return deck;
 }
 
-function funnel(body: Miniature, z: number, foot: number, top: number, width: number, rake = 0) {
-  const height = top - foot;
-  const crownZ = z + Math.sin(rake) * height * .5;
-  body.part("octagon", armorLight, 0, foot + .013, z, width * 1.25, .033, width * 1.42);
-  body.part("drum", "#c6a171", 0, foot + height * .50, z, width, height, width * 1.17, rake);
-  body.part("drum", ink, 0, top - .023, crownZ, width * 1.05, .048, width * 1.23, rake);
-  body.part("drum", "#272e31", 0, top + .001, crownZ, width * .73, .006, width * .91, rake);
-}
+function bombardmentDeck({ body, enamel }: Sculpture, deck: number) {
+  // Low casemate, one oversized forward gun and a wide raked stack.
+  body.part("bevel", "#5a7079", 0, deck + .032, .012, .224, .063, .434);
+  body.part("bevel", "#b2aba0", 0, deck + .071, -.102, .172, .025, .201);
+  body.part("hip", armorLight, 0, deck + .106, -.118, .144, .062, .126);
+  body.box("#253541", 0, deck + .124, -.177, .107, .017, .013);
+  enamel.part("bevel", enamelLight, 0, deck + .14, -.118, .142, .019, .116);
+  body.part("octagon", "#4a5d65", 0, deck + .026, -.309, .180, .054, .146);
+  body.part("bevel", "#bcc4bc", 0, deck + .070, -.311, .156, .060, .126);
+  body.beam(armor, [0, deck + .078, -.351], [0, deck + .110, -.478], .046);
+  body.part("octagon", ink, 0, deck + .108, -.455, .052, .032, .050, Math.PI / 2);
 
-function militaryMast(body: Miniature, z: number, foot: number, top: number, span: number) {
-  body.beam(armor, [0, foot, z], [0, top, z], .013);
-  body.part("octagon", cabin, 0, top - .089, z, span * .49, .031, .066);
-  body.box(armor, 0, top - .043, z, span, .013, .014);
-}
-
-function pilothouse({body, enamel}: Sculpture, z: number, foot: number, width: number, depth: number, height: number) {
-  body.part("bevel", cabin, 0, foot + height * .37, z, width * .88, height * .75, depth * .92);
-  body.part("bevel", ink, 0, foot + height * .78, z, width, height * .22, depth);
-  enamel.part("bevel", enamelLight, 0, foot + height * .97, z, width * 1.09, height * .16, depth * 1.05);
-}
-
-function deckTurret(body: Miniature, z: number, foot: number, direction: number, paired: boolean) {
-  const width = paired ? .154 : .160;
-  body.part("octagon", armor, 0, foot + .017, z, width * 1.09, .044, .137);
-  body.part("octagon", armorLight, 0, foot + .060, z, width, .066, .129);
-  for (const x of paired ? [-.028, .028] : [0]) {
-    const bore = paired ? .029 : .044;
-    body.part("octagon", armor, x, foot + .080, z + direction * .093,
-      bore, .147, bore, Math.PI / 2 - direction * .10);
-  }
-}
-
-function paddleWheels({ body, enamel }: Sculpture, width: number, radius: number, z: number) {
-  const height = radius + .019;
+  body.part("octagon", armorLight, 0, deck + .083, .043, .154, .042, .140);
+  body.part("drum", "#bd985f", 0, deck + .182, .054, .119, .188, .128, .095);
+  body.part("drum", "#303b3c", 0, deck + .267, .064, .128, .053, .136, .095);
+  body.part("drum", "#232a30", 0, deck + .291, .066, .097, .007, .103, .095);
+  body.beam(armor, [0, deck + .144, -.117], [0, .601, -.117], .016);
+  body.beam(armor, [-.061, .548, -.117], [.061, .548, -.117], .012);
   for (const side of [-1, 1]) {
-    const hub = side * (width / 2 + .032);
-    // Leave the wheel open between its axle and paddles. The exposed rim and
-    // bright paddle tips read as a wheel in a single tile's silhouette.
-    body.part("octagon", brass, hub, height, z, .077, .048, .077, 0, 0, Math.PI / 2);
-    for (let i = 0; i < 8; i++) {
-      const angle = i * Math.PI / 4;
-      const nextAngle = angle + Math.PI / 4;
-      const outer: [number, number, number] = [
-        hub, height + Math.cos(angle) * radius, z + Math.sin(angle) * radius,
-      ];
-      const rim = hub + side * .024;
-      body.beam(walnut, [hub, height, z], outer, .016, .022);
-      body.box(wood, ...outer, .058, .020, .040, angle);
-      body.beam(brass, [rim, outer[1], outer[2]],
-        [rim, height + Math.cos(nextAngle) * radius, z + Math.sin(nextAngle) * radius], .011);
+    for (const z of [-.135, -.038, .147]) {
+      body.part("bevel", "#91a2a5", side * .105, deck + .030, z, .023, .050, .058);
+      body.box(ink, side * .118, deck + .040, z, .006, .012, .031);
     }
-    enamel.part("octagon", enamelLight, hub + side * .029, height, z,
-      .040, .008, .040, 0, 0, Math.PI / 2);
+    body.part("hip", "#ded0b1", side * .082, deck + .077, .174, .043, .040, .126, Math.PI);
+    body.box(wood, side * .082, deck + .097, .174, .021, .008, .093);
   }
+  body.part("bevel", armor, 0, deck + .030, .315, .104, .061, .087);
+  body.beam(armorLight, [0, deck + .068, .321], [0, deck + .077, .426], .025);
+  body.box(teak, 0, deck + .013, .420, .092, .021, .044);
 }
 
-type SailPoint = [number, number, number];
-
-function sailCloth(body: Miniature, corners: SailPoint[], center: SailPoint) {
-  const shades = ["#ece1c6", "#dfcca7", "#d2b78b", "#e9d9b5"];
-  for (let i = 0; i < corners.length; i++) {
-    const front = [corners[i], corners[(i + 1) % corners.length], center];
-    // Players can see either face as the ship turns to follow its route.
-    body.face(shades[i], front);
-    body.face(shades[i], front.reverse());
+function raftDeck({ body, enamel }: Sculpture) {
+  for (let i = -2; i <= 2; i++) {
+    const trim = Math.abs(i) * .024;
+    body.part("octagon", i % 2 ? wood : walnut, i * .060, .051, trim, .068, .448 - trim, .074, Math.PI / 2);
   }
-}
-
-function paddleSailboat(sculpt: Sculpture, deck: number, type: "scout" | "rammer") {
-  const { body } = sculpt;
-  paddleWheels(sculpt, vesselHulls[type].width, type === "scout" ? .103 : .091, .058);
-  if (type === "scout") {
-    const mast = -.022;
-    const throat: SailPoint = [0, .490, mast];
-    const peak: SailPoint = [.098, .542, .109];
-    const clew: SailPoint = [.154, .252, .241];
-    const tack: SailPoint = [0, .268, mast];
-    body.beam(walnut, [0, deck, mast], [0, .513, mast], .024);
-    body.beam(wood, throat, peak, .019);
-    body.beam(wood, tack, clew, .019);
-    sailCloth(body, [throat, peak, clew, tack], [.138, .381, .086]);
-    sailCloth(body, [[0, .466, mast], [-.107, .225, -.264], [0, .251, mast - .032]],
-      [-.035, .305, -.128]);
-    pilothouse(sculpt, .205, deck, .117, .095, .063);
-    body.beam(wood, [-.063, deck + .053, -.217], [0, deck + .060, -.252], .020);
-    body.beam(wood, [.063, deck + .053, -.217], [0, deck + .060, -.252], .020);
-    body.beam(armor, [0, deck + .039, -.183], [0, deck + .068, -.293], .026);
-    return;
-  }
-
-  const yardLeft: SailPoint = [-.112, .406, -.098];
-  const yardRight: SailPoint = [.112, .385, -.118];
-  body.beam(walnut, [0, deck, -.111], [0, .438, -.092], .022);
-  body.beam(wood, yardLeft, yardRight, .018);
-  sailCloth(body, [yardLeft, yardRight, [.089, .203, -.154], [-.081, .210, -.165]],
-    [.004, .300, -.167]);
-  body.part("hip", walnut, 0, deck + .021, -.208, .094, .043, .139);
-  body.part("bevel", brass, 0, deck + .030, -.249, .036, .032, .087);
-  body.part("bevel", teak, 0, deck + .021, .184, .095, .047, .121);
-}
-
-function capitalShip(sculpt: Sculpture, type: "bomber" | "juggernaut", deck: number) {
-  const {body, enamel} = sculpt;
-  const flagship = type === "juggernaut";
-  const width = vesselHulls[type].width;
-  // A raised battery deck, not a stack of floating cabins. Boat deck, long
-  // funnels and fore/aft stations make the hull read as one continuous ship.
-  body.part("bevel", armorLight, 0, deck + .033, .009, width * .87, .084, .506);
-  for (const side of [-1, 1]) {
-    for (const z of [-.15, 0, .15]) {
-      body.part("octagon", armor, side * width * .408, deck + .038, z, .048, .049, .072);
-      body.box(ink, side * width * .472, deck + .044, z, .009, .016, .030);
+  for (const z of [-.140, .133]) {
+    body.box(wood, 0, .094, z, .305, .026, .044);
+    for (const x of [-.116, .110]) {
+      body.box(ivory, x, .109, z - .012, .018, .016, .066, 0, -.24);
+      body.box(brass, x + .015, .109, z + .010, .018, .016, .061, 0, .10);
     }
   }
-  body.part("bevel", cabin, 0, deck + .085, .009, width * .89, .025, .492);
-  body.part("bevel", teak, 0, deck + .100, .009, width * .80, .011, .477);
-  const upper = deck + .105;
-  pilothouse(sculpt, -.156, upper, width * .59, .111, .090);
-  militaryMast(body, -.164, upper + .081, flagship ? .655 : .619, flagship ? .187 : .161);
-  if (flagship) {
-    funnel(body, -.026, upper, .557, .086);
-    funnel(body, .098, upper, .555, .083);
-  } else {
-    // The bombardment ship has a single broad, raked uptake. Alongside the
-    // flagship its role reads from above, even when the guns are foreshortened.
-    funnel(body, .028, upper, .538, .123, .095);
-    body.part("bevel", armorLight, 0, upper + .026, .149, .090, .054, .067);
+  for (const x of [-.067, 0, .067]) {
+    body.box(teak, x, .106, -.017, .066, .016, .216);
   }
+  body.part("bevel", walnut, .051, .144, .044, .081, .068, .076);
+  body.box(brass, .051, .182, .044, .071, .010, .011);
+  body.part("octagon", "#a18051", -.012, .136, .092, .057, .051, .065, 0, 0, .22);
+  body.beam(walnut, [-.071, .101, .071], [-.071, .302, .071], .017);
+  enamel.face(enamelLight, [[-.070,.293,.068], [-.070,.235,.068], [-.060,.268,.183]]);
+  enamel.face(enamelLight, [[-.060,.268,.183], [-.070,.235,.068], [-.070,.293,.068]]);
+  body.beam(walnut, [.081,.109,.090], [.181,.059,.191], .012);
+  body.part("bevel", wood, .169, .057, .181, .038, .012, .086, 0, .50);
+}
+
+function dinghyDeck({ body, enamel }: Sculpture, deck: number) {
+  for (const z of [-.085, .080])
+    body.box(ivory, 0, deck + .015, z, .136, .024, .033);
+  body.part("bevel", "#c0a078", 0, deck + .012, -.013, .110, .020, .102);
   for (const side of [-1, 1]) {
-    const x = side * width * .328;
-    body.part("hip", cabin, x, upper + .024, .051, .052, .042, .15, Math.PI);
-    body.part("bevel", wood, x, upper + .044, .051, .035, .008, .101);
+    body.beam(walnut, [side*.019, deck + .027, -.040], [side*.111, .061, .096], .012);
+    body.part("bevel", wood, side*.110, .060, .101, .028, .013, .061, 0, -side * .46);
+    body.box(brass, side*.077, deck + .026, .025, .019, .025, .018);
   }
-  militaryMast(body, .196, upper, flagship ? .575 : .494, flagship ? .157 : .105);
-  deckTurret(body, -.310, deck + .007, -1, flagship);
-  deckTurret(body, .307, deck + .007, 1, flagship);
-  if (flagship) {
-    body.part("octagon", cabin, 0, upper + .031, .193, .109, .061, .096);
-    enamel.part("bevel", enamelLight, 0, upper + .069, .193, .129, .025, .096);
+  // A hooded figure and covered gear give the rowboat a low silhouette.
+  body.part("hip", ink, 0, deck + .061, .035, .086, .103, .088);
+  enamel.part("spire", enamelLight, 0, deck + .120, .033, .098, .068, .088);
+  body.part("bevel", "#57483a", 0, deck + .020, -.132, .073, .035, .070);
+}
+
+function pirateDeck({ body, enamel }: Sculpture, deck: number) {
+  body.part("bevel", walnut, 0, deck + .030, .164, .148, .069, .156);
+  enamel.part("bevel", enamelLight, 0, deck + .069, .164, .157, .018, .156);
+  for (const side of [-1, 1]) {
+    body.box(brass, side * .044, deck + .040, .245, .026, .018, .014);
+    body.box("#272c36", side * .071, deck + .040, .010, .026, .026, .036);
+    body.beam(armor, [side * .058, deck + .045, .010], [side * .106, deck + .051, .012], .019);
   }
+  body.beam(walnut, [0, deck, .044], [0, .473, .038], .022);
+  body.beam(walnut, [0, deck + .034, -.176], [0, .215, -.316], .016);
+  body.beam(brass, [-.114, .375, .038], [.105, .390, .024], .016);
+  const cloth: [number, number, number][] = [
+    [-.105, .372, .037], [-.080, .200, -.006], [.087, .212, -.022], [.099, .385, .027],
+  ];
+  const crease: [number, number, number] = [.008, .278, -.058];
+  for (let i = 0; i < cloth.length; i++) {
+    const seam = [cloth[i], cloth[(i + 1) % cloth.length], crease];
+    enamel.face(i % 2 ? "#8d8785" : "#cfc7b8", seam);
+    enamel.face(i % 2 ? "#8d8785" : "#cfc7b8", seam.reverse());
+  }
+  body.face("#313b43", [[0,.467,.035], [0,.412,.035], [.065,.431,.105]]);
+  body.face("#313b43", [[.065,.431,.105], [0,.412,.035], [0,.467,.035]]);
 }
 
 function navy(sculpt: Sculpture, type: Vessel) {
-  const { body, enamel } = sculpt;
-  if (type === "raft") {
-    for (let i = -2; i <= 2; i++) {
-      const trim = Math.abs(i) * .02;
-      body.part("octagon", i % 2 ? wood : walnut, i * .060, .051, trim, .068, .448 - trim, .074, Math.PI / 2);
-    }
-    for (const z of [-.135, .136]) body.box(brass, 0, .09, z, .30, .019, .027);
-    enamel.part("bevel", enamelLight, 0, .111, .017, .224, .036, .189);
-    body.part("bevel", wood, .021, .153, .069, .093, .054, .081);
-    body.beam(walnut, [-.052, .108, .093], [-.052, .291, .093], .019);
-    enamel.box(enamelLight, -.052, .267, .130, .015, .050, .079);
-    return;
-  }
-
-  const deck = navalHull(sculpt, type);
   switch (type) {
+    case "raft":
+      raftDeck(sculpt);
+      break;
     case "scout":
     case "rammer":
-      paddleSailboat(sculpt, deck, type);
+      carveLightVessel(sculpt, type);
       break;
     case "bomber":
+      bombardmentDeck(sculpt, navalHull(sculpt, type));
+      break;
     case "juggernaut":
-      capitalShip(sculpt, type, deck);
+      carveDreadnoughtDeck(sculpt, navalHull(sculpt, type), vesselHulls[type].width);
       break;
     case "dinghy":
-      for (const z of [-.090, .078]) body.box(ivory, 0, deck + .015, z, .139, .024, .034);
-      body.part("hip", ink, 0, deck + .065, .039, .099, .111, .096);
-      enamel.part("spire", enamelLight, 0, deck + .131, .036, .111, .069, .096);
-      body.beam(wood, [-.084, deck + .025, -.103], [-.054, deck + .037, .118], .012);
+      dinghyDeck(sculpt, navalHull(sculpt, type));
       break;
     case "pirate":
-      body.beam(walnut, [0, deck, .041], [0, .404, .033], .024);
-      body.beam(brass, [-.103, .373, .038], [.093, .387, .034], .017);
-      enamel.part("bevel", enamelLight, 0, .303, .028, .192, .143, .028, -.11, .13, .073);
-      body.box(ivory, 0, .303, .008, .025, .138, .012, -.11, .13, -.46);
-      body.part("bevel", ink, 0, deck + .035, .166, .121, .057, .066);
+      pirateDeck(sculpt, navalHull(sculpt, type));
       break;
   }
 }

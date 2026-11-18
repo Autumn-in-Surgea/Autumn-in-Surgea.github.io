@@ -9,4 +9,4 @@ export function buildingVisualTier(cityLevel: number): BuildingVisualTier {
 
 // The top surfaces meet at these local model heights before fitting the span to its banks.
 export const bridgeDeckHeight = 0.162;
-export const roadSurfaceHeight = 0.028;
+export const roadSurfaceHeight = 0.009;

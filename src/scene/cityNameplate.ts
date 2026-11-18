@@ -7,15 +7,15 @@ export interface CityNameplateDetails {
   income: number;
 }
 
-export const cityDetailHeight = 94;
-const incomeFontSize = 41;
-const padding = 12;
+export const cityDetailHeight = 84;
+const incomeFontSize = 37;
+const padding = 10;
 
 export function measureCityDetails(ctx: CanvasRenderingContext2D, details: CityNameplateDetails, font: string) {
   const { population, units, capacity, income } = details;
   const incomeText = `+${income}`;
   const meter = cityMeter(population, units, capacity);
-  const meterWidth = Math.min(224, Math.max(156, capacity * 19));
+  const meterWidth = Math.min(204, Math.max(142, capacity * 17.5));
   const detailFont = `600 ${incomeFontSize}px ${font}`;
   ctx.font = detailFont;
   const width = Math.max(meterWidth, ctx.measureText(incomeText).width) + padding * 2;
@@ -28,15 +28,15 @@ export function drawCityDetails(
   titleHeight: number,
   width: number,
 ) {
-  const centerY = titleHeight + 20;
+  const centerY = titleHeight + 19;
   ctx.font = row.detailFont;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillStyle = "#ecd9a2";
-  ctx.fillText(row.incomeText, width / 2, titleHeight + 68);
+  ctx.fillText(row.incomeText, width / 2, titleHeight + 60);
 
   const barLeft = (width - row.meterWidth) / 2;
-  const height = 32;
+  const height = 29;
   const top = centerY - height / 2;
   const { cells, deficit } = row.meter;
   const stride = row.meterWidth / cells.length;

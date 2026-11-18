@@ -11,9 +11,11 @@ import {
   UNITS,
 } from "../data/config";
 import { distance, generateMap, isWater, neighbors } from "../map/generate";
+import { openingNations } from "../map/openingNations";
 import { hashSeed, seededRandom } from "../map/random";
-import { STORY_NATIONS, STORY_SIZE } from "../map/story";
-import { getNation, NATIONS, type NationOpening } from "../../nations/registry";
+import { portRoutes } from "./waterConnections";
+import { STORY_SIZE } from "../map/story";
+import { getNation, type NationOpening } from "../../nations/registry";
 import type {
   Action,
   ActionResult,
@@ -386,12 +388,8 @@ export function createGame(input: GameOptions): GameState {
     startingProfiles: input.startingProfiles ?? [],
     seed: input.seed?.trim() || "2026",
   };
-  const availableNations = options.scenario === "story" ? STORY_NATIONS : NATIONS;
-  const anonymous = options.scenario === "free" ||
-    (options.scenario === "fair" && options.civilization === "neutral");
-  const selectedNation = anonymous
-    ? undefined
-    : availableNations.find(nation => nation.id === options.civilization) ?? availableNations[0];
+  const roster = openingNations(options);
+  const selectedNation = roster.at(0);
   options.civilization = selectedNation?.id ?? "neutral";
   const maxOpponents = selectedNation ? opponentLimit(options.scenario) : 10;
   options.aiCount =
@@ -417,12 +415,7 @@ export function createGame(input: GameOptions): GameState {
   options.maxRounds =
     options.mode === "score" ? 30 : Math.max(30, options.maxRounds);
   const map = generateMap(options);
-  const rivals = availableNations.filter((nation) => nation !== selectedNation);
-  if (options.scenario === "fair" && selectedNation) {
-    const order = (id: string) => hashSeed(`${options.seed}:rival:${id}`);
-    rivals.sort((a, b) => order(a.id) - order(b.id));
-  }
-  const nations = selectedNation ? [selectedNation, ...rivals.slice(0, options.aiCount)] : [];
+  const nations = roster.slice(0, options.aiCount + 1);
   const random = seededRandom(options.seed + ":names"),
     names = [...NEUTRAL_NAMES].sort(() => random() - 0.5);
   const openings = Array.from({ length: options.aiCount + 1 }, (_, id): NationOpening => {
@@ -995,9 +988,7 @@ export function validateAction(s: GameState, a: Action): string | null {
         ? null
         : "目标不可攻击。移动后攻击需要突进技能。";
     if (a.type === "HEAL")
-      return !u.moved && !u.attacked && u.hp < u.maxHp
-        ? null
-        : "休整需要完整行动与受伤状态。";
+      return canRecover(u) ? null : "休整需要完整行动与受伤状态。";
     if (a.type === "PROMOTE")
       return !u.veteran && u.kills >= 3 && !skill(u, "static")
         ? null
@@ -1222,9 +1213,10 @@ function updateConnections(s: GameState): void {
     if (!capital) continue;
     const network = new Set<number>(),
       queue = [tileAt(s, capital).id];
+    let explored: Set<number> | undefined;
     network.add(queue[0]);
-    while (queue.length) {
-      const id = queue.shift()!,
+    for (let i = 0; i < queue.length; i++) {
+      const id = queue[i],
         tile = s.tiles[id];
       for (const n of neighbors(s.tiles, s.options.size, tile)) {
         if (
@@ -1243,33 +1235,12 @@ function updateConnections(s: GameState): void {
         }
       }
       if (tile.building === "port") {
-        const seen = new Set([id]),
-          waterQueue: [number, number][] = [[id, 0]];
-        while (waterQueue.length) {
-          const [w, d] = waterQueue.shift()!;
-          if (d >= 5) continue;
-          for (const n of neighbors(s.tiles, s.options.size, s.tiles[w])) {
-            if (
-              !isWater(n) ||
-              seen.has(n.id) ||
-              !p.explored.includes(n.id) ||
-              (n.owner !== null &&
-                n.owner !== p.id &&
-                !isAtPeace(s, p.id, n.owner)) ||
-              (n.terrain === "deep" && !hasTech(p, "sailing"))
-            )
-              continue;
-            seen.add(n.id);
-            if (
-              n.building === "port" &&
-              n.owner === p.id &&
-              !network.has(n.id)
-            ) {
-              network.add(n.id);
-              queue.push(n.id);
-            }
-            waterQueue.push([n.id, d + 1]);
-          }
+        explored ??= new Set(p.explored);
+        for (const route of portRoutes(s, tile, p, explored)) {
+          const destination = route[route.length - 1];
+          if (network.has(destination)) continue;
+          network.add(destination);
+          queue.push(destination);
         }
       }
     }
@@ -1362,6 +1333,13 @@ function exhaust(u: Unit): void {
   u.moved = true;
   u.attacked = true;
   u.escapeUsed = true;
+}
+function canRecover(u: Unit): boolean {
+  return !u.moved && !u.attacked && u.hp < u.maxHp;
+}
+function recover(s: GameState, u: Unit): void {
+  u.hp = Math.min(u.maxHp, u.hp + (tileAt(s, u).owner === u.owner ? 4 : 2));
+  exhaust(u);
 }
 function removeDead(s: GameState, killer: Unit | undefined): void {
   for (const u of s.units.filter((u) => u.hp <= 0)) {
@@ -1648,11 +1626,7 @@ export function applyAction(source: GameState, a: Action): ActionResult {
       break;
     }
     case "HEAL":
-      u!.hp = Math.min(
-        u!.maxHp,
-        u!.hp + (tileAt(s, u!).owner === p.id ? 4 : 2),
-      );
-      exhaust(u!);
+      recover(s, u!);
       break;
     case "HEAL_OTHERS":
       for (const target of s.units)
@@ -2004,6 +1978,8 @@ export function applyAction(source: GameState, a: Action): ActionResult {
       p.embassies.push(a.targetPlayer);
       break;
     case "END_TURN":
+      for (const unit of s.units)
+        if (unit.owner === p.id && canRecover(unit)) recover(s, unit);
       nextTurn(s);
       break;
     case "RESIGN":

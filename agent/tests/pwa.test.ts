@@ -16,24 +16,32 @@ describe("PWA installation and update lifecycle", () => {
   let browser: EventTarget & { location: { reload: ReturnType<typeof vi.fn> } };
   let callbacks: Callbacks;
   let serviceWorker: EventTarget;
+  let displayMode: EventTarget & { matches: boolean };
+  const toggleAttribute = vi.fn();
 
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
     vi.stubEnv("PROD", true);
+    displayMode = Object.assign(new EventTarget(), { matches: false });
     browser = Object.assign(new EventTarget(), {
       isSecureContext: true,
       location: { reload: vi.fn() },
-      matchMedia: () => Object.assign(new EventTarget(), { matches: false }),
+      matchMedia: () => displayMode,
     });
     vi.stubGlobal("window", browser);
-    vi.stubGlobal("document", Object.assign(new EventTarget(), { visibilityState: "visible" }));
+    vi.stubGlobal("document", Object.assign(new EventTarget(), {
+      visibilityState: "visible",
+      documentElement: { toggleAttribute },
+    }));
     serviceWorker = Object.assign(new EventTarget(), {
       // Remains pending until the test explicitly supplies successful installation callbacks.
       ready: new Promise(() => undefined),
     });
     vi.stubGlobal("navigator", {
       onLine: true,
+      userAgent: "Mozilla/5.0 (Macintosh)",
+      maxTouchPoints: 0,
       serviceWorker,
       storage: { persist: vi.fn(async () => true) },
     });
@@ -55,6 +63,21 @@ describe("PWA installation and update lifecycle", () => {
     expect(pwa.getPwaState().offlineReady).toBe(false);
     callbacks.onOfflineReady();
     expect(pwa.getPwaState().offlineReady).toBe(true);
+  });
+
+  it.each([
+    ["legacy iPhone Home Screen", "iPhone", 5, true, false, true],
+    ["iPhone Safari tab", "iPhone", 5, false, false, false],
+    ["iPad Home Screen with desktop UA", "Macintosh", 5, undefined, true, true],
+    ["macOS installed application", "Macintosh", 0, undefined, true, false],
+    ["Android installed application", "Linux; Android", 5, undefined, true, false],
+  ])("scopes Home Screen spacing to iOS for %s", async (_, userAgent, maxTouchPoints, standalone, matches, iosLayout) => {
+    Object.assign(navigator, { userAgent, maxTouchPoints, standalone });
+    displayMode.matches = matches;
+    const pwa = await import("../../src/pwa/register");
+    pwa.initializePwa();
+    expect(toggleAttribute).toHaveBeenLastCalledWith("data-ios-standalone", iosLayout);
+    expect(pwa.getPwaState().installed).toBe(matches || standalone === true);
   });
 
   it("offers updates without interrupting the game and activates only on explicit request", async () => {

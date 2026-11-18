@@ -57,7 +57,8 @@
 .menu-copy h1 {
   margin: 0;
   color: #fff4da;
-  font: 700 clamp(52px, 7.2vw, 94px)/1.13 var(--font-display);
+  font-size: clamp(52px, 7.2vw, 94px);
+  line-height: 1.13;
   letter-spacing: .085em;
   text-indent: .085em;
   text-shadow: 0 3px 18px #102432de;

@@ -13,6 +13,7 @@ import {
   ScanLine,
   Building2,
   Gem,
+  Palette,
 } from "lucide-react";
 import {
   TECHNOLOGIES,
@@ -268,9 +269,25 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
   return (
-    <Modal title="设置" onClose={onClose}>
+    <Modal title="设置" onClose={onClose} menuSurface>
       <div className="settings-body">
         <PwaControls canUpdate={!busy && !playbackStep && !eventNotice} beforeUpdate={save} />
+        <div className="setting-row menu-theme-setting">
+          <Palette size={20} aria-hidden="true" />
+          <span><strong id="menu-theme-label">界面主题</strong></span>
+          <div className="menu-theme-options" role="group" aria-labelledby="menu-theme-label">
+            {([
+              ["system", "跟随系统"],
+              ["light", "浅色"],
+              ["dark", "深色"],
+            ] as const).map(([menuTheme, label]) => (
+              <button type="button" key={menuTheme}
+                aria-pressed={settings.menuTheme === menuTheme}
+                onClick={() => updateSettings({ menuTheme })}
+              >{label}</button>
+            ))}
+          </div>
+        </div>
         {(
           [
             { key: "showResources", icon: Gem, title: "资源显示" },

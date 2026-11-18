@@ -1,14 +1,22 @@
 .app.is-playing {
-  --hud-stat-height: clamp(34px, 5dvh, 43px);
-  --hud-command-height: clamp(54px, 9dvh, 67px);
+  --hud-bar-height: clamp(54px, 9dvh, 67px);
   --hud-metal: #b89b66;
   --hud-content-width: min(100%, var(--menu-max-inline, 100dvh), 46rem);
+  --hud-top-inset: env(safe-area-inset-top, 0px);
+  --hud-bottom-inset: env(safe-area-inset-bottom, 0px);
   --hud-rim: #0d1c2c;
   --hud-ribbon: repeating-linear-gradient(112deg, transparent 0 4px, #bba27208 4px 5px, transparent 5px 9px),
     linear-gradient(180deg, #2c455e, #1c334a 67%, #14283e);
   display: grid;
   grid-template: auto minmax(0, 1fr) auto / minmax(0, 1fr);
   min-height: 0;
+}
+:root[data-ios-standalone] .app.is-playing {
+  /* Reserve the inset outside both bars so artwork and text stay out of system chrome. */
+  padding-block: max(8px, env(safe-area-inset-top, 0px)) max(8px, env(safe-area-inset-bottom, 0px));
+  --hud-top-inset: 0px;
+  --hud-bottom-inset: 0px;
+  background-color: var(--chrome-deep);
 }
 .is-playing > .game-scene {
   position: relative;
@@ -25,49 +33,54 @@
 }
 .hud-statbar {
   grid-row: 1;
-  block-size: calc(var(--hud-stat-height) + env(safe-area-inset-top));
-  padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
+  block-size: calc(var(--hud-bar-height) + var(--hud-top-inset));
+  padding: var(--hud-top-inset) env(safe-area-inset-right) 0 env(safe-area-inset-left);
   border-bottom: 1px solid var(--hud-metal);
   box-shadow: inset 0 -3px var(--hud-rim), 0 2px 8px #070f12b0;
 }
 .hud-statbar-inner {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1.32fr) repeat(2, minmax(0, .68fr)) minmax(0, 1.12fr);
+  container-type: inline-size;
   height: 100%;
   width: var(--hud-content-width);
-  padding: 0 4px 2px;
+  padding: 5px 5px 4px;
   margin-inline: auto;
   font-variant-numeric: tabular-nums;
 }
-.hud-statbar-inner::before, .hud-statbar-inner::after {
-  content: "";
-  flex: 1 1 30px;
-  height: 5px;
-  background: linear-gradient(90deg, transparent, #ad905ab8 88%) center / 100% 1px no-repeat;
-}
-.hud-statbar-inner::after { transform: scaleX(-1); }
 .hud-stat {
   display: flex;
   align-items: center;
   justify-content: center;
   min-inline-size: 0;
-  gap: clamp(3px, .75vw, 7px);
-  padding-inline: clamp(6px, 1.4vw, 22px);
+  gap: clamp(3px, 1.1cqi, 8px);
+  padding-inline: clamp(2px, 1cqi, 8px);
   white-space: nowrap;
   line-height: 1.1;
 }
 .hud-stat + .hud-stat { border-inline-start: 1px solid #b29b6261; }
-.hud-stat strong { font-size: var(--font-size-large); overflow: hidden; text-overflow: ellipsis; }
-.hud-stat svg { color: #dbc08a; flex: none; }
-.hud-round > span, .hud-yield { font-size: var(--font-size-small); }
+.hud-stat strong {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  font-size: clamp(20px, 4.9cqi, 34px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hud-stat svg {
+  inline-size: clamp(16px, 3cqi, 23px);
+  block-size: clamp(16px, 3cqi, 23px);
+  color: #dbc08a;
+  flex: none;
+}
+.hud-round-value { display: flex; align-items: baseline; gap: 3px; }
+.hud-round span, .hud-yield { font-size: clamp(13px, 2.35cqi, 17px); }
 .hud-yield { color: #c8d6ab; }
 
 .hud-command-bar {
   grid-row: 3;
   position: relative;
-  block-size: calc(var(--hud-command-height) + env(safe-area-inset-bottom));
-  padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  block-size: calc(var(--hud-bar-height) + var(--hud-bottom-inset));
+  padding: 0 env(safe-area-inset-right) var(--hud-bottom-inset) env(safe-area-inset-left);
   border-top: 1px solid var(--hud-metal);
   box-shadow: inset 0 3px var(--hud-rim), 0 -3px 12px #080f1b6b;
 }
@@ -130,7 +143,7 @@
 .hud-action-secondary { color: #e9d09e; font-size: 11px; font-weight: 600; }
 
 .hud-drawer-stack {
-  --action-row-size: var(--hud-command-height);
+  --action-row-size: var(--hud-bar-height);
   --detail-row-size: 44px;
   --drawer-size: calc(var(--action-row-size) + var(--detail-row-size) + 2px);
   position: absolute;
@@ -258,11 +271,25 @@
 
 .reduce-motion :is(.hud-selection, .hud-feedback, .hud-action, .hud-end-turn) { transition: none; }
 
+@container (max-width: 500px) {
+  .hud-stat {
+    display: grid;
+    grid-template: auto auto / auto auto;
+    place-content: center;
+    justify-items: center;
+    gap: 2px 4px;
+  }
+  .hud-stat > :is(strong, .hud-round-value) {
+    grid-area: 2 / 1 / 3 / -1;
+  }
+  .hud-stat strong { font-size: clamp(22px, 6.5cqi, 28px); }
+  .hud-stat strong[data-wide-count="true"] { font-size: clamp(16px, 4.45cqi, 23px); }
+  .hud-stat > :is(svg, span) { grid-row: 1; }
+  .hud-stat:not(:has(> span)) > svg,
+  .hud-round > span { grid-column: 1 / -1; }
+  .hud-round span, .hud-yield { font-size: clamp(12px, 3.1cqi, 15px); }
+}
+
 @media (max-width: 420px) {
   .hud-combat-side { flex-direction: column; align-items: stretch; gap: 1px; padding-block: 2px; }
-  .hud-statbar-inner::before, .hud-statbar-inner::after { display: none; }
-  .hud-stat { padding-inline: clamp(4px, 1.6vw, 7px); }
-  .hud-stat strong { font-size: 18px; }
-  .hud-stat svg { width: 14px; height: 14px; }
-  .hud-round > span, .hud-yield { font-size: 12px; }
 }

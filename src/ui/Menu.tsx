@@ -1,4 +1,4 @@
-import { terrainColors } from "../scene/terrainColors";
+import { getTerrainAssets } from "../nations/models";
 import { useDeferredValue, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
@@ -167,6 +167,7 @@ function NewGame({ onClose }: { onClose: () => void }) {
       title="新游戏"
       onClose={onClose}
       wide
+      menuSurface
       footer={
         <>
           {error && (
@@ -455,7 +456,7 @@ function NewGame({ onClose }: { onClose: () => void }) {
                       ["landRatio", "陆地比例", 0.05, 1, 0.01],
                       ["forestRatio", "森林比例", 0, 0.8, 0.01],
                       ["mountainRatio", "山地比例", 0, 0.4, 0.02],
-                      ["resourceDensity", "资源密度", 0.1, 0.9, 0.05],
+                      ["resourceDensity", "非矿资源密度", 0.1, 0.9, 0.05],
                       ["villageDensity", "村庄密度", 0.015, 0.08, 0.005],
                       ["noiseScale", "噪声频率", 2, 12, 0.1],
                     ] as const
@@ -566,7 +567,7 @@ function MapPreview({
     const w = 480 / size;
     ctx.clearRect(0, 0, 480, 480);
     for (const t of tiles) {
-      ctx.fillStyle = terrainColors[t.terrain];
+      ctx.fillStyle = getTerrainAssets(t.terrainVariant).shells[t.terrain].color;
       ctx.fillRect(t.x * w, t.y * w, Math.ceil(w), Math.ceil(w));
     }
     starts.forEach((p, i) => {
@@ -615,7 +616,7 @@ function MapPreview({
 
 export function About({ onClose }: { onClose: () => void }) {
   return (
-    <Modal title="关于" onClose={onClose}>
+    <Modal title="关于" onClose={onClose} menuSurface>
       <div className="about-body">
         <img className="about-mark" src={`${import.meta.env.BASE_URL}${GAME_ICON_192}`} width={82} height={82} alt="" />
         <h3>

@@ -1,18 +1,13 @@
 @font-face {
-  font-family: "GenRyu Dan";
-  src: url("../assets/fonts/genryu-dan.woff2") format("woff2");
-  font-weight: 700;
-  font-display: swap;
-}
-@font-face {
   font-family: "Resource Han Rounded";
   src: url("../assets/fonts/resource-han-rounded-40.woff2") format("woff2");
   font-weight: 400 700;
   font-display: swap;
 }
 :root {
-  --font-display: "GenRyu Dan", "Songti SC", "STSong", serif;
   --font-body: "Resource Han Rounded", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-display: "Songti SC", "STSong", "SimSun", "宋体", "NSimSun",
+    "Noto Serif CJK SC", "AR PL SungtiL GB", var(--font-body);
   --font-size-large: 20px;
   --font-size-small: 14px;
   --motion-ease: cubic-bezier(0.45, 0, 0.35, 1);
@@ -54,6 +49,11 @@
 }
 body {
   margin: 0;
+}
+:root[data-ios-standalone] {
+  background-color: var(--chrome-deep);
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
 }
 button,
 input,
@@ -1735,11 +1735,19 @@ kbd {
   }
 }
 
-/* Only page and dialog titles use the display face. */
+.menu-copy h1,
+.menu-page-heading h2,
+.event-notice-card h2,
+.hud-selection-title,
 .about-body h3,
 .results-modal h2,
 .fatal h1 {
   font-family: var(--font-display);
-  font-size: var(--font-size-large);
   font-weight: 700;
+  font-synthesis: weight;
+}
+.about-body h3,
+.results-modal h2,
+.fatal h1 {
+  font-size: var(--font-size-large);
 }

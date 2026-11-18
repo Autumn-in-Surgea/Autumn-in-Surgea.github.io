@@ -47,9 +47,9 @@ function Scenery({ game, tile, city, tier, simple, checkResourceAvailability, sh
   return <>
     <TerrainDetails tile={tile} simple={simple} />
     {resource && (!simple || available) && (
-      <Resources tile={tile} modelSet={modelSet} highlight={available && showResourceHints} />
+      <Resources tile={tile} highlight={available && showResourceHints} />
     )}
-    {tile.ruin && <RuinModel />}
+    {tile.ruin && <RuinModel terrainVariant={tile.terrainVariant} />}
   </>;
 }
 
@@ -109,13 +109,14 @@ export function TileScenery(props: ModelProps & {
   const road = hasRoadModel(tile) && <RoadInlay tile={tile} tiles={game.tiles}
     size={game.options.size} explored={knownTiles} tier={tier as BuildingVisualTier} />;
   const scene = <Scenery {...props} checkResourceAvailability={visible && props.checkResourceAvailability} />;
-  const lighthouse = tile.lighthouse && <LighthouseModel />;
+  const lighthouse = tile.lighthouse && <LighthouseModel terrainVariant={tile.terrainVariant} />;
   if (!change || reducedMotion) return <>{road}{scene}{lighthouse}</>;
 
   const { previousGame, previousTier, previousCity, previousExplored } = change;
   const oldTile = previousGame.tiles[tile.id];
   const site = siteLandscape(tile);
-  const fixedLandscape = !!change.scenery && !!site && site === siteLandscape(oldTile);
+  const fixedLandscape = !!change.scenery && !!site && site === siteLandscape(oldTile)
+    && tile.terrainVariant === oldTile.terrainVariant;
   const oldOwnership = isForeignTerritory(oldTile.owner);
   const start = issuedAt + change.delay * 1000;
   return <>

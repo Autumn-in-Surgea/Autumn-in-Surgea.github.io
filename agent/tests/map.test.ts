@@ -1,14 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
   CIVILIZATIONS,
+  DEFAULT_OPTIONS,
+  distance,
   generateMap,
   getCityIncome,
   getReachableTiles,
   MAP_SIZE_CHOICES,
   opponentLimit,
   OPENING_PROFILES,
+  type Resource,
+  type Terrain,
 } from "../../src/game";
-import { getNation } from "../../src/nations/registry";
+import { assignTerrainVariants } from "../../src/game/map/terrainVariants";
+import { DEFAULT_TERRAIN_VARIANT, getFactionPack, getNation } from "../../src/nations/registry";
 import { deserializeGame, serializeGame } from "../../src/store/save";
 import { newGame } from "./helpers";
 
@@ -265,6 +270,47 @@ describe("map sizes, topology and configurable generation", () => {
       initial.tiles.map((tile) => tile.terrain),
     );
   });
+  it("thins each non-ore resource by ten percent in seeded free maps", () => {
+    const totals: Record<Terrain, number> = {
+      plain: 0, forest: 0, mountain: 0, shallow: 0, deep: 0,
+    };
+    const counts: Record<Resource, number> = {
+      fruit: 0, crop: 0, animal: 0, ore: 0, fish: 0, starfish: 0,
+    };
+    for (let i = 0; i < 12; i++) {
+      const { tiles, starts } = generateMap({
+        ...DEFAULT_OPTIONS, scenario: "free", size: 64, aiCount: 1, seed: `resource-rates-${i}`,
+        mapSettings: { ...DEFAULT_OPTIONS.mapSettings, resourceDensity: 0.9, villageDensity: 0 },
+      });
+      for (const tile of tiles) {
+        if (tile.ruin || tile.lighthouse || starts.some(id => distance(tile, tiles[id]) <= 2)) continue;
+        totals[tile.terrain]++;
+        if (tile.resource) counts[tile.resource]++;
+      }
+    }
+    const rates = [
+      ["fruit", counts.fruit / totals.plain, 0.2025, 0.016],
+      ["crop", counts.crop / totals.plain, 0.2025, 0.016],
+      ["animal", counts.animal / totals.forest, 0.405, 0.03],
+      ["fish", counts.fish / totals.shallow, 0.405, 0.03],
+      ["starfish", counts.starfish / totals.deep, 0.0729, 0.006],
+      ["ore", counts.ore / totals.mountain, 0.7, 0.035],
+    ] as const;
+    for (const [resource, rate, expected, tolerance] of rates)
+      expect(Math.abs(rate - expected), resource).toBeLessThan(tolerance);
+  });
+  it.each(["fair", "free"] as const)("matches the mountain ore rate in %s maps independently of resource density", (scenario) => {
+    const { tiles, starts, villages } = generateMap({
+      ...DEFAULT_OPTIONS, scenario, size: 64, mapType: "dryland", seed: "mountain-ore-rate",
+      mapSettings: { ...DEFAULT_OPTIONS.mapSettings, landRatio: 1, resourceDensity: 0 },
+    });
+    const mountains = tiles.filter(tile => tile.terrain === "mountain" && !tile.ruin &&
+      !starts.includes(tile.id) && !villages.includes(tile.id));
+    expect(mountains.length).toBeGreaterThan(350);
+    expect(mountains.filter(tile => tile.resource === "ore").length / mountains.length).toBeCloseTo(0.7, 1);
+    if (scenario === "free")
+      expect(tiles.every(tile => !tile.resource || tile.resource === "ore")).toBe(true);
+  });
   it("uses custom free-mode positions exactly and rejects duplicates or outside coordinates", () => {
     const base = newGame({ scenario: "free", size: 20, mapType: "dryland" });
     const spawns = base.cities
@@ -301,6 +347,57 @@ describe("map sizes, topology and configurable generation", () => {
         },
       }),
     ).toThrow();
+  });
+});
+
+describe("coordinate-bound terrain assets", () => {
+  it.each(["fair", "free", "story"] as const)("uses the starting nations' configured variants throughout %s", (scenario) => {
+    const game = newGame({ scenario, civilization: "nosta" });
+    const expected = new Set(game.players.map(player => getFactionPack(player.civilization).terrainVariant));
+    expect(new Set(game.tiles.map(tile => tile.terrainVariant))).toEqual(expected);
+  });
+
+  it("assigns all terrains by distance and breaks ties by the original coordinate", () => {
+    const { tiles } = generateMap({ ...DEFAULT_OPTIONS, scenario: "free", size: 12, seed: "terrain-variant-border" });
+    const anchors = [
+      { tileId: 17, terrainVariant: "nosta" },
+      { tileId: 13, terrainVariant: "rina" },
+    ] as const;
+    const assigned = assignTerrainVariants(tiles, anchors);
+    expect(assigned[13].terrainVariant).toBe("rina");
+    expect(assigned[17].terrainVariant).toBe("nosta");
+    expect(assigned[15].terrainVariant).toBe("rina");
+    expect(assigned[143].terrainVariant).toBe("nosta");
+    expect(assigned).toEqual(assignTerrainVariants(tiles, [...anchors].reverse()));
+    expect(tiles[15].terrainVariant).toBe(DEFAULT_TERRAIN_VARIANT);
+  });
+
+  it("uses configured variants at national capitals without changing generation rolls", () => {
+    const options = { ...DEFAULT_OPTIONS, aiCount: 4, civilization: "rina" as const, seed: "terrain-variant-roster" };
+    const original = generateMap(options);
+    const rina = getNation("rina")!, nosta = getNation("nosta")!;
+    const rinaVariant = rina.terrainVariant, nostaVariant = nosta.terrainVariant;
+    try {
+      rina.terrainVariant = "rina";
+      nosta.terrainVariant = "nosta";
+      const preview = generateMap(options);
+      const fair = newGame(options);
+      expect(preview.starts).toEqual(original.starts);
+      expect(preview.villages).toEqual(original.villages);
+      const geography = (map: typeof preview) => map.tiles.map(tile => [tile.terrain, tile.resource, tile.ruin]);
+      expect(geography(preview)).toEqual(geography(original));
+      expect(fair.tiles.map(tile => tile.terrainVariant)).toEqual(preview.tiles.map(tile => tile.terrainVariant));
+      for (const [id, start] of preview.starts.entries()) {
+        expect(preview.tiles[start].terrainVariant).toBe(getNation(fair.players[id].civilization)?.terrainVariant);
+      }
+      const story = generateMap({ ...options, scenario: "story" });
+      const otherStory = generateMap({ ...options, scenario: "story", civilization: "imperia" });
+      expect(story.tiles).toEqual(otherStory.tiles);
+      expect(story.tiles[story.starts[0]].terrainVariant).toBe("rina");
+    } finally {
+      rina.terrainVariant = rinaVariant;
+      nosta.terrainVariant = nostaVariant;
+    }
   });
 });
 

@@ -1,5 +1,6 @@
-import { NATIONS } from "../../nations/registry";
+import { DEFAULT_TERRAIN_VARIANT, NATIONS } from "../../nations/registry";
 import type { CivilizationId, Position, Tile } from "../types";
+import { assignTerrainVariants } from "./terrainVariants";
 
 /** Hand-authored, immutable setting map. Each character covers a 2×2 region.
  * The fixed coastline, ranges, rivers, forests, cities and resources below are
@@ -129,6 +130,7 @@ export function createStoryMap(civilization: CivilizationId) {
       x,
       y,
       terrain: land ? "plain" : "deep",
+      terrainVariant: DEFAULT_TERRAIN_VARIANT,
       resource: null,
       owner: null,
       cityId: null,
@@ -222,8 +224,12 @@ export function createStoryMap(civilization: CivilizationId) {
     ? civilization
     : "imperia";
   const order = [selected, ...STORY_FACTIONS.filter((c) => c !== selected)];
+  const anchors = STORY_NATIONS.map(({ id, terrainVariant }) => {
+    const { x, y } = capitalLocations[id]!;
+    return { tileId: y * STORY_SIZE + x, terrainVariant };
+  });
   return {
-    tiles,
+    tiles: assignTerrainVariants(tiles, anchors),
     starts: order.map((c) => {
       const city = STORY_CITIES.find((x) => x.capitalOfCivilization === c)!;
       return city.y * 32 + city.x;

@@ -49,9 +49,18 @@ export function initializePwa() {
   if (initialized || typeof window === "undefined") return;
   initialized = true;
   const standalone = window.matchMedia("(display-mode: standalone)");
-  const installed = standalone.matches || !!(navigator as Navigator & { standalone?: boolean }).standalone;
+  const device = navigator as Navigator & { standalone?: boolean };
+  // Desktop-style iPad user agents still advertise Macintosh with touch input.
+  const appleMobile = /iPhone|iPad|iPod/.test(device.userAgent) ||
+    (/Macintosh/.test(device.userAgent) && device.maxTouchPoints > 1);
+  const installed = () => standalone.matches || device.standalone === true;
+  const syncIosLayout = () => document.documentElement.toggleAttribute(
+    "data-ios-standalone",
+    device.standalone === true || (standalone.matches && appleMobile),
+  );
+  syncIosLayout();
   publish({
-    installed,
+    installed: installed(),
     online: navigator.onLine,
     supported: import.meta.env.PROD && "serviceWorker" in navigator && window.isSecureContext,
   });
@@ -60,7 +69,10 @@ export function initializePwa() {
     void registration?.update().catch(() => undefined);
   });
   window.addEventListener("offline", () => publish({ online: false }));
-  standalone.addEventListener("change", (event) => publish({ installed: event.matches }));
+  standalone.addEventListener("change", () => {
+    syncIosLayout();
+    publish({ installed: installed() });
+  });
   window.addEventListener("beforeinstallprompt", (event) => {
     event.preventDefault();
     installPrompt = event as InstallPrompt;

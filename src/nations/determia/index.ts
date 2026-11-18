@@ -1,5 +1,5 @@
 import emblem from "./logo.png";
-import type { NationPack } from "../types";
+import { DEFAULT_TERRAIN_VARIANT, type NationPack } from "../types";
 
 export const nation = {
   id: "determia",
@@ -11,6 +11,7 @@ export const nation = {
   description: "西北的银灰文明。",
   images: { emblem },
   modelSet: "determia",
+  terrainVariant: DEFAULT_TERRAIN_VARIANT,
   opening: {
     technologies: ["strategy"],
     unit: "defender",

@@ -18,6 +18,7 @@ export interface Settings {
   showHints: boolean;
   showResources: boolean;
   cityDetails: "map" | "panel";
+  menuTheme: "system" | "light" | "dark";
 }
 const defaultSettings: Settings = {
   sound: true,
@@ -25,6 +26,7 @@ const defaultSettings: Settings = {
   showHints: false,
   showResources: true,
   cityDetails: "map",
+  menuTheme: "system",
 };
 function readSettings(): Settings {
   try {
@@ -37,6 +39,7 @@ function readSettings(): Settings {
       showHints: saved.showHints ?? defaultSettings.showHints,
       showResources: typeof saved.showResources === "boolean" ? saved.showResources : defaultSettings.showResources,
       cityDetails: saved.cityDetails === "panel" ? "panel" : defaultSettings.cityDetails,
+      menuTheme: saved.menuTheme === "light" || saved.menuTheme === "dark" ? saved.menuTheme : defaultSettings.menuTheme,
     };
   } catch {
     return defaultSettings;

@@ -3,10 +3,10 @@ import type { ReactNode } from "react";
 import type { BufferGeometry } from "three";
 import { BackSide, Color, ShaderMaterial } from "three";
 import type { BuildingId, City, Player, Tile } from "../game/types";
-import { lighthouseModel, ruinModel } from "./architecture";
-import { developedLandscape, grove, mountain, siteLandscape } from "./landscape";
+import { siteLandscape } from "./landscape";
 import type { BuildingVisualTier } from "./buildingVisualTier";
 import type { ModelSetId } from "../nations/registry";
+import { getTerrainAssets } from "../nations/models";
 import { cityAppearance, MODEL_SETS } from "./factionModels";
 import { useTerritoryMaterial } from "./territoryMaterials";
 
@@ -73,29 +73,27 @@ function Sculpture({ modelKey, build, highlight = false }: {
 
 export const TerrainDetails = memo(function TerrainDetails({ tile, simple = false }: { tile: Tile; simple?: boolean }) {
   if (tile.cityId || tile.lighthouse) return null;
-  const variant = (tile.x * 7 + tile.y * 13) % 6;
+  const assets = getTerrainAssets(tile.terrainVariant);
+  const variation = (tile.x * 7 + tile.y * 13) % 6;
   if (tile.building) {
     const site = siteLandscape(tile);
-    return site && <Sculpture modelKey={`site:${site}:${variant}:${simple}`}
-      build={() => developedLandscape(site, variant, simple)} />;
+    return site && <Sculpture modelKey={`site:${tile.terrainVariant}:${site}:${variation}:${simple}`}
+      build={() => assets.developed(site, variation, simple)} />;
   }
-  if (tile.terrain === "forest") {
-    return <Sculpture modelKey={`grove:${variant}:${simple}`} build={() => grove(variant, simple)} />;
-  }
-  if (tile.terrain === "mountain") {
-    return <Sculpture modelKey={`ridge:${variant%3}:${simple}`} build={() => mountain(variant, simple)} />;
-  }
-  return null;
+  const build = assets.details[tile.terrain];
+  const style = tile.terrain === "mountain" ? variation % 3 : variation;
+  return build ? <Sculpture modelKey={`terrain:${tile.terrainVariant}:${tile.terrain}:${style}:${simple}`}
+    build={() => build(style, simple)} /> : null;
 });
 
-export const Resources = memo(function Resources({ tile, modelSet, highlight }: {
+export const Resources = memo(function Resources({ tile, highlight }: {
   tile: Tile;
-  modelSet: ModelSetId;
   highlight: boolean;
 }) {
   const kind = tile.resource;
   if (!kind || tile.cityId || tile.building) return null;
-  return <Sculpture modelKey={`resource:${modelSet}:${kind}`} build={() => MODEL_SETS[modelSet].resource(kind)} highlight={highlight} />;
+  return <Sculpture modelKey={`resource:${tile.terrainVariant}:${kind}`}
+    build={() => getTerrainAssets(tile.terrainVariant).resource(kind)} highlight={highlight} />;
 });
 
 export const CityModel = memo(function CityModel({ city, players }: { city: City; players: readonly Player[] }) {
@@ -111,5 +109,7 @@ export const BuildingModel = memo(function BuildingModel({ type, color, modelSet
     build={() => MODEL_SETS[modelSet].building(type, color, tier)} />;
 });
 
-export const RuinModel = () => <Sculpture modelKey="ruin" build={ruinModel} />;
-export const LighthouseModel = () => <Sculpture modelKey="lighthouse" build={lighthouseModel} />;
+export const RuinModel = ({ terrainVariant }: Pick<Tile, "terrainVariant">) =>
+  <Sculpture modelKey={`ruin:${terrainVariant}`} build={getTerrainAssets(terrainVariant).ruin} />;
+export const LighthouseModel = ({ terrainVariant }: Pick<Tile, "terrainVariant">) =>
+  <Sculpture modelKey={`lighthouse:${terrainVariant}`} build={getTerrainAssets(terrainVariant).lighthouse} />;

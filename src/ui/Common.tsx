@@ -3,6 +3,7 @@ import type { KeyboardEvent, ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { ArrowLeft } from "lucide-react";
 import "./full-screen.css";
+import "./menu-theme.css";
 
 const menuControls = "button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], summary, [tabindex='0']";
 
@@ -12,6 +13,7 @@ export function Modal({
   children,
   onClose,
   wide = false,
+  menuSurface = false,
   footer,
 }: {
   title: string;
@@ -19,6 +21,7 @@ export function Modal({
   children: ReactNode;
   onClose: () => void;
   wide?: boolean;
+  menuSurface?: boolean;
   footer?: ReactNode;
 }) {
   const ref = useRef<HTMLElement>(null);
@@ -56,6 +59,7 @@ export function Modal({
   return createPortal(
     <section
       className={`menu-page${wide ? " menu-page-wide" : ""}`}
+      data-menu-surface={menuSurface ? "" : undefined}
       ref={ref}
       role="dialog"
       aria-modal="true"

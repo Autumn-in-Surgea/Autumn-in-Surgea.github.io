@@ -1,6 +1,9 @@
+import { DEFAULT_TERRAIN_VARIANT } from "../../nations/registry";
 import type { CivilizationId, GameOptions, Position, Tile } from "../types";
+import { openingNations } from "./openingNations";
 import { hashSeed, seededRandom } from "./random";
 import { createStoryMap } from "./story";
+import { assignTerrainVariants } from "./terrainVariants";
 
 export const distance = (a: Position, b: Position): number =>
   Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
@@ -20,6 +23,8 @@ export function neighbors(tiles: Tile[], size: number, tile: Position): Tile[] {
 const clamp = (n: number, min: number, max: number) =>
   Math.max(min, Math.min(max, n));
 const smooth = (n: number) => n * n * (3 - 2 * n);
+const resourceChanceScale = 0.9;
+const mountainOreChance = 0.7;
 /** Continuous seeded value noise; four octaves produce broad coasts and smaller details. */
 export function valueNoise(x: number, y: number, seed: number): number {
   const xi = Math.floor(x),
@@ -229,6 +234,7 @@ export function generateMap(options: GameOptions): GeneratedMap {
             ? "forest"
             : "plain"
         : "deep",
+      terrainVariant: DEFAULT_TERRAIN_VARIANT,
       resource: null,
       owner: null,
       cityId: null,
@@ -368,26 +374,37 @@ export function generateMap(options: GameOptions): GeneratedMap {
       }
   }
   const resourceRand = seededRandom(options.seed + ":resources");
+  const starfishChance = resourceDensity * 0.09 * resourceChanceScale;
   for (const t of tiles) {
-    const r = resourceRand(),
-      density =
-        resourceDensity *
-        (nearTown[t.id] <= 1
-          ? 1.25
-          : nearTown[t.id] <= 2
-            ? 0.65
-            : free
-              ? 0.5
-              : 0);
-    if (r < density) {
-      if (t.terrain === "plain")
-        t.resource = resourceRand() < 0.5 ? "fruit" : "crop";
-      else if (t.terrain === "forest") t.resource = "animal";
-      else if (t.terrain === "mountain") t.resource = "ore";
-      else if (t.terrain === "shallow") t.resource = "fish";
+    const r = resourceRand();
+    const proximity = nearTown[t.id] <= 1
+      ? 1.25
+      : nearTown[t.id] <= 2
+        ? 0.65
+        : free ? 0.5 : 0;
+    const baseChance = Math.min(1, resourceDensity * proximity);
+    const chance = baseChance * resourceChanceScale;
+    switch (t.terrain) {
+      case "plain":
+        if (r < baseChance) {
+          // Preserve the seeded type roll even when the lower chance removes this resource.
+          const resource = resourceRand() < 0.5 ? "fruit" : "crop";
+          if (r < chance) t.resource = resource;
+        }
+        break;
+      case "forest":
+        if (r < chance) t.resource = "animal";
+        break;
+      case "mountain":
+        if (r < mountainOreChance) t.resource = "ore";
+        break;
+      case "shallow":
+        if (r < chance) t.resource = "fish";
+        break;
+      case "deep":
+        if (r < starfishChance) t.resource = "starfish";
+        break;
     }
-    if (t.terrain === "deep" && r < resourceDensity * 0.09)
-      t.resource = "starfish";
     if (!isWater(t) && resourceRand() < 0.018 && !towns.includes(t.id)) {
       t.ruin = true;
       t.resource = null;
@@ -422,5 +439,8 @@ export function generateMap(options: GameOptions): GeneratedMap {
     tiles[id].resource = null;
     tiles[id].ruin = false;
   }
-  return { tiles, starts, villages };
+  const anchors = openingNations(options).slice(0, starts.length).map(({ terrainVariant }, i) => ({
+    tileId: starts[i], terrainVariant,
+  }));
+  return { tiles: assignTerrainVariants(tiles, anchors), starts, villages };
 }

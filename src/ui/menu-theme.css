@@ -1,0 +1,120 @@
+/* Only the title screen, setup, About and Settings inherit this scheme. */
+.app[data-menu-theme] :is(.menu-shell, .menu-page[data-menu-surface]) {
+  --menu-ink: light-dark(#22394f, #efe8d6);
+  --menu-muted: light-dark(#5e625d, #b5c3cf);
+  --menu-brass: light-dark(#836a3c, #dfc184);
+  --menu-edge: light-dark(#b8a37b, #637b90);
+  --menu-field: light-dark(#fffaed, #192b3d);
+  --menu-panel: light-dark(#eee3cd, #24384b);
+  --menu-hover: light-dark(#fff6dd, #324b62);
+  --menu-inset: light-dark(#fffaed9c, #bcd2e029);
+  --menu-button: linear-gradient(light-dark(#fdf8ec, #334b62), light-dark(#ece2ca, #213549));
+  --menu-selected: linear-gradient(150deg, light-dark(#3d5a78, #536e88), light-dark(#22394f, #2c465f));
+  color-scheme: light dark;
+}
+
+.app[data-menu-theme="light"] :is(.menu-shell, .menu-page[data-menu-surface]) { color-scheme: light; }
+.app[data-menu-theme="dark"] :is(.menu-shell, .menu-page[data-menu-surface]) { color-scheme: dark; }
+
+.menu-shell .menu-actions > button {
+  border-color: light-dark(#d4b784, #b2986a);
+  background: linear-gradient(145deg, light-dark(#fdf6e4f5, #22394ff5), light-dark(#e4d5b7f2, #101f32f5));
+  box-shadow: 0 4px 12px #14242962, inset 0 0 0 2px light-dark(#fff9e990, #101f32a8);
+  color: light-dark(#20364b, #fff7e0);
+  text-shadow: 0 1px 4px light-dark(#fffaeab0, #10212b);
+}
+
+.menu-shell .menu-actions > button > svg { color: light-dark(#775829, #f8dfab); }
+.menu-shell .menu-actions > button::after { border-color: light-dark(#9c784b5f, #d5ba7f51); }
+.menu-shell .menu-actions > .menu-start {
+  border-color: light-dark(#efe0ae, #e9d3a1);
+  background: linear-gradient(145deg, light-dark(#fff3d9, #476989), light-dark(#d4b875, #22394f) 80%);
+}
+.menu-shell .menu-actions > button:hover:not(:disabled) {
+  border-color: #fff0cb;
+  background: linear-gradient(light-dark(#fff9e7, #476989), light-dark(#ecdbb6, #3d5a78));
+}
+.menu-shell .menu-actions > button:disabled { opacity: .73; }
+.menu-shell .menu-footer .pwa-button {
+  color: var(--menu-ink);
+  background: var(--menu-button);
+}
+
+.menu-page[data-menu-surface] {
+  --ink: var(--menu-ink);
+  --green: var(--menu-ink);
+  --line: var(--menu-edge);
+  --jade: light-dark(#4d7162, #a9d1ba);
+  --paper: var(--menu-field);
+  background: linear-gradient(120deg, light-dark(#dad1bc, #101b29), light-dark(#e8dfcb, #152637) 50%, light-dark(#dbd1ba, #101c29));
+}
+
+.menu-page[data-menu-surface] .menu-page-content {
+  border-inline-color: light-dark(#ae946b5d, #8ca6ba36);
+  background:
+    repeating-linear-gradient(117deg, transparent 0 4px, light-dark(#62432205, #b1c1d408) 4px 5px, transparent 5px 11px),
+    linear-gradient(118deg, light-dark(#fbf6e9, #1c2e41), light-dark(#f3ead6, #182838));
+}
+.menu-page[data-menu-surface] .menu-page-footer {
+  border-top-color: var(--menu-edge);
+  box-shadow: inset 0 2px var(--menu-inset);
+  background: light-dark(#e9dec8, #172839);
+}
+
+.menu-page[data-menu-surface] :is(.setting-row strong, .setup-rules legend, .setup-grid label > span,
+  .seed-input button, .faction-inputs label, .generation-settings label, .generation-settings b,
+  .setup-map-label, .spawn-editor p, .setup-footer > span, .nation-opening, .text-action) {
+  color: var(--menu-ink);
+}
+.menu-page[data-menu-surface] :is(.setting-row small, .civ-card small, .settings-game,
+  .about-body > p, .nation-opening dt) { color: var(--menu-muted); }
+.menu-page[data-menu-surface] :is(.setting-row > svg, .about-body a, .text-action:hover) { color: var(--menu-brass); }
+.menu-page[data-menu-surface] .setting-row:hover { background: light-dark(#ede5d253, #779bb71c); }
+.menu-page[data-menu-surface] .toggle:not(.on) { background: light-dark(#cfc2a9, #586d80); }
+.menu-page[data-menu-surface] .toggle.on { background: light-dark(#3d5a78, #487d6d); }
+
+.menu-page[data-menu-surface] :is(select, .seed-input, .faction-inputs input) {
+  color: var(--menu-ink);
+  border-color: var(--menu-edge);
+  background: var(--menu-field);
+}
+.menu-page[data-menu-surface] .generation-settings input { accent-color: var(--menu-brass); }
+.menu-page[data-menu-surface] :is(.setup-rules, .faction-settings) { border-color: var(--menu-edge); }
+.menu-page[data-menu-surface] :is(.settings-game, .nation-opening, .setup-error) {
+  background: var(--menu-panel);
+}
+.menu-page[data-menu-surface] .setup-error { color: light-dark(#914c3e, #f5ac9e); }
+.menu-page[data-menu-surface] :is(.secondary, .pwa-button, .scenario-tabs button, .menu-theme-options button) {
+  color: var(--menu-ink);
+  background: var(--menu-button);
+  border-color: var(--menu-edge);
+  box-shadow: inset 0 0 0 2px var(--menu-inset);
+}
+.menu-page[data-menu-surface] :is(.secondary, .pwa-button, .scenario-tabs button, .menu-theme-options button):hover:not(:disabled) {
+  background: var(--menu-hover);
+}
+.menu-page[data-menu-surface] :is(.scenario-tabs button.selected, .menu-theme-options button[aria-pressed="true"]) {
+  color: #fff4da;
+  border-color: var(--chrome-brass);
+  background: var(--menu-selected);
+  box-shadow: inset 0 0 0 2px #e4cea050;
+}
+.menu-page[data-menu-surface] .civ-card { background: light-dark(#f9f3e580, #192b3db3); }
+.menu-page[data-menu-surface] .civ-card:hover { background: var(--menu-hover); }
+.menu-page[data-menu-surface] .civ-card.selected { background: var(--menu-panel); }
+
+.menu-theme-setting { flex-wrap: wrap; }
+.menu-theme-options {
+  display: inline-grid;
+  flex: 0 1 auto;
+  grid-template-columns: repeat(3, auto);
+  gap: 4px;
+}
+.menu-theme-options button {
+  min-block-size: 44px;
+  padding-inline: clamp(6px, 2vw, 12px);
+  border: 1px solid;
+  border-radius: 3px;
+  font-weight: 650;
+  white-space: nowrap;
+}

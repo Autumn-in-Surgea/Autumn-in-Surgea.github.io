@@ -1,5 +1,5 @@
 import emblem from "./logo.png";
-import type { NationPack } from "../types";
+import { DEFAULT_TERRAIN_VARIANT, type NationPack } from "../types";
 
 export const nation = {
   id: "imperia",
@@ -11,6 +11,7 @@ export const nation = {
   description: "中央大陆的旧日秩序。",
   images: { emblem },
   modelSet: "imperia",
+  terrainVariant: DEFAULT_TERRAIN_VARIANT,
   opening: {
     technologies: ["organization"],
     unit: "warrior",

@@ -1,5 +1,5 @@
 import emblem from "./logo.png";
-import type { NationPack } from "../types";
+import { DEFAULT_TERRAIN_VARIANT, type NationPack } from "../types";
 
 export const nation = {
   id: "ida",
@@ -11,6 +11,7 @@ export const nation = {
   description: "南方绯红的群岛文明。",
   images: { emblem },
   modelSet: "ida",
+  terrainVariant: DEFAULT_TERRAIN_VARIANT,
   opening: {
     technologies: ["hunting"],
     unit: "warrior",

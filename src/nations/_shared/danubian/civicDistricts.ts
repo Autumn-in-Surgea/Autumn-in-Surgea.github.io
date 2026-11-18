@@ -1,12 +1,8 @@
 import { Miniature } from "../../../scene/miniature";
 import { facade, cityStreetDatum as ground } from "./cityMasonry";
+import { brass, brick, cobalt, copper, ink as shadow, ivory as limestone, terracotta as roofTile } from "../../../scene/architecturalPalette";
 
-const limestone = "#e9d8b6";
-const sandstone = "#c0a47b";
-const brick = "#a66348";
-const roofTile = "#af523d";
-const copper = "#5c847d";
-const shadow = "#445452";
+const sandstone = "#bd8c66";
 type Point = [number, number, number];
 
 // A pitched roof with a true ridge, rather than a truncated pyramid. The gable
@@ -28,7 +24,7 @@ function pitchedRoof(m: Miniature, x: number, y: number, z: number, w: number,
 
 function parapet(m: Miniature, x: number, y: number, z: number, w: number, d: number, coping: string) {
   const rim = 0.011;
-  m.box("#747875", x, y+0.004, z, w, 0.008, d);
+  m.box("#596278", x, y+0.004, z, w, 0.008, d);
   for (const sign of [-1,1]) {
     m.box(coping, x, y+0.012, z+sign*(d-rim)/2, w, 0.024, rim);
     m.box(coping, x+sign*(w-rim)/2, y+0.012, z, rim, 0.024, d-2*rim);
@@ -36,24 +32,24 @@ function parapet(m: Miniature, x: number, y: number, z: number, w: number, d: nu
 }
 
 function mansardShop(m: Miniature, x: number, y: number, z: number) {
-  const half = 0.133, slate = "#67747c";
+  const half = 0.133;
   // The steep lower slope turns at a continuous shoulder under a shallow upper pitch.
   const profile: [number,number][] = [[0.076,0],[0.048,0.059],[0,0.074],[-0.048,0.059],[-0.076,0]];
   const points = (side: number): Point[] => profile.map(([depth,rise]) => [x+side*half,y+rise,z+depth]);
   const left = points(-1), right = points(1);
-  for (let j=1; j<profile.length; j++) m.face(slate, [left[j-1],right[j-1],right[j],left[j]]);
+  for (let j=1; j<profile.length; j++) m.face(cobalt, [left[j-1],right[j-1],right[j],left[j]]);
   m.face(limestone, left);
   m.face(limestone, right.reverse());
   for (const dx of [-0.061,0.061]) {
     m.box(limestone, x+dx, y+0.035, z+0.055, 0.052, 0.055, 0.037);
     m.box(shadow, x+dx, y+0.037, z+0.075, 0.027, 0.031, 0.004);
-    pitchedRoof(m, x+dx, y+0.061, z+0.055, 0.061, 0.049, 0.023, "#55656a", limestone);
+    pitchedRoof(m, x+dx, y+0.061, z+0.055, 0.061, 0.049, 0.023, cobalt, limestone);
   }
 }
 
 export function treatyShops(m: Miniature, color: string) {
   // A red-roofed corner inn, with an oriel and the bay window below its cap.
-  const eaves = facade(m, -0.125, -0.118, 0.264, 0.200, 0.152, "#dfbb85", 3, 2);
+  const eaves = facade(m, -0.125, -0.118, 0.264, 0.200, 0.152, "#ecc38c", 3, 2);
   pitchedRoof(m, -0.125, eaves, -0.118, 0.294, 0.226, 0.087, roofTile, limestone);
   // A timber collar and diagonal struts outline the inn's front gable.
   m.box("#866344", -0.125, eaves+0.006, -0.003, 0.267, 0.012, 0.009);
@@ -69,10 +65,10 @@ export function treatyShops(m: Miniature, color: string) {
   }
   m.part("octagon", sandstone, x, 0.240, z, 0.13, 0.018, 0.13);
   m.part("spire", roofTile, x, 0.285, z, 0.145, 0.092, 0.145);
-  m.part("gem", "#be9859", x, 0.337, z, 0.014, 0.019, 0.014);
+  m.part("gem", brass, x, 0.337, z, 0.014, 0.019, 0.014);
   // Two low, separate shopfronts leave a lane across the front of the inn.
-  const side = facade(m, 0.204, -0.125, 0.187, 0.130, 0.106, "#c7976c", 2, 2);
-  pitchedRoof(m, 0.204, side, -0.125, 0.147, 0.206, 0.059, "#98604b", limestone, true);
+  const side = facade(m, 0.204, -0.125, 0.187, 0.130, 0.106, "#e1a882", 2, 2);
+  pitchedRoof(m, 0.204, side, -0.125, 0.147, 0.206, 0.059, "#9f533e", limestone, true);
   const shop = facade(m, -0.110, 0.179, 0.244, 0.125, 0.101, limestone, 3, 1);
   mansardShop(m, -0.110, shop, 0.179);
   m.box(color, -0.110, 0.124, 0.257, 0.244, 0.014, 0.058, 0.15);
@@ -144,8 +140,8 @@ export function merchantQuarter(m: Miniature, color: string) {
   const left = 0.049, right = 0.245;
   for (const front of [0.198,0.259]) {
     const back = front-0.061, crest = annex+0.045;
-    m.face("#88958b", [[left,annex,front],[right,annex,front],[right,crest,back],[left,crest,back]]);
-    m.face("#779697", [[right,annex,back],[left,annex,back],[left,crest,back],[right,crest,back]]);
+    m.face(cobalt, [[left,annex,front],[right,annex,front],[right,crest,back],[left,crest,back]]);
+    m.face(copper, [[right,annex,back],[left,annex,back],[left,crest,back],[right,crest,back]]);
     m.face(limestone, [[right,annex,front],[right,annex,back],[right,crest,back]]);
     m.face(limestone, [[left,annex,back],[left,annex,front],[left,crest,back]]);
   }
@@ -161,23 +157,23 @@ function crownRoof(m: Miniature, x: number, y: number, z: number, w: number, d: 
     const mid: Point = [(left[0]+right[0])/2,y,(left[2]+right[2])/2];
     const innerL: Point = [x+a*w*0.30,y+h*0.46,z+b*d*0.30];
     const innerR: Point = [x+c*w*0.30,y+h*0.46,z+e*d*0.30];
-    m.face("#817848", [[left[0],left[1]-0.009,left[2]], [right[0],right[1]-0.009,right[2]], right, left]);
-    m.face("#9c9052", [left,mid,innerL]);
-    m.face("#9c9052", [mid,innerR,innerL]);
-    m.face("#9c9052", [mid,right,innerR]);
+    m.face("#a8732e", [[left[0],left[1]-0.009,left[2]], [right[0],right[1]-0.009,right[2]], right, left]);
+    m.face(brass, [left,mid,innerL]);
+    m.face(brass, [mid,innerR,innerL]);
+    m.face(brass, [mid,right,innerR]);
   }
   // Long ridge runs across the central facade; gable ends remain visible above
   // the hipped skirt from both three-quarter views.
   const e = y+h*0.46, peak = y+h, l = x-w*0.30, r = x+w*0.30;
   const back = z-d*0.30, front = z+d*0.30;
-  m.face("#9e9252", [[l,e,front],[r,e,front],[r,peak,z],[l,peak,z]]);
-  m.face("#96884d", [[r,e,back],[l,e,back],[l,peak,z],[r,peak,z]]);
+  m.face("#db9c42", [[l,e,front],[r,e,front],[r,peak,z],[l,peak,z]]);
+  m.face("#bf8137", [[r,e,back],[l,e,back],[l,peak,z],[r,peak,z]]);
   m.face(limestone, [[l,e,back],[l,e,front],[l,peak,z]]);
   m.face(limestone, [[r,e,front],[r,e,back],[r,peak,z]]);
-  m.box("#b4a359", x, peak+0.002, z, w*0.67, 0.013, 0.014);
+  m.box("#f2c475", x, peak+0.002, z, w*0.67, 0.013, 0.014);
   for (const sign of [-1,1]) {
     // The ridge caps turn upward above the pale triangular gable ends.
-    m.beam("#b4a359", [x+w*0.303*sign,peak+0.004,z],
+    m.beam("#f2c475", [x+w*0.303*sign,peak+0.004,z],
       [x+w*0.354*sign,peak+0.017,z], 0.013);
   }
 }
@@ -190,7 +186,7 @@ export function axialCapital(m: Miniature, color: string) {
   const registry = facade(m, 0.283, -0.151, 0.153, 0.173, 0.219, "#be9b72", 3, 3);
   parapet(m, 0.283, registry, -0.151, 0.158, 0.178, limestone);
   m.box("#b79a71", 0.247, registry+0.047, -0.187, 0.068, 0.083, 0.077);
-  m.box("#61716c", 0.247, registry+0.093, -0.187, 0.080, 0.014, 0.088);
+  m.box(cobalt, 0.247, registry+0.093, -0.187, 0.080, 0.014, 0.088);
   m.box(limestone, 0.283, ground+0.104, -0.151, 0.161, 0.012, 0.182);
   facade(m, 0, -0.108, 0.304, 0.246, 0.291, limestone, 5, 4);
   const tower = facade(m, 0, -0.029, 0.210, 0.210, 0.372, "#cfb482", 3, 4);
@@ -210,9 +206,9 @@ export function axialCapital(m: Miniature, color: string) {
     m.box(limestone, 0, ground+0.006+i*0.008, 0.218-i*0.035, 0.18, 0.012+i*0.016, 0.042);
   }
   const visitors = facade(m, -0.246, 0.208, 0.194, 0.134, 0.131, limestone, 3, 2);
-  m.part("hip", "#7f866b", -0.246, visitors+0.029, 0.208, 0.221, 0.059, 0.158);
+  m.part("hip", copper, -0.246, visitors+0.029, 0.208, 0.221, 0.059, 0.158);
   m.box(color, -0.246, ground+0.084, 0.287, 0.105, 0.012, 0.040);
   const officers = facade(m, 0.257, 0.219, 0.156, 0.195, 0.145, "#d0b283", 2, 2);
-  pitchedRoof(m, 0.257, officers, 0.219, 0.218, 0.179, 0.062, "#776a5b", limestone, true);
+  pitchedRoof(m, 0.257, officers, 0.219, 0.218, 0.179, 0.062, cobalt, limestone, true);
   m.box(brick, 0.301, officers+0.031, 0.166, 0.027, 0.061, 0.026);
 }

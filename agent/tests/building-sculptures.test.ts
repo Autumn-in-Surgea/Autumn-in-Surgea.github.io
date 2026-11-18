@@ -6,6 +6,7 @@ import { buildingVisualTier, roadSurfaceHeight } from "../../src/scene/buildingV
 import { MODEL_SETS } from "../../src/scene/factionModels";
 import { roadGeometry } from "../../src/scene/RoadInlay";
 import { terrainHeight } from "../../src/scene/terrainElevation";
+import { DEFAULT_TERRAIN_VARIANT } from "../../src/nations/registry";
 
 describe("city improvement sculptures", () => {
   it("advances once per two city levels and caps at the third appearance", () => {
@@ -42,6 +43,7 @@ describe("city improvement sculptures", () => {
       x: id % 3,
       y: Math.floor(id / 3),
       terrain: "shallow",
+      terrainVariant: DEFAULT_TERRAIN_VARIANT,
       owner: null,
       cityId: null,
       building: null,

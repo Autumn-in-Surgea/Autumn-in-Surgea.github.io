@@ -111,6 +111,7 @@ export interface GameOptions {
 export interface Tile extends Position {
   id: number;
   terrain: Terrain;
+  readonly terrainVariant: NationId;
   resource: Resource | null;
   owner: number | null;
   cityId: string | null;

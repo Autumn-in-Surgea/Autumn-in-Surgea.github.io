@@ -227,6 +227,7 @@ export default function App() {
   return (
     <div
       className={`app ${screen === "menu" ? "is-menu" : "is-playing"} ${reducedMotion ? "reduce-motion" : ""}`}
+      data-menu-theme={settings.menuTheme}
     >
       {screen === "game" && game && (
         <div className="game-scene">

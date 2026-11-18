@@ -1,8 +1,8 @@
 import { Miniature } from "./miniature";
+import { brass, cobalt, ink, ivory, masonry, terracotta } from "./architecturalPalette";
 
-const stone = "#e0d4b7", pale = "#f0e5cd", shadow = "#8b8976";
-const bronze = "#a58951", brass = "#d9ba72", ink = "#425455";
-const slate = "#536c65";
+const stone = "#e4d2c3", shadow = "#7b7888";
+const bronze = "#ae7b4f";
 
 function plinth(m: Miniature, w: number, d: number) {
   m.part("bevel", shadow, 0, 0.025, 0, w, 0.05, d);
@@ -17,20 +17,20 @@ export function ruinModel() {
     m.box(bronze,x,0.07+h*0.63,z,0.124,0.033,0.13);
   }
   m.box(shadow,-0.109,0.42,-0.061,0.201,0.065,0.146,0,0,-0.082);
-  m.part("gem", brass,0.012,0.142,0.05,0.124,0.16,0.114,0,0,-0.16);
-  m.box("#aaa18a",0.03,0.113,0.138,0.117,0.079,0.17,0,0.39,-0.1);
-  return m.finish();
+  m.part("gem", "#98699c",0.012,0.161,0.05,0.141,0.196,0.132,0,0,-0.16);
+  m.box(masonry,0.03,0.113,0.138,0.117,0.079,0.17,0,0.39,-0.1);
+  return m.finish().scale(1.20, 1.19, 1.20);
 }
 
 export function lighthouseModel() {
   const m = new Miniature();
   m.part("octagon", shadow,0,0.063,0,0.48,0.126,0.48);
-  m.part("octagon", pale,0,0.323,0,0.226,0.401,0.226);
-  m.part("octagon", slate,0,0.327,0,0.235,0.077,0.235);
+  m.part("octagon", ivory,0,0.323,0,0.226,0.401,0.226);
+  m.part("octagon", terracotta,0,0.327,0,0.235,0.089,0.235);
   m.part("octagon", bronze,0,0.528,0,0.302,0.055,0.302);
-  m.part("octagon", "#d7b66f",0,0.624,0,0.17,0.139,0.17);
+  m.part("octagon", "#efc665",0,0.624,0,0.17,0.139,0.17);
   for (const x of [-1,1]) for (const z of [-1,1]) m.box(ink,x*0.081,0.632,z*0.08,0.02,0.169,0.022);
-  m.part("spire", slate,0,0.765,0,0.302,0.144,0.302);
+  m.part("spire", cobalt,0,0.765,0,0.302,0.144,0.302);
   m.part("gem", brass,0,0.852,0,0.038,0.099,0.039);
-  return m.finish();
+  return m.finish().scale(1.21, 1.14, 1.21);
 }

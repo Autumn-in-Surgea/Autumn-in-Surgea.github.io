@@ -1,6 +1,8 @@
 import type { EventNotice, Resource, Terrain, UnitType } from "../game/types";
 import type { ModelSetId } from "./models";
 
+export const DEFAULT_TERRAIN_VARIANT = "imperia" as const;
+
 export interface NationOpening {
   technologies: readonly string[];
   unit: UnitType;
@@ -19,6 +21,7 @@ export interface NationPack {
   capital: string;
   images: { emblem: string };
   modelSet: ModelSetId;
+  terrainVariant: string;
   opening: NationOpening;
   notices: {
     opening: EventNotice;

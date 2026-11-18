@@ -76,21 +76,25 @@ export function GameHUD({
       <header className="hud-statbar" aria-label="对局统计">
         <div className="hud-statbar-inner">
           <div className="hud-stat hud-round" aria-label={`第 ${game.round} 回合`}>
-            <span>回合</span><strong>{game.round}</strong>
-            {game.options.mode === "score" && <span>/{game.options.maxRounds}</span>}
+            <span>回合</span>
+            <div className="hud-round-value">
+              <strong>{game.round}</strong>
+              {game.options.mode === "score" && <span>/{game.options.maxRounds}</span>}
+            </div>
           </div>
           <div className="hud-stat hud-stars" aria-label={`${game.players[0].resources} 星星，每回合收入 ${income}`}>
-            <ResourceIcon size={18} /><strong>{game.players[0].resources}</strong>
+            <ResourceIcon size={18} />
+            <strong data-wide-count={game.players[0].resources >= 10000}>{game.players[0].resources}</strong>
             <span className="hud-yield">+{income}</span>
           </div>
           <div className="hud-stat" aria-label={`${cities} 座城市`}>
-            <Building2 size={17} aria-hidden="true" /><strong>{cities}</strong>
+            <Building2 size={17} aria-hidden="true" /><strong data-wide-count={cities >= 100}>{cities}</strong>
           </div>
           <div className="hud-stat" aria-label={`${units} 个单位`}>
-            <UsersRound size={17} aria-hidden="true" /><strong>{units}</strong>
+            <UsersRound size={17} aria-hidden="true" /><strong data-wide-count={units >= 100}>{units}</strong>
           </div>
           <div className="hud-stat" aria-label={`分数 ${score}`}>
-            <Trophy size={17} aria-hidden="true" /><strong>{score}</strong>
+            <Trophy size={17} aria-hidden="true" /><strong data-wide-count={score >= 10000}>{score}</strong>
           </div>
         </div>
       </header>

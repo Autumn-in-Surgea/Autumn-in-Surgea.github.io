@@ -16,11 +16,13 @@ import { Canvas, events, useFrame, useThree } from "@react-three/fiber";
 import type { ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
 import { factionForOwner, type ModelSetId } from "../nations/registry";
+import { getTerrainAssets } from "../nations/models";
 import { colorForOwner, MODEL_SETS } from "./factionModels";
 import { SceneQuality } from "./SceneQuality";
 import { knownTerrainHeight, terrainCapOffset } from "./terrainElevation";
 import { TerrainInlays } from "./TerrainInlays";
 import { TerritoryBorders } from "./TerritoryBorders";
+import { ShippingLanes } from "./ShippingLanes";
 import { TileScenery } from "./TileScenery";
 import { buildTileTiers, type StructureChange } from "../store/structurePlayback";
 import { BoardFrame, tileCap, tilePlinth } from "./BoardFrame";
@@ -40,7 +42,6 @@ import type { PresentedUnit } from "./motion";
 import { BOARD_UNIT_RENDER_ORDER } from "./unitModels";
 import { SelectionHalo, SquareOutline } from "./boardHighlights";
 import { ForeignTerritory, foreignTerritoryBrightness, isForeignTerritory } from "./territoryMaterials";
-import { terrainColors } from "./terrainColors";
 import type { PlaybackStep } from "../store/actionPlayback";
 import { cityDetailHeight, drawCityDetails, measureCityDetails, type CityNameplateDetails } from "./cityNameplate";
 
@@ -247,7 +248,8 @@ type LabelKind = "city" | "health" | "feedback";
 const labelOrder: Record<LabelKind, number> = { city: 9, health: 10, feedback: 11 };
 // Board labels are painted at this texture resolution per world-space tile.
 const labelPixelsPerTile = 280;
-const labelFontSize = { city: 44, health: 68 };
+const labelFontSize = { city: 34, health: 56 };
+const ignoreLabelRaycast = () => {};
 
 function createLabel(
   text: string,
@@ -263,18 +265,18 @@ function createLabel(
   const font = `${weight} ${size}px ${style.font}`;
   ctx.font = font;
   const metrics = ctx.measureText(text);
-  const padding = kind === "city" ? 26 : 18;
+  const padding = kind === "city" ? 22 : kind === "health" ? 16 : 18;
   const titleWidth = Math.ceil(metrics.width) + padding;
-  const titleHeight = size + 16;
+  const titleHeight = size + (kind === "city" ? 14 : 16);
   const detailRow = cityDetails && measureCityDetails(ctx, cityDetails, style.font);
   canvas.width = Math.max(titleWidth, Math.ceil(detailRow?.width ?? 0));
   canvas.height = titleHeight + (detailRow ? cityDetailHeight : 0);
   if (kind !== "health") {
     ctx.fillStyle = kind === "city"
-      ? detailRow ? "rgba(23, 43, 59, 0.84)" : "rgba(31, 47, 47, 0.48)"
+      ? detailRow ? "rgba(23, 43, 59, 0.74)" : "rgba(31, 47, 47, 0.38)"
       : "#f5f0e3f2";
     ctx.beginPath();
-    ctx.roundRect(1, 1, canvas.width - 2, canvas.height - 2, 11);
+    ctx.roundRect(1, 1, canvas.width - 2, canvas.height - 2, kind === "city" ? 9 : 11);
     ctx.fill();
   }
   ctx.font = font;
@@ -283,7 +285,7 @@ function createLabel(
   const y = (titleHeight + metrics.actualBoundingBoxAscent - metrics.actualBoundingBoxDescent) / 2;
   if (kind === "health") {
     ctx.lineJoin = "round";
-    ctx.lineWidth = 12;
+    ctx.lineWidth = 10;
     ctx.strokeStyle = "#182523";
     ctx.strokeText(text, x, y);
   }
@@ -292,10 +294,6 @@ function createLabel(
   if (detailRow) drawCityDetails(ctx, detailRow, titleHeight, canvas.width);
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
-  if (detailRow) texture.userData.titleUv = {
-    halfWidth: titleWidth / (canvas.width * 2),
-    bottom: cityDetailHeight / canvas.height,
-  };
   return texture;
 }
 
@@ -332,6 +330,7 @@ function Label({
       center={kind === "city" ? [0.5, 1] : [0.5, 0.5]}
       scale={[texture.image.width / pixelsPerUnit, texture.image.height / pixelsPerUnit, 1]}
       renderOrder={labelOrder[kind]}
+      raycast={ignoreLabelRaycast}
     >
       <spriteMaterial
         ref={materialRef}
@@ -346,9 +345,18 @@ function Label({
   );
 }
 
-// Small instanced patches let Three cull offscreen squares on the 64×64 board.
-// Each patch needs two draws regardless of the number of squares it contains.
-const BoardTiles = memo(function BoardTiles({ game, ...props }: {
+const fogShell = { cap: tileCap, plinth: tilePlinth, color: "#a2aca5", plinthColor: "#798681" };
+const boardShell = (tile: Tile, known: boolean) =>
+  known ? getTerrainAssets(tile.terrainVariant).shells[tile.terrain] : fogShell;
+
+interface ShellBatch {
+  cap: THREE.BufferGeometry;
+  plinth: THREE.BufferGeometry;
+  tiles: Tile[];
+}
+
+// Cull offscreen patches on large boards and share two draws per shell geometry pair.
+const BoardTiles = memo(function BoardTiles({ game, explored, ...props }: {
   game: GameState;
   explored: Set<number>;
   visible: Set<number>;
@@ -360,17 +368,26 @@ const BoardTiles = memo(function BoardTiles({ game, ...props }: {
   const patches = useMemo(() => {
     const span = size <= 24 ? size : 8;
     const across = Math.ceil(size / span);
-    const groups = Array.from({ length: across * across }, () => [] as Tile[]);
+    const groups = Array.from({ length: across * across }, () => new Map<string, ShellBatch>());
     for (const tile of game.tiles) {
-      groups[Math.floor(tile.y / span) * across + Math.floor(tile.x / span)].push(tile);
+      const group = groups[Math.floor(tile.y / span) * across + Math.floor(tile.x / span)];
+      const { cap, plinth } = boardShell(tile, explored.has(tile.id));
+      const key = `${cap.id}:${plinth.id}`;
+      let batch = group.get(key);
+      if (!batch) {
+        batch = { cap, plinth, tiles: [] };
+        group.set(key, batch);
+      }
+      batch.tiles.push(tile);
     }
     return groups;
-  }, [game.tiles, size]);
-  return <>{patches.map((tiles) => <BoardPatch key={tiles[0].id} tiles={tiles} {...props} />)}</>;
+  }, [game.tiles, explored, size]);
+  return <>{patches.flatMap((batches, index) => [...batches].map(([key, batch]) =>
+    <BoardPatch key={`${index}:${key}`} {...batch} explored={explored} {...props} />
+  ))}</>;
 });
 
-function BoardPatch({ tiles, explored, visible, offset, onClick, onHover }: {
-  tiles: Tile[];
+function BoardPatch({ tiles, cap, plinth, explored, visible, offset, onClick, onHover }: ShellBatch & {
   explored: Set<number>;
   visible: Set<number>;
   offset: number;
@@ -407,10 +424,12 @@ function BoardPatch({ tiles, explored, visible, offset, onClick, onHover }: {
       }
       const dark = visible.has(tile.id) && isForeignTerritory(tile.owner);
       const wasDark = !!old && !!previous?.visible.has(old.id) && isForeignTerritory(old.owner);
-      if (!old || known !== wasKnown || dark !== wasDark || (known && old.terrain !== tile.terrain)) {
+      if (!old || old.id !== tile.id || known !== wasKnown || dark !== wasDark ||
+        (known && (old.terrain !== tile.terrain || old.terrainVariant !== tile.terrainVariant))) {
         const brightness = dark ? foreignTerritoryBrightness : 1;
-        base.setColorAt(i, color.set(known ? "#907e65" : "#798681").multiplyScalar(brightness));
-        top.setColorAt(i, color.set(known ? terrainColors[tile.terrain] : "#a2aca5").multiplyScalar(brightness));
+        const shell = boardShell(tile, known);
+        base.setColorAt(i, color.set(shell.plinthColor).multiplyScalar(brightness));
+        top.setColorAt(i, color.set(shell.color).multiplyScalar(brightness));
         recolored = true;
       }
     });
@@ -436,18 +455,16 @@ function BoardPatch({ tiles, explored, visible, offset, onClick, onHover }: {
     <>
       <instancedMesh
         ref={baseRef}
-        args={[tilePlinth, material("#ffffff"), tiles.length]}
+        args={[plinth, material("#ffffff"), tiles.length]}
         receiveShadow
-        dispose={null}
         onClick={click}
         onPointerMove={hover}
         onPointerOut={() => onHover(null)}
       />
       <instancedMesh
         ref={topRef}
-        args={[tileCap, material("#ffffff"), tiles.length]}
+        args={[cap, material("#ffffff"), tiles.length]}
         receiveShadow
-        dispose={null}
         onClick={click}
         onPointerMove={hover}
         onPointerOut={() => {
@@ -506,7 +523,7 @@ const TileView = memo(function TileView({
 }) {
   const explored = knownTiles.has(tile.id);
   const surface = knownTerrainHeight(tile, explored);
-  const cityLabelOffset = city && city.owner !== null && city.level >= 5 ? 0.49 : 0.42;
+  const cityLabelOffset = city && city.owner !== null && city.level >= 5 ? 0.39 : 0.32;
   const cityDetails = useMemo<CityNameplateDetails | undefined>(() => {
     if (city?.owner !== 0 || !showCityNames || !showCityDetails) return;
     return {
@@ -570,7 +587,7 @@ const TileView = memo(function TileView({
               color="#e3decb"
               opacity={visible ? 1 : 0.8}
               cityDetails={cityDetails}
-              // Equal x/z offsets put the top of the plate at the screen-facing corner.
+              // Keep the plate centered just in front of the city.
               position={[cityLabelOffset, 0.015, cityLabelOffset]}
             />
           )}
@@ -1220,6 +1237,7 @@ function World({
           onHover={setHoveredTile}
         />
         {!view.simple && <TerrainInlays game={game} tileIds={view.ids} visible={visible} />}
+        {!preview && <ShippingLanes game={game} explored={explored} />}
         <TerritoryBorders tiles={game.tiles} players={game.players} explored={explored} size={game.options.size} />
         {displayTiles.map((tile) => (
           <TileView
@@ -1304,18 +1322,12 @@ class SceneBoundary extends Component<
 }
 
 function hitPriority(object: THREE.Object3D) {
-  if (object instanceof THREE.Sprite) return object.renderOrder;
   return object.renderOrder === BOARD_UNIT_RENDER_ORDER ? BOARD_UNIT_RENDER_ORDER : 0;
 }
 
-function visibleBoardHit({ object, point, face, uv }: THREE.Intersection) {
+function visibleBoardHit({ object, point, face }: THREE.Intersection) {
   for (let node: THREE.Object3D | null = object; node; node = node.parent) {
     if (!node.visible) return false;
-  }
-  if (object instanceof THREE.Sprite && uv) {
-    // Only the name remains a target, so details can overlap nearby clickable tiles.
-    const titleUv = object.material.map?.userData.titleUv;
-    return !titleUv || (Math.abs(uv.x - 0.5) <= titleUv.halfWidth && uv.y >= titleUv.bottom);
   }
   if (!(object instanceof THREE.Mesh)) return true;
   const material: THREE.Material | undefined = Array.isArray(object.material)
@@ -1349,7 +1361,7 @@ const sceneEvents: typeof events = (store) => {
       onDoubleClick: () => {},
       onContextMenu: () => {},
     },
-    // Plates extend below their tile. Resolve overlaps in the same order they are drawn.
+    // Foreground pieces can overlap nearby tiles. Give them priority as drawn.
     filter: (hits) => hits
       .filter(visibleBoardHit)
       .sort((a, b) => hitPriority(b.object) - hitPriority(a.object)),

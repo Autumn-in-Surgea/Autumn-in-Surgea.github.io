@@ -1,4 +1,4 @@
-import { Miniature } from "../../scene/miniature";
+import { Miniature } from "../../../scene/miniature";
 
 // The shared architectural drawing datum is translated to the tile surface when baked.
 export const cityStreetDatum = 0.051;

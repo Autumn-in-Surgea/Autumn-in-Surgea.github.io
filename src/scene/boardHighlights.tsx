@@ -6,41 +6,32 @@ import { easeInOut } from "./motion";
 type Highlight = "selection" | "target";
 type Outline = Highlight | "hover" | "reachable";
 
+const opacity = 0.7;
 const highlights = {
-  selection: { rim: "#917031", light: "#fff4b1", glow: "#eaa540" },
-  target: { rim: "#963c30", light: "#ffcbad", glow: "#ed6046" },
+  selection: { rim: "#af7b29", light: "#fff0a9", glow: "#eab351" },
+  target: { rim: "#a53932", light: "#ff8f79", glow: "#ed6046" },
+  reachable: { rim: "#245f4d", light: "#64e8be", glow: "#63bd8d" },
+  hover: { rim: "#9a9178", light: "#f6f0d9", glow: "#f6f0d9" },
 };
-
-function squareBorder(radius: number, thickness: number) {
-  const square = (r: number) => [
-    new THREE.Vector2(-r, -r),
-    new THREE.Vector2(r, -r),
-    new THREE.Vector2(r, r),
-    new THREE.Vector2(-r, r),
-  ];
-  const shape = new THREE.Shape(square(radius + thickness / 2));
-  shape.holes.push(new THREE.Path(square(radius - thickness / 2).reverse()));
-  return new THREE.ShapeGeometry(shape).rotateX(-Math.PI / 2);
-}
-
-const plainOutline = squareBorder(0.474, 0.027);
-const plainMaterials = {
-  reachable: new THREE.MeshBasicMaterial({ color: "#487d69", transparent: true, opacity: 0.86, depthTest: false, depthWrite: false }),
-  hover: new THREE.MeshBasicMaterial({ color: "#f6f0d9", transparent: true, opacity: 0.72, depthTest: false, depthWrite: false }),
-};
-const squareGlow = new THREE.PlaneGeometry(1.13, 1.13).rotateX(-Math.PI / 2);
-const ringGlow = new THREE.PlaneGeometry(0.98, 0.98).rotateX(-Math.PI / 2);
+const highlightPlane = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
 const ignoreRaycast = () => {};
 
-function luminousMaterial(kind: Highlight, round: boolean) {
+// The dot and the rim share the same material, so 70% is their combined
+// coverage even where their soft edges meet.
+function luminousMaterial(kind: Outline, round = false) {
   const palette = highlights[kind];
+  const dot = !round && (kind === "reachable" || kind === "target");
   return new THREE.ShaderMaterial({
     uniforms: {
       rim: { value: new THREE.Color(palette.rim) },
       light: { value: new THREE.Color(palette.light) },
       glow: { value: new THREE.Color(palette.glow) },
-      radius: { value: round ? 0.37 : 0.469 },
+      opacity: { value: opacity },
+      radius: { value: round ? 0.364 : 0.404 },
+      thickness: { value: kind === "hover" ? 0.021 : 0.039 },
       rounded: { value: round ? 1 : 0 },
+      dotRadius: { value: dot ? 0.093 : 0 },
+      dotPosition: { value: new THREE.Vector2(kind === "target" ? 0.255 : 0, kind === "target" ? 0.255 : 0) },
     },
     transparent: true,
     depthWrite: false,
@@ -57,31 +48,44 @@ function luminousMaterial(kind: Highlight, round: boolean) {
       uniform vec3 rim;
       uniform vec3 light;
       uniform vec3 glow;
+      uniform float opacity;
       uniform float radius;
+      uniform float thickness;
       uniform float rounded;
+      uniform float dotRadius;
+      uniform vec2 dotPosition;
       varying vec2 tilePoint;
       void main() {
         float box = max(abs(tilePoint.x), abs(tilePoint.y));
         float distanceFromLine = abs(mix(box, length(tilePoint), rounded) - radius);
-        float aa = clamp(fwidth(distanceFromLine) * 0.65, 0.001, 0.019);
-        float core = 1.0 - smoothstep(0.008, 0.008 + aa, distanceFromLine);
-        float edge = 1.0 - smoothstep(0.020, 0.020 + aa, distanceFromLine);
-        float halo = 1.0 - smoothstep(0.010, 0.094, distanceFromLine);
-        float opacity = max(edge * 0.85 + core * 0.13, halo * halo * 0.42);
-        if (opacity < 0.004) discard;
+        float aa = clamp(fwidth(distanceFromLine) * 0.66, 0.003, 0.035);
+        float core = 1.0 - smoothstep(thickness * 0.46, thickness * 0.46 + aa, distanceFromLine);
+        float edge = 1.0 - smoothstep(thickness, thickness + aa, distanceFromLine);
+        float halo = 1.0 - smoothstep(thickness, thickness + 0.046, distanceFromLine);
+        float coverage = max(edge, halo * halo * 0.36);
         vec3 color = mix(mix(glow, rim, edge), light, core);
-        gl_FragColor = vec4(color, opacity);
+
+        if (dotRadius > 0.0) {
+          float distanceToDot = length(tilePoint - dotPosition);
+          float dotEdge = 1.0 - smoothstep(dotRadius - aa * 0.6, dotRadius + aa * 0.6, distanceToDot);
+          float dotCore = 1.0 - smoothstep(dotRadius * 0.66, dotRadius * 0.66 + aa, distanceToDot);
+          color = mix(color, mix(rim, light, dotCore), dotEdge);
+          coverage = max(coverage, dotEdge);
+        }
+
+        if (coverage < 0.004) discard;
+        gl_FragColor = vec4(color, coverage * opacity);
         #include <colorspace_fragment>
       }
     `,
   });
 }
 
-// All highlights share their buffers. The dim reach outline stays a simple ring,
-// even when a long-range move lights up a large part of the board.
 const squareMaterials = {
-  selection: luminousMaterial("selection", false),
-  target: luminousMaterial("target", false),
+  selection: luminousMaterial("selection"),
+  target: luminousMaterial("target"),
+  reachable: luminousMaterial("reachable"),
+  hover: luminousMaterial("hover"),
 };
 const ringMaterials = {
   selection: luminousMaterial("selection", true),
@@ -89,13 +93,13 @@ const ringMaterials = {
 };
 
 export function SquareOutline({ kind, height }: { kind: Outline; height: number }) {
-  const glow = kind === "selection" || kind === "target";
   return (
     <mesh
+      name={`tile-highlight-${kind}`}
       position={[0, height, 0]}
-      geometry={glow ? squareGlow : plainOutline}
-      material={glow ? squareMaterials[kind] : plainMaterials[kind]}
-      renderOrder={glow ? 2 : 1}
+      geometry={highlightPlane}
+      material={squareMaterials[kind]}
+      renderOrder={2}
       raycast={ignoreRaycast}
       dispose={null}
     />
@@ -121,7 +125,8 @@ export function SelectionHalo({
   return (
     <mesh
       ref={ring}
-      geometry={ringGlow}
+      name={`unit-highlight-${kind}`}
+      geometry={highlightPlane}
       material={ringMaterials[kind]}
       position={[0, 0.035, 0]}
       renderOrder={3}

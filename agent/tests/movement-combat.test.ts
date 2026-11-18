@@ -36,10 +36,10 @@ describe("standard movement and action skills", () => {
       applyAction(game, { type: "MOVE", unitId: unit.id, to: 144 }).ok,
     ).toBe(false);
   });
-  it("rejects occupied destinations and other players’ units", () => {
+  it("rejects occupied destinations without a legal swap and other players’ units", () => {
     const game = battlefield(),
       unit = addUnit(game, 0, "rider", 3, 3);
-    addUnit(game, 0, "warrior", 4, 3);
+    addUnit(game, 0, "warrior", 4, 3).moved = true;
     const enemy = addUnit(game, 1, "warrior", 3, 4);
     expect(
       applyAction(game, { type: "MOVE", unitId: unit.id, to: 3 * 12 + 4 }).ok,

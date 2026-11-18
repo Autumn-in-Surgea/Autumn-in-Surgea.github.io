@@ -5,7 +5,7 @@ import {
   TECHNOLOGIES,
   UNITS,
 } from "../game/data/config";
-import type { EventNotice, GameState } from "../game/types";
+import type { EventNotice, GameState, UnitType } from "../game/types";
 
 export const MAX_SAVE_BYTES = 8_000_000;
 const civilizationIds = new Set([
@@ -130,6 +130,7 @@ export function deserializeGame(raw: string): GameState {
     "开局设置",
   );
   check(text(options.seed) && count(options.maxRounds, 5), "种子或回合上限");
+  check(options.quickMode === undefined || typeof options.quickMode === "boolean", "快速模式");
   check(
     Array.isArray(options.factionNames) &&
       options.factionNames.length <= 11 &&
@@ -296,17 +297,20 @@ export function deserializeGame(raw: string): GameState {
     );
     return player;
   });
-  if (options.scenario === "story")
+  if (
+    options.scenario === "story" ||
+    (options.scenario === "fair" && options.civilization !== "neutral")
+  )
     check(
       players[0].civilization === options.civilization &&
         new Set(players.map((player) => player.civilization)).size ===
           playerCount &&
         players.every((player) => player.civilization !== "neutral"),
-      "剧情文明",
+      "国家列表",
     );
   else
     check(
-      players.every((player) => player.civilization === "neutral"),
+      options.civilization === "neutral" && players.every((player) => player.civilization === "neutral"),
       "独立势力",
     );
   check(
@@ -368,6 +372,15 @@ export function deserializeGame(raw: string): GameState {
       "城市标识或坐标",
     );
     check(owner(city.owner) && owner(city.capitalOf), "城市归属");
+    if (city.training !== undefined) {
+      const order = record(city.training, "城市训练");
+      check(
+        options.quickMode === false && city.owner !== null &&
+          owns(UNITS, order.unitType) && UNITS[order.unitType as UnitType].trainable &&
+          count(order.readyRound, 2),
+        "城市训练",
+      );
+    }
     check(
       count(city.level, 1) &&
         integer(city.population) &&
@@ -525,7 +538,12 @@ export function deserializeGame(raw: string): GameState {
     );
     if (event.notice !== undefined) {
       const notice = record(event.notice, "事件提示");
-      check(text(notice.title) && text(notice.message), "事件提示");
+      check(
+        text(notice.title) && text(notice.message) &&
+        (notice.nationId === undefined ||
+          (text(notice.nationId) && notice.nationId !== "neutral" && civilizationIds.has(notice.nationId))),
+        "事件提示",
+      );
     }
     if (event.combat !== undefined) {
       const hit = record(event.combat, "战斗记录");

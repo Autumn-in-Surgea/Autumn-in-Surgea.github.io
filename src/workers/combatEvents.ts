@@ -4,6 +4,9 @@ export interface WitnessedMove {
   id: number;
   unitId: string;
   path: number[];
+  swapWith?: string;
+  /** Indices of visible friendly pieces passed on the route. */
+  passing?: number[];
 }
 interface AiPresentation {
   round: number;

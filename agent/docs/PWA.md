@@ -29,7 +29,7 @@ npm run preview
 
 新版本下载完成后显示“更新并重启”，不会自动重载正在进行的对局。更新按钮先调用存档回调；存档失败或 AI 尚在处理时不允许更新。用户确认后激活等待中的 Service Worker，再重新载入页面。应用回到前台或恢复网络时会检查更新。
 
-浏览器页签、iOS 主屏幕和 manifest 图标统一来自 `设定/logo.png`。Android 的可裁切版留有浅色安全区，圆形遮罩内保留完整图案。下次更新图案时应更新图标 URL，Chrome 已安装应用的图标会通过应用菜单的更新确认更新。[Chrome 应用更新说明](https://developer.chrome.com/blog/improvements-to-web-app-updates)
+浏览器页签、iOS 主屏幕、PWA 安装图标和游戏内的「关于」共用 `设定/logo.png` 生成的图标。Android 的可裁切版在深色底上保留安全边距。图案更新时用新版文件名，避免旧图标缓存。已安装的 Chrome 应用会通过应用更新流程确认新图标。[Chrome 应用更新说明](https://developer.chrome.com/blog/improvements-to-web-app-updates)
 
 ## 实机验收流程
 

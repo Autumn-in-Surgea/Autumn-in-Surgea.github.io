@@ -1,4 +1,4 @@
-import { CIVILIZATIONS } from "../../factions/registry";
+import { NATIONS } from "../../nations/registry";
 import type { CivilizationId, Position, Tile } from "../types";
 
 /** Hand-authored, immutable setting map. Each character covers a 2×2 region.
@@ -23,19 +23,20 @@ const COASTLINE = [
   "~~~~.~~~..~~~...",
   "~~~~~~~~~~~~~~~~",
 ];
-export const STORY_FACTIONS: CivilizationId[] = CIVILIZATIONS.map(faction => faction.id);
-const capitalLocations: Record<Exclude<CivilizationId, "neutral">, Position> = {
+const capitalLocations: Partial<Record<CivilizationId, Position>> = {
   imperia: { x: 12, y: 15 }, determia: { x: 6, y: 6 }, nosta: { x: 18, y: 5 },
   ida: { x: 17, y: 27 }, rina: { x: 28, y: 16 },
 };
+export const STORY_NATIONS = NATIONS.filter(nation => capitalLocations[nation.id]);
+export const STORY_FACTIONS: CivilizationId[] = STORY_NATIONS.map(nation => nation.id);
 export const STORY_CITIES: {
   x: number;
   y: number;
   name: string;
   capitalOfCivilization?: CivilizationId;
 }[] = [
-  ...CIVILIZATIONS.map(faction => ({
-    ...capitalLocations[faction.id], name: faction.capital, capitalOfCivilization: faction.id,
+  ...STORY_NATIONS.map(faction => ({
+    ...capitalLocations[faction.id]!, name: faction.capital, capitalOfCivilization: faction.id,
   })),
   { x: 19, y: 16, name: "大台" },
   { x: 19, y: 21, name: "春州" },

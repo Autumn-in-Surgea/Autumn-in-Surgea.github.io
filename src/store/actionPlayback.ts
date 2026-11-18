@@ -3,8 +3,6 @@ import type { Action, GameEvent, GameState } from "../game/types";
 
 import type { StructureChange } from "./structurePlayback";
 
-export const ACTION_GAP_MS = 120;
-
 export interface PlaybackStep {
   id: number;
   focusTile: number | null;
@@ -30,6 +28,11 @@ export function observedActionTile(
     if (event.type !== "capture" && event.type !== "upgrade") continue;
     const id = tileAt(after, event.at).id;
     if (seen.has(id) || visible.has(id)) return id;
+  }
+  if (action.type === "END_TURN" && before.options.quickMode === false) {
+    const existing = new Set(before.units.map((unit) => unit.id));
+    const recruit = after.units.find((unit) => !existing.has(unit.id) && isUnitVisible(after, unit, 0));
+    if (recruit) return tileAt(after, recruit).id;
   }
   if (action.type === "CONVERT") {
     const target = before.units.find((unit) => unit.id === action.targetId);

@@ -65,6 +65,9 @@ export function chooseMove(
   const defending = guard && distance(u, guard) === 0;
   const candidateScores: { to: number; score: number; risk: number }[] = [];
   for (const id of moves) {
+    // This evaluator only scores the mover. Avoid spending another unit's
+    // move or pulling an ally off a siege or guard assignment in that search.
+    if (k.occupants.get(id)?.owner === u.owner) continue;
     const t = s.tiles[id], after = nav.get(id);
     const risk = incomingDamage(s, k, threats, u, id);
     let score = (before !== undefined && after !== undefined ? (before - after) * 9 : 0);

@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   applyAction,
+  getAttackTargets,
   getMovementPath,
   getReachableTiles,
   movementCost,
   UNITS,
 } from "../../src/game";
-import { addUnit, battlefield } from "./helpers";
+import { addCity, addUnit, battlefield } from "./helpers";
 
 const at = (x: number, y: number) => y * 12 + x;
 
@@ -51,23 +52,66 @@ describe("shared weighted movement paths", () => {
     },
   );
 
-  it("avoids occupied squares and respects hostile zones of control", () => {
+  it("crosses a spent teammate without stopping on it and still respects hostile zones of control", () => {
     const game = battlefield(),
       unit = addUnit(game, 0, "knight", 3, 3);
-    addUnit(game, 0, "warrior", 4, 3);
-    const path = getMovementPath(game, unit.id, at(5, 3));
-    expect(path).not.toContain(at(4, 3));
-    expect(path.at(-1)).toBe(at(5, 3));
+    addUnit(game, 0, "warrior", 4, 3).moved = true;
+    game.tiles[at(4, 2)].terrain = "deep";
+    game.tiles[at(4, 4)].terrain = "deep";
+    expect(getMovementPath(game, unit.id, at(5, 3))).toEqual([at(3, 3), at(4, 3), at(5, 3)]);
+    expect(applyAction(game, { type: "MOVE", unitId: unit.id, to: at(5, 3) }).ok).toBe(true);
     expect(getMovementPath(game, unit.id, at(4, 3))).toEqual([]);
     addUnit(game, 1, "warrior", 5, 4);
-    const controlled = getMovementPath(game, unit.id, at(6, 3));
-    // Entering a controlled tile ends movement; it cannot be an intermediate leg.
-    for (const id of controlled.slice(1, -1)) {
-      const tile = game.tiles[id];
-      expect(
-        Math.max(Math.abs(tile.x - 5), Math.abs(tile.y - 4)),
-      ).toBeGreaterThan(1);
+    expect(getMovementPath(game, unit.id, at(5, 3))).toEqual([]);
+  });
+
+  it("swaps adjacent units in one move, spends both movement allowances and keeps attacks available", () => {
+    const game = battlefield(), unit = addUnit(game, 0, "rider", 3, 3);
+    const teammate = addUnit(game, 0, "archer", 4, 3);
+    const other = addUnit(game, 0, "archer", 5, 3);
+    const enemy = addUnit(game, 1, "warrior", 4, 4);
+    // A road detour through (4, 2) is cheaper, but exchanging places is one step.
+    game.tiles[at(4, 3)].terrain = "forest";
+    game.tiles[at(4, 3)].road = game.tiles[at(4, 2)].road = true;
+    expect(getMovementPath(game, unit.id, at(4, 3))).toEqual([at(3, 3), at(4, 3)]);
+    expect(getReachableTiles(game, unit.id)).not.toContain(at(other.x, other.y));
+    const result = applyAction(game, { type: "MOVE", unitId: unit.id, to: at(4, 3) });
+    expect(result.ok).toBe(true);
+    expect(result.state.units.find(u => u.id === unit.id)).toMatchObject({ x: 4, y: 3, moved: true, attacked: false });
+    expect(result.state.units.find(u => u.id === teammate.id)).toMatchObject({ x: 3, y: 3, moved: true, attacked: false });
+    expect(result.state.events.filter(e => e.type === "move").map(e => e.unitId)).toEqual([unit.id, teammate.id]);
+    for (const id of [unit.id, teammate.id]) {
+      expect(getReachableTiles(result.state, id)).toEqual([]);
+      expect(getAttackTargets(result.state, id).map(target => target.id)).toContain(enemy.id);
     }
+  });
+
+  it("spends an ally's remaining escape and starts a new occupation for the unit entering the city", () => {
+    const game = battlefield(), unit = addUnit(game, 0, "warrior", 3, 3);
+    const city = addCity(game, 4, 4, null);
+    const teammate = addUnit(game, 0, "rider", city.x, city.y);
+    teammate.attacked = teammate.moved = true;
+    teammate.capturedTurn = 1;
+    game.round = 2;
+    const result = applyAction(game, { type: "MOVE", unitId: unit.id, to: at(city.x, city.y) });
+    expect(result.ok).toBe(true);
+    expect(result.state.units.find(u => u.id === unit.id)?.capturedTurn).toBe(2);
+    expect(result.state.units.find(u => u.id === teammate.id)).toMatchObject({ capturedTurn: null, escapeUsed: true });
+  });
+
+  it("checks both directions of a coastal swap before embarking and disembarking", () => {
+    const game = battlefield(), unit = addUnit(game, 0, "warrior", 3, 3);
+    const port = game.tiles[at(4, 3)];
+    Object.assign(port, { terrain: "shallow", building: "port", owner: 0 });
+    const teammate = addUnit(game, 0, "scout", port.x, port.y);
+    const swap = { type: "MOVE" as const, unitId: unit.id, to: port.id };
+    expect(getReachableTiles(game, unit.id)).not.toContain(port.id);
+    expect(applyAction(game, swap).ok).toBe(false);
+    teammate.carried = { type: "rider", maxHp: 10, veteran: false, kills: 0 };
+    const result = applyAction(game, swap);
+    expect(result.ok).toBe(true);
+    expect(result.state.units.find(u => u.id === unit.id)).toMatchObject({ x: 4, y: 3, moved: true, type: "raft" });
+    expect(result.state.units.find(u => u.id === teammate.id)).toMatchObject({ x: 3, y: 3, moved: true, type: "rider" });
   });
 
   it("uses the cheaper road route and can reach four road steps with a rider", () => {

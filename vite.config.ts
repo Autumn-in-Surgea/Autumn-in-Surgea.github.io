@@ -1,7 +1,7 @@
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
-import { GAME_NAME_ZH, GAME_TITLE } from "./src/branding";
+import { GAME_ICON_192, GAME_NAME_ZH, GAME_TITLE } from "./src/branding";
 export default defineConfig({
   base: "./",
   plugins: [
@@ -26,19 +26,19 @@ export default defineConfig({
         categories: ["games", "strategy"],
         icons: [
           {
-            src: "icons/surgea-app-192.png",
+            src: GAME_ICON_192,
             sizes: "192x192",
             type: "image/png",
             purpose: "any",
           },
           {
-            src: "icons/surgea-app-512.png",
+            src: "icons/surgea-5b34254e-app-512.png",
             sizes: "512x512",
             type: "image/png",
             purpose: "any",
           },
           {
-            src: "icons/surgea-app-maskable-512.png",
+            src: "icons/surgea-5b34254e-app-maskable-512.png",
             sizes: "512x512",
             type: "image/png",
             purpose: "maskable",

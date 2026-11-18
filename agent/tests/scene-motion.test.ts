@@ -106,3 +106,28 @@ describe("fog-safe transitions", () => {
     ).toBe(false);
   });
 });
+
+describe("friendly piece clearance", () => {
+  it("swaps along opposite arcs while keeping the original endpoints", () => {
+    const from: MotionVector = [2, 0.2, 3], to: MotionVector = [3, 0.3, 4];
+    const a = createMotionPath([from, to]), b = createMotionPath([to, from]);
+    const first: MotionVector = [0, 0, 0], second: MotionVector = [0, 0, 0];
+    sampleMotionPath(a, 0.19, 0.38, first, true);
+    sampleMotionPath(b, 0.19, 0.38, second, true);
+    expect(Math.hypot(first[0] - second[0], first[2] - second[2])).toBeCloseTo(0.72);
+    sampleMotionPath(a, 0.38, 0.38, first, true);
+    sampleMotionPath(b, 0.38, 0.38, second, true);
+    expect(first).toEqual(to);
+    expect(second).toEqual(from);
+  });
+
+  it("sidesteps a stationary friend and returns to the exact destination", () => {
+    const target: MotionVector = [4, 0.2, 3];
+    const path = createMotionPath([[2, 0.2, 3], [3, 0.2, 3], target], [1]);
+    const out: MotionVector = [0, 0, 0];
+    sampleMotionPath(path, 0.16, 0.32, out);
+    expect(out[2]).toBeCloseTo(3.46);
+    sampleMotionPath(path, 0.32, 0.32, out);
+    expect(out).toEqual(target);
+  });
+});

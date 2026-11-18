@@ -6,7 +6,7 @@ import type { BuildingId, City, Player, Tile } from "../game/types";
 import { lighthouseModel, ruinModel } from "./architecture";
 import { developedLandscape, grove, mountain, siteLandscape } from "./landscape";
 import type { BuildingVisualTier } from "./buildingVisualTier";
-import type { ModelSetId } from "../factions/registry";
+import type { ModelSetId } from "../nations/registry";
 import { cityAppearance, MODEL_SETS } from "./factionModels";
 import { useTerritoryMaterial } from "./territoryMaterials";
 

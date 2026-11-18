@@ -4,8 +4,12 @@ import {
   generateMap,
   getCityIncome,
   getReachableTiles,
+  MAP_SIZE_CHOICES,
+  opponentLimit,
   OPENING_PROFILES,
 } from "../../src/game";
+import { getNation } from "../../src/nations/registry";
+import { deserializeGame, serializeGame } from "../../src/store/save";
 import { newGame } from "./helpers";
 
 const storyNames = ["中京", "大台", "春州", "长守", "漠海", "丰化", "千华"];
@@ -67,7 +71,7 @@ describe("three distinct world modes", () => {
     },
   );
   it.each(["free", "fair"] as const)(
-    "%s uses independent names and identical initial assets",
+    "%s can still reproduce an old anonymous opening",
     (scenario) => {
       const game = newGame({ scenario, aiCount: 4, size: 20 });
       expect(
@@ -98,6 +102,57 @@ describe("three distinct world modes", () => {
       }
     },
   );
+  it.each(MAP_SIZE_CHOICES)("starts a %i-square fair game with the chosen nation and unique national rivals", (size) => {
+    const options = {
+      scenario: "fair" as const,
+      civilization: "rina" as const,
+      mapType: "continents" as const,
+      seed: "nations-on-the-coast",
+      aiCount: 10,
+      size,
+      factionNames: ["占位名称"],
+      startingProfiles: ["luxury"],
+    };
+    const game = newGame(options);
+    expect(game).toEqual(newGame(options));
+    expect(game.options.aiCount).toBe(opponentLimit("fair"));
+    expect(game.players[0].civilization).toBe("rina");
+    expect(new Set(game.players.map(player => player.civilization)).size).toBe(game.players.length);
+    expect(new Set(game.players.map(player => player.color)).size).toBe(game.players.length);
+    expect(game.tiles).toHaveLength(size ** 2);
+    for (const player of game.players) {
+      const nation = getNation(player.civilization)!;
+      const capital = game.cities.find(city => city.capitalOf === player.id)!;
+      expect(player.name).toBe(nation.name);
+      expect(player.color).toBe(nation.color);
+      expect(player.technologies).toEqual(nation.opening.technologies);
+      expect(game.units.find(unit => unit.owner === player.id)?.type).toBe(nation.opening.unit);
+      expect(capital.name).toBe(nation.capital);
+      expect(capital.level).toBe(nation.opening.cityLevel);
+      const deposit = nation.opening.fairDeposit;
+      if (deposit) {
+        const tiles = capital.territory.map(id => game.tiles[id]);
+        expect(tiles.filter(t => t.terrain === deposit.terrain && t.resource === deposit.resource).length)
+          .toBeGreaterThanOrEqual(deposit.count);
+      }
+    }
+    expect(deserializeGame(serializeGame(game))).toEqual(game);
+  });
+
+  it("keeps fair terrain dry when Rina's fishing is unlocked", () => {
+    const game = newGame({ scenario: "fair", civilization: "rina", mapType: "dryland", size: 24 });
+    expect(game.players[0].technologies).toContain("fishing");
+    expect(game.tiles.some(tile => tile.terrain === "deep" || tile.terrain === "shallow")).toBe(false);
+  });
+
+  it("rejects duplicate or mixed nation rosters in a named fair save", () => {
+    const game = newGame({ scenario: "fair", civilization: "imperia", size: 24 });
+    for (const invalid of ["imperia", "neutral"] as const) {
+      game.players[1].civilization = invalid;
+      expect(() => deserializeGame(serializeGame(game))).toThrow(/国家列表/);
+    }
+  });
+
   it("accepts custom names in free mode", () => {
     const game = newGame({
       scenario: "free",

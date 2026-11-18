@@ -2,8 +2,8 @@ import { useLayoutEffect, useRef, type ReactNode } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Box3, Group, Vector3 } from "three";
 import type { City, GameState, Tile } from "../game/types";
-import { getVisibleResource, isTerritoryResourceHarvestable } from "../game/rules/engine";
-import { factionForOwner } from "../factions/registry";
+import { getVisibleResource, isTerritoryResourceAvailable } from "../game/rules/engine";
+import { factionForOwner } from "../nations/registry";
 import type { BuildingVisualTier } from "./buildingVisualTier";
 import { colorForOwner } from "./factionModels";
 import { BuildingModel, CityModel, LighthouseModel, Resources, RuinModel, TerrainDetails } from "./worldModels";
@@ -22,11 +22,12 @@ interface ModelProps {
   city?: City;
   tier: number;
   simple: boolean;
-  showHarvestHints: boolean;
+  checkResourceAvailability: boolean;
+  showResourceHints: boolean;
   knownTiles: ReadonlySet<number>;
 }
 
-function Scenery({ game, tile, city, tier, simple, showHarvestHints, knownTiles, includeLandscape = true }: ModelProps & { includeLandscape?: boolean }) {
+function Scenery({ game, tile, city, tier, simple, checkResourceAvailability, showResourceHints, knownTiles, includeLandscape = true }: ModelProps & { includeLandscape?: boolean }) {
   const { modelSet } = factionForOwner(game.players, tile.owner);
   if (city) return <CityModel city={city} players={game.players} />;
   if (tile.building) {
@@ -42,10 +43,12 @@ function Scenery({ game, tile, city, tier, simple, showHarvestHints, knownTiles,
     return <>{includeLandscape && <TerrainDetails tile={tile} simple={simple} />}{building}</>;
   }
   const resource = getVisibleResource(game, tile, 0);
-  const highlight = showHarvestHints && !!resource && isTerritoryResourceHarvestable(game, tile, 0);
+  const available = checkResourceAvailability && !!resource && isTerritoryResourceAvailable(game, tile, 0);
   return <>
     <TerrainDetails tile={tile} simple={simple} />
-    {resource && (!simple || highlight) && <Resources tile={tile} modelSet={modelSet} highlight={highlight} />}
+    {resource && (!simple || available) && (
+      <Resources tile={tile} modelSet={modelSet} highlight={available && showResourceHints} />
+    )}
     {tile.ruin && <RuinModel />}
   </>;
 }
@@ -105,7 +108,7 @@ export function TileScenery(props: ModelProps & {
   const { game, tile, tier, knownTiles, visible, reducedMotion, change, issuedAt, surfaceY } = props;
   const road = hasRoadModel(tile) && <RoadInlay tile={tile} tiles={game.tiles}
     size={game.options.size} explored={knownTiles} tier={tier as BuildingVisualTier} />;
-  const scene = <Scenery {...props} showHarvestHints={visible && props.showHarvestHints} />;
+  const scene = <Scenery {...props} checkResourceAvailability={visible && props.checkResourceAvailability} />;
   const lighthouse = tile.lighthouse && <LighthouseModel />;
   if (!change || reducedMotion) return <>{road}{scene}{lighthouse}</>;
 
@@ -126,8 +129,9 @@ export function TileScenery(props: ModelProps & {
     {change.scenery ? <Exchange phase={change.scenery} issuedAt={start} surfaceY={surfaceY}
       previous={<ForeignTerritory.Provider value={oldOwnership}>
         <Scenery game={previousGame} tile={oldTile} city={previousCity} tier={previousTier}
-          simple={props.simple} showHarvestHints={false} includeLandscape={!fixedLandscape} knownTiles={previousExplored} />
+          simple={props.simple} checkResourceAvailability={false} showResourceHints={false}
+          includeLandscape={!fixedLandscape} knownTiles={previousExplored} />
       </ForeignTerritory.Provider>}
-      next={<Scenery {...props} showHarvestHints={false} includeLandscape={!fixedLandscape} />} /> : scene}
+      next={<Scenery {...props} checkResourceAvailability={false} includeLandscape={!fixedLandscape} />} /> : scene}
   </>;
 }

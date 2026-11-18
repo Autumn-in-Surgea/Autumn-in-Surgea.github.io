@@ -1,5 +1,5 @@
-import type { UnitType } from "../../game/types";
-import { Miniature } from "../../scene/miniature";
+import type { UnitType } from "../../../game/types";
+import { Miniature } from "../../../scene/miniature";
 
 // Sculpt the walnut, ivory and metal once. A second mesh carries the enamel
 // inlay so every faction shares the same carving, including exhausted pieces.

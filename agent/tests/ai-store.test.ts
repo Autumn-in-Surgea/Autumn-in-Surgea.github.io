@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Action, GameState } from "../../src/game/types";
 import { applyAction, DEFAULT_OPTIONS, getAttackTargets, getReachableTiles, tileAt } from "../../src/game";
+import { getNation } from "../../src/nations/registry";
 
 const jobs = vi.hoisted(() => ({
   pending: [] as { resolve: (actions: Action[]) => void; reject: (error: Error) => void }[],
@@ -22,10 +23,27 @@ beforeEach(() => {
   jobs.plan.mockReset();
   jobs.cancel.mockReset();
   jobs.plan.mockImplementation(() => new Promise((resolve, reject) => jobs.pending.push({ resolve, reject })));
-  useGameStore.getState().start({ ...structuredClone(DEFAULT_OPTIONS), size: 12, aiCount: 2 });
+  useGameStore.getState().start({ ...structuredClone(DEFAULT_OPTIONS), civilization: "neutral", size: 12, aiCount: 2 });
 });
 
 describe("worker and game session coordination", () => {
+  it("restores a named fair opening notice and unlocks the turn after acknowledgement", () => {
+    const nation = getNation("rina")!;
+    const get = useGameStore.getState;
+    const expected = { ...nation.notices.opening, nationId: nation.id };
+    get().start({ ...structuredClone(DEFAULT_OPTIONS), civilization: nation.id, aiCount: 1 });
+    expect(get().eventNotice).toEqual(expected);
+    expect(get().command({ type: "END_TURN" })).toBe(false);
+    get().menu();
+    get().load();
+    expect(get().eventNotice).toEqual(expected);
+    get().acknowledgeEvent();
+    expect(get().eventNotice).toBeNull();
+    expect(get().command({ type: "END_TURN" })).toBe(true);
+    expect(jobs.plan).toHaveBeenCalledOnce();
+    get().menu();
+  });
+
   it("restores unread reward notices and removes them from the save after acknowledgement", () => {
     const game = battlefield();
     const notice = { title: "探索遗迹", message: "获得 10 星。" };
@@ -56,7 +74,7 @@ describe("worker and game session coordination", () => {
     useGameStore.getState().command({ type: "END_TURN" });
     useGameStore.getState().menu();
     expect(useGameStore.getState().busy).toBe(false);
-    useGameStore.getState().start({ ...structuredClone(DEFAULT_OPTIONS), size: 12, aiCount: 1, seed: "replacement" });
+    useGameStore.getState().start({ ...structuredClone(DEFAULT_OPTIONS), civilization: "neutral", size: 12, aiCount: 1, seed: "replacement" });
     const fresh = useGameStore.getState().game;
     jobs.pending[0].resolve([{ type: "END_TURN" }]);
     await Promise.resolve();
@@ -121,7 +139,7 @@ describe("worker and game session coordination", () => {
     }
   });
 
-  it("waits for a rewarded discovery to be acknowledged before starting the opposing turn", () => {
+  it("shows a discovery without animation immediately and waits for acknowledgement before starting the opposing turn", () => {
     const game = battlefield();
     game.players[0].metPlayers = [];
     addUnit(game, 1, "warrior", 2, 2);
@@ -130,10 +148,7 @@ describe("worker and game session coordination", () => {
     const detach = get().attachPlayback();
     try {
       expect(get().command({ type: "END_TURN" })).toBe(true);
-      expect(get().eventNotice).toBeNull();
-      expect(get().playbackStep).not.toBeNull();
-      expect(jobs.plan).not.toHaveBeenCalled();
-      get().completePlayback(get().playbackStep!.id);
+      expect(get().playbackStep).toBeNull();
       expect(get().eventNotice?.title).toBe("初次接触");
       expect(get().game?.players[0].resources).toBeGreaterThan(game.players[0].resources);
       expect(jobs.plan).not.toHaveBeenCalled();

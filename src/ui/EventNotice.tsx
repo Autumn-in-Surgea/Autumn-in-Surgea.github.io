@@ -1,5 +1,7 @@
 import { useId, useLayoutEffect, useRef } from "react";
 import type { EventNotice as EventContent } from "../game/types";
+import { getNation } from "../nations/registry";
+import { NationEmblem } from "./NationEmblem";
 import "./event-notice.css";
 
 export function EventNotice({ notice, onAcknowledge }: {
@@ -9,6 +11,7 @@ export function EventNotice({ notice, onAcknowledge }: {
   const dialog = useRef<HTMLDialogElement>(null);
   const text = useRef<HTMLDivElement>(null);
   const confirm = useRef<HTMLButtonElement>(null);
+  const nation = notice.nationId ? getNation(notice.nationId) : undefined;
   const titleId = useId();
   const messageId = useId();
 
@@ -37,6 +40,7 @@ export function EventNotice({ notice, onAcknowledge }: {
     >
       <div className="event-notice-card">
         <header>
+          {nation && <NationEmblem nation={nation} />}
           <h2 id={titleId}>{notice.title}</h2>
         </header>
         <div id={messageId} ref={text} className="event-notice-message">

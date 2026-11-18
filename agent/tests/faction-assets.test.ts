@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Mesh, MeshBasicMaterial, Raycaster, Vector3 } from "three";
-import { CIVILIZATIONS, factionForOwner, getFactionPack } from "../../src/factions/registry";
+import { CIVILIZATIONS, factionForOwner, getFactionPack } from "../../src/nations/registry";
 import { applyAction } from "../../src/game";
 import { cityAppearance, MODEL_SETS } from "../../src/scene/factionModels";
 import { deserializeGame, serializeGame } from "../../src/store/save";

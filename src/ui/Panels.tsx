@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef } from "react";
 import {
   ArrowRight,
   Check,
@@ -10,8 +10,9 @@ import {
   Upload,
   Save,
   Home,
-  Flag,
+  ScanLine,
   Building2,
+  Gem,
 } from "lucide-react";
 import {
   TECHNOLOGIES,
@@ -25,6 +26,8 @@ import { useGameStore } from "../store/gameStore";
 import { Modal, Cost, ResourceIcon } from "./Common";
 import { TechTreeViewport } from "./TechTreeViewport";
 import { scenarioLabels } from "./Menu";
+import { getNation } from "../nations/registry";
+import { NationEmblem } from "./NationEmblem";
 import { PwaControls } from "../pwa/PwaControls";
 
 export function TechPanel({
@@ -189,50 +192,56 @@ export function DiplomacyPanel({
     <Modal title="外交" onClose={onClose}>
       <div className="diplomacy-body">
         {others.length ? (
-          others.map((p) => (
-            <article className="diplomacy-row" key={p.id}>
-              <header>
-                <i style={{ background: p.color }} />
-                <h3>{p.name}</h3>
-                <span>
-                  {p.eliminated
-                    ? "已消灭"
-                    : player.peaceWith.includes(p.id)
-                      ? "和平"
-                      : "战争"}
-                </span>
-              </header>
-              {!p.eliminated && (
-                <div>
-                  {player.peaceWith.includes(p.id)
-                    ? button(
-                        { type: "BREAK_PEACE", targetPlayer: p.id },
-                        "解除和平",
+          others.map((p) => {
+            const nation = getNation(p.civilization);
+            return (
+              <article className="diplomacy-row" key={p.id}>
+                <header>
+                  {nation ? <NationEmblem nation={nation} /> : <i style={{ background: p.color }} />}
+                  <h3 className="nation-name">
+                    {p.name}
+                    {nation && <small lang="en">{nation.english}</small>}
+                  </h3>
+                  <span>
+                    {p.eliminated
+                      ? "已消灭"
+                      : player.peaceWith.includes(p.id)
+                        ? "和平"
+                        : "战争"}
+                  </span>
+                </header>
+                {!p.eliminated && (
+                  <div>
+                    {player.peaceWith.includes(p.id)
+                      ? button(
+                          { type: "BREAK_PEACE", targetPlayer: p.id },
+                          "解除和平",
+                        )
+                      : button(
+                          { type: "PEACE", targetPlayer: p.id },
+                          player.peaceOffers.includes(p.id)
+                            ? "接受和平"
+                            : p.peaceOffers.includes(0)
+                              ? "已提议和平"
+                              : "提议和平",
+                        )}
+                    {player.embassies.includes(p.id) ? (
+                      <span className="embassy-label">
+                        <Building2 size={15} />
+                        已建大使馆
+                      </span>
+                    ) : (
+                      button(
+                        { type: "EMBASSY", targetPlayer: p.id },
+                        "大使馆",
+                        getEmbassyCost(game, 0),
                       )
-                    : button(
-                        { type: "PEACE", targetPlayer: p.id },
-                        player.peaceOffers.includes(p.id)
-                          ? "接受和平"
-                          : p.peaceOffers.includes(0)
-                            ? "已提议和平"
-                            : "提议和平",
-                      )}
-                  {player.embassies.includes(p.id) ? (
-                    <span className="embassy-label">
-                      <Building2 size={15} />
-                      已建大使馆
-                    </span>
-                  ) : (
-                    button(
-                      { type: "EMBASSY", targetPlayer: p.id },
-                      "大使馆",
-                      getEmbassyCost(game, 0),
-                    )
-                  )}
-                </div>
-              )}
-            </article>
-          ))
+                    )}
+                  </div>
+                )}
+              </article>
+            );
+          })
         ) : (
           <p>尚未发现其他阵营。</p>
         )}
@@ -242,10 +251,9 @@ export function DiplomacyPanel({
 }
 
 export function SettingsPanel({ onClose }: { onClose: () => void }) {
-  const { game, settings, updateSettings, save, exportSave, menu, importSave, command, busy, playbackStep, eventNotice } =
+  const { game, screen, settings, updateSettings, save, exportSave, menu, importSave, busy, playbackStep, eventNotice, resetCamera } =
     useGameStore();
-  const [resign, setResign] = useState(false),
-    file = useRef<HTMLInputElement>(null);
+  const file = useRef<HTMLInputElement>(null);
   const exportFile = () => {
     if (!game) return;
     const raw = exportSave();
@@ -265,6 +273,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
         <PwaControls canUpdate={!busy && !playbackStep && !eventNotice} beforeUpdate={save} />
         {(
           [
+            { key: "showResources", icon: Gem, title: "资源显示" },
             { key: "sound", icon: Volume2, title: "音效" },
             { key: "reducedMotion", icon: Activity, title: "减少动画" },
             { key: "showHints", icon: HelpCircle, title: "操作提示" },
@@ -277,13 +286,25 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
             aria-checked={settings[key]}
             onClick={() => updateSettings({ [key]: !settings[key] })}
           >
-            <Icon size={20} />
+            <Icon size={20} aria-hidden="true" />
             <span>
               <strong>{title}</strong>
             </span>
-            <i className={`toggle ${settings[key] ? "on" : ""}`} />
+            <i className={`toggle ${settings[key] ? "on" : ""}`} aria-hidden="true" />
           </button>
         ))}
+        <label className="setting-row">
+          <Building2 size={20} aria-hidden="true" />
+          <span><strong id="city-details-label">详细信息</strong></span>
+          <select
+            aria-labelledby="city-details-label"
+            value={settings.cityDetails}
+            onChange={(e) => updateSettings({ cityDetails: e.target.value === "panel" ? "panel" : "map" })}
+          >
+            <option value="map">地图标签</option>
+            <option value="panel">选择面板</option>
+          </select>
+        </label>
         {game && (
           <div className="save-actions">
             <button
@@ -341,39 +362,20 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
               }}
             >
               <Home size={17} />
-              保存并返回主菜单
+              返回主菜单
             </button>
-            {game.status === "playing" &&
-              !game.players[0].eliminated &&
-              (resign ? (
-                <div className="resign-confirm">
-                  <p>确认认输并结束对局？</p>
-                  <button
-                    className="danger"
-                    onClick={() => {
-                      command({ type: "RESIGN" });
-                      onClose();
-                    }}
-                  >
-                    确认认输
-                  </button>
-                  <button
-                    className="secondary"
-                    onClick={() => setResign(false)}
-                  >
-                    取消
-                  </button>
-                </div>
-              ) : (
-                <button
-                  className="text-action muted"
-                  disabled={game.currentPlayer !== 0}
-                  onClick={() => setResign(true)}
-                >
-                  <Flag size={14} />
-                  认输
-                </button>
-              ))}
+            {screen === "game" && (
+              <button
+                className="text-action"
+                onClick={() => {
+                  resetCamera();
+                  onClose();
+                }}
+              >
+                <ScanLine size={16} />
+                重置视角
+              </button>
+            )}
           </>
         )}
       </div>
@@ -435,7 +437,7 @@ export function ResultsPanel({
           <ArrowRight size={18} />
         </button>
         <button className="text-action" onClick={onClose}>
-          查看地图
+          返回棋盘
         </button>
       </div>
     </Modal>

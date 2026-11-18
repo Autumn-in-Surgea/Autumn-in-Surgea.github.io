@@ -1,5 +1,5 @@
 import { terrainColors } from "../scene/terrainColors";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useDeferredValue, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
   Play,
@@ -8,10 +8,17 @@ import {
   Shuffle,
   Check,
   Flag,
+  Zap,
 } from "lucide-react";
-import { GAME_EDITION, GAME_NAME_EN, GAME_NAME_ZH } from "../branding";
-import { CIVILIZATIONS, DEFAULT_OPTIONS, OPENING_PROFILES } from "../game";
+import { GAME_EDITION, GAME_ICON_192, GAME_NAME_EN, GAME_NAME_ZH } from "../branding";
+import {
+  DEFAULT_OPTIONS, MAP_SIZE_CHOICES, OPENING_PROFILES, SLOW_TRAINING_ROUNDS,
+  TECHNOLOGIES, UNITS, opponentLimit,
+} from "../game";
+import { NATIONS } from "../nations/registry";
+import { NationEmblem } from "./NationEmblem";
 import { generateMap } from "../game/map/generate";
+import { STORY_NATIONS, STORY_SIZE } from "../game/map/story";
 import type { GameOptions, MapSettings, Tile } from "../game/types";
 import { hasSavedGame, useGameStore } from "../store/gameStore";
 import { Modal } from "./Common";
@@ -93,10 +100,14 @@ function NewGame({ onClose }: { onClose: () => void }) {
     startingProfiles: [],
     mapSettings: { ...DEFAULT_OPTIONS.mapSettings, customSpawns: [] },
   }));
+  const [randomMapSize, setRandomMapSize] = useState(DEFAULT_OPTIONS.size);
   const [error, setError] = useState("");
   const [spawnIndex, setSpawnIndex] = useState(0);
   const story = options.scenario === "story",
     free = options.scenario === "free";
+  const quickMode = options.quickMode !== false;
+  const roster = story ? STORY_NATIONS : NATIONS;
+  const nation = free ? undefined : roster.find(item => item.id === options.civilization) ?? roster[0];
   const manualSpawns = free && options.mapSettings.spawnMode === "custom";
   const change = (patch: Partial<GameOptions>) => {
     setError("");
@@ -106,18 +117,30 @@ function NewGame({ onClose }: { onClose: () => void }) {
     setError("");
     setOptions((o) => ({ ...o, mapSettings: { ...o.mapSettings, ...patch } }));
   };
+  const { scenario, civilization, size, mapType, seed, aiCount } = options;
+  const { landRatio, forestRatio, mountainRatio, resourceDensity, villageDensity, noiseScale } = options.mapSettings;
+  const previewOptions = useMemo<GameOptions>(() => ({
+    ...DEFAULT_OPTIONS,
+    scenario, civilization, size, mapType, aiCount,
+    seed: seed || "preview",
+    mapSettings: {
+      ...DEFAULT_OPTIONS.mapSettings,
+      landRatio, forestRatio, mountainRatio, resourceDensity, villageDensity, noiseScale,
+      spawnMode: "balanced",
+    },
+  }), [scenario, civilization, size, mapType, seed, aiCount, landRatio, forestRatio, mountainRatio,
+    resourceDensity, villageDensity, noiseScale]);
+  const displayedOptions = useDeferredValue(previewOptions);
   const preview = useMemo(() => {
-    if (options.scenario === "fair") return null;
+    if (displayedOptions.scenario === "fair") return null;
     try {
-      return generateMap({
-        ...options,
-        seed: options.seed || "preview",
-        mapSettings: { ...options.mapSettings, spawnMode: "balanced" },
-      });
+      const map = generateMap(displayedOptions);
+      return { tiles: map.tiles, starts: map.starts.map(id => map.tiles[id]) };
     } catch {
       return null;
     }
-  }, [options]);
+  }, [displayedOptions]);
+  const previewIsCurrent = displayedOptions === previewOptions;
   const setSpawn = (x: number, y: number) => {
     const spawns = options.mapSettings.customSpawns.slice();
     spawns[spawnIndex] = { x, y };
@@ -125,11 +148,11 @@ function NewGame({ onClose }: { onClose: () => void }) {
     setSpawnIndex((i) => Math.min(options.aiCount, i + 1));
   };
   const switchScenario = (scenario: GameOptions["scenario"]) => {
+    if (scenario === options.scenario) return;
     change({
       scenario,
-      civilization: scenario === "story" ? "imperia" : "neutral",
-      size: scenario === "story" ? 32 : 16,
-      aiCount: scenario === "story" ? 4 : 2,
+      size: scenario === "story" ? STORY_SIZE : randomMapSize,
+      aiCount: scenario === "story" ? opponentLimit(scenario) : Math.min(options.aiCount, opponentLimit(scenario)),
       mapType: scenario === "story" ? "continents" : options.mapType,
       mapSettings: {
         ...options.mapSettings,
@@ -161,6 +184,7 @@ function NewGame({ onClose }: { onClose: () => void }) {
                 try {
                   start({
                     ...options,
+                    civilization: nation?.id ?? "neutral",
                     seed: options.seed.trim() || randomSeed(),
                     maxRounds: 30,
                   });
@@ -192,25 +216,34 @@ function NewGame({ onClose }: { onClose: () => void }) {
             ),
           )}
         </div>
-        {story && (
-          <div className="civilization-grid">
-            {CIVILIZATIONS.map((c) => (
-              <button
-                key={c.id}
-                className={`civ-card ${options.civilization === c.id ? "selected" : ""}`}
-                style={{ "--civ": c.color } as React.CSSProperties}
-                onClick={() => change({ civilization: c.id })}
-              >
-                <span className="civ-emblem">
-                  {c.images?.emblem ? <img src={c.images.emblem} alt="" /> : c.symbol}
-                </span>
-                <strong>{c.name}</strong>
-                {options.civilization === c.id && (
-                  <Check className="civ-check" size={15} />
-                )}
-              </button>
-            ))}
-          </div>
+        {nation && (
+          <section className="nation-picker" aria-label="选择国家">
+            <div className="civilization-grid" role="group" aria-label="国家">
+              {roster.map(c => (
+                <button
+                  key={c.id}
+                  className={`civ-card ${nation.id === c.id ? "selected" : ""}`}
+                  style={{ "--civ": c.color } as React.CSSProperties}
+                  aria-pressed={nation.id === c.id}
+                  onClick={() => change({ civilization: c.id })}
+                >
+                  <NationEmblem nation={c} className="civ-emblem" />
+                  <strong>{c.name}</strong>
+                  <small lang="en">{c.english}</small>
+                  {nation.id === c.id && <Check className="civ-check" size={15} aria-hidden="true" />}
+                </button>
+              ))}
+            </div>
+            <dl className="nation-opening" style={{ borderInlineStartColor: nation.color }} aria-label="开局配置">
+              <div>
+                <dt>科技</dt>
+                <dd>{nation.opening.technologies.map(id => TECHNOLOGIES.find(tech => tech.id === id)?.name ?? id).join("、") || "无"}</dd>
+              </div>
+              <div><dt>单位</dt><dd>{UNITS[nation.opening.unit].name}</dd></div>
+              <div><dt>首都</dt><dd>{nation.capital} · {nation.opening.cityLevel} 级</dd></div>
+              <div><dt>星星</dt><dd>{nation.opening.stars}</dd></div>
+            </dl>
+          </section>
         )}
         <div className="setup-grid">
           <label>
@@ -220,12 +253,14 @@ function NewGame({ onClose }: { onClose: () => void }) {
               disabled={story}
               value={options.size}
               onChange={(e) => {
-                change({ size: Number(e.target.value) });
+                const size = Number(e.target.value);
+                setRandomMapSize(size);
+                change({ size });
                 mapChange({ customSpawns: [] });
                 setSpawnIndex(0);
               }}
             >
-              {[12, 16, 20, 24, 32, 48, 64].map((n) => (
+              {MAP_SIZE_CHOICES.map((n) => (
                 <option key={n} value={n}>
                   {n} × {n}
                 </option>
@@ -291,7 +326,7 @@ function NewGame({ onClose }: { onClose: () => void }) {
                 setSpawnIndex(0);
               }}
             >
-              {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
+              {Array.from({ length: opponentLimit(options.scenario) }, (_, i) => i + 1).map((n) => (
                 <option value={n} key={n}>
                   {n}
                 </option>
@@ -344,7 +379,24 @@ function NewGame({ onClose }: { onClose: () => void }) {
             </div>
           </label>
         </div>
-        {!story && (
+        <fieldset className="setup-rules">
+          <legend>游戏规则</legend>
+          <button
+            className="setting-row"
+            type="button"
+            role="switch"
+            aria-labelledby="quick-mode-label"
+            aria-describedby="quick-mode-duration"
+            aria-checked={quickMode}
+            onClick={() => change({ quickMode: !quickMode })}
+          >
+            <Zap size={20} aria-hidden="true" />
+            <span><strong id="quick-mode-label">快速模式</strong></span>
+            <small id="quick-mode-duration">{quickMode ? "即时训练" : `训练用时 ${SLOW_TRAINING_ROUNDS} 回合`}</small>
+            <i className={`toggle ${quickMode ? "on" : ""}`} aria-hidden="true" />
+          </button>
+        </fieldset>
+        {free && (
           <details className="faction-settings" open>
             <summary>
               <Flag size={16} />
@@ -392,7 +444,7 @@ function NewGame({ onClose }: { onClose: () => void }) {
             </div>
           </details>
         )}
-        {(free || preview) && (
+        {(free || (story && preview)) && (
           <section className={`setup-geography${free ? " setup-geography-free" : ""}`}>
             <h3>{free ? "地图生成" : "地图预览"}</h3>
             <div className="setup-geography-body">
@@ -474,18 +526,15 @@ function NewGame({ onClose }: { onClose: () => void }) {
                   )}
                   <MapPreview
                     tiles={preview.tiles}
-                    size={options.size}
-                    starts={manualSpawns
-                      ? options.mapSettings.customSpawns
-                      : preview.starts.map((id) => preview.tiles[id])
-                    }
-                    editable={manualSpawns}
+                    size={displayedOptions.size}
+                    starts={manualSpawns && previewIsCurrent ? options.mapSettings.customSpawns : preview.starts}
+                    editable={manualSpawns && previewIsCurrent}
                     onSelect={setSpawn}
                   />
                   <span className="setup-map-label">
-                    {story
-                      ? `固定地图 · ${options.size} × ${options.size}`
-                      : `${mapLabels[options.mapType]} · ${options.size} × ${options.size}`}
+                    {displayedOptions.scenario === "story"
+                      ? `固定地图 · ${displayedOptions.size} × ${displayedOptions.size}`
+                      : `${mapLabels[displayedOptions.mapType]} · ${displayedOptions.size} × ${displayedOptions.size}`}
                   </span>
                 </div>
               )}
@@ -511,7 +560,7 @@ function MapPreview({
   onSelect: (x: number, y: number) => void;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const ctx = ref.current?.getContext("2d");
     if (!ctx) return;
     const w = 480 / size;
@@ -568,6 +617,7 @@ export function About({ onClose }: { onClose: () => void }) {
   return (
     <Modal title="关于" onClose={onClose}>
       <div className="about-body">
+        <img className="about-mark" src={`${import.meta.env.BASE_URL}${GAME_ICON_192}`} width={82} height={82} alt="" />
         <h3>
           {GAME_NAME_ZH} · <span lang="en">{GAME_NAME_EN}</span>
         </h3>
@@ -576,7 +626,7 @@ export function About({ onClose }: { onClose: () => void }) {
           of Polytopia 的公开资料。
         </p>
         <p>
-          故事模式使用固定地图和世界观名称。自由模式支持地图参数和手动出生点。公平模式使用统一开局与标准规则。
+          故事模式使用固定地图和世界观名称。自由模式支持地图参数和手动出生点。公平模式使用标准地图，可选择与故事模式相同的五个国家。
         </p>
         <p>代码、界面和几何模型独立制作。此项目不是官方产品。</p>
         <a

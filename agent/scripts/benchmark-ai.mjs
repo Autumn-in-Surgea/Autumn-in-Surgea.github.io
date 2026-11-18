@@ -15,7 +15,7 @@ const server = await createServer({ root, configFile: false, optimizeDeps: { noD
 try {
   console.log(JSON.stringify({ measuredAt: new Date().toISOString(), node: process.version, platform: process.platform, architecture: process.arch, cpu: cpus()[0]?.model, aiSourceSha256: createHash('sha256').update(readdirSync(aiSource).filter(name => name.endsWith('.ts')).sort().map(name => name + '\n' + readFileSync(new URL(name, aiSource), 'utf8')).join('\n')).digest('hex') }));
   const game = await server.ssrLoadModule('/src/game/index.ts');
-  const options = (extra = {}) => ({ ...structuredClone(game.DEFAULT_OPTIONS), seed: 'ai-benchmark-2026', scenario: 'fair', mapType: 'dryland', size: 12, aiCount: 1, startingProfiles: Array(11).fill('organization'), ...extra });
+  const options = (extra = {}) => ({ ...structuredClone(game.DEFAULT_OPTIONS), seed: 'ai-benchmark-2026', scenario: 'fair', civilization: 'neutral', mapType: 'dryland', size: 12, aiCount: 1, startingProfiles: Array(11).fill('organization'), ...extra });
   const sampleTurn = (state) => {
     const before = performance.now();
     const result = game.runAiTurnDetailed(state);

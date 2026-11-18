@@ -1,4 +1,4 @@
-import { Miniature } from "../../scene/miniature";
+import { Miniature } from "../../../scene/miniature";
 import { facade, cityStreetDatum as pavement } from "./cityMasonry";
 
 const limestone = "#d9cbb0";

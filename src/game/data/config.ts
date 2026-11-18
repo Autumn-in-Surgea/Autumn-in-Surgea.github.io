@@ -7,6 +7,15 @@ import type {
   UnitSkill,
   UnitType,
 } from "../types";
+import { NATIONS } from "../../nations/registry";
+import { STORY_NATIONS } from "../map/story";
+
+export const MAP_SIZE_CHOICES = [24, 32, 48] as const;
+export function opponentLimit(scenario: GameOptions["scenario"]) {
+  if (scenario === "story") return STORY_NATIONS.length - 1;
+  return scenario === "free" ? 10 : Math.min(10, NATIONS.length - 1);
+}
+
 export const DEFAULT_MAP_SETTINGS: GameOptions["mapSettings"] = {
   landRatio: 0.62,
   forestRatio: 0.38,
@@ -19,18 +28,20 @@ export const DEFAULT_MAP_SETTINGS: GameOptions["mapSettings"] = {
 };
 export const DEFAULT_OPTIONS: GameOptions = {
   scenario: "fair",
-  civilization: "neutral",
-  size: 16,
+  civilization: "imperia",
+  size: MAP_SIZE_CHOICES[0],
   aiCount: 2,
   difficulty: "normal",
   mapType: "continents",
   seed: "2026",
   mode: "conquest",
   maxRounds: 30,
+  quickMode: true,
   factionNames: [],
   startingProfiles: [],
   mapSettings: DEFAULT_MAP_SETTINGS,
 };
+export const SLOW_TRAINING_ROUNDS = 1;
 export const PLAYER_COLORS = [
   "#4f9185",
   "#b55d59",
@@ -44,7 +55,7 @@ export const PLAYER_COLORS = [
   "#858653",
   "#665e9d",
 ];
-export { CIVILIZATIONS } from "../../factions/registry";
+export { CIVILIZATIONS } from "../../nations/registry";
 const unit = (
   id: UnitType,
   name: string,

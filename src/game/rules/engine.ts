@@ -1,16 +1,19 @@
 import {
   BUILDINGS,
-  CIVILIZATIONS,
   DEFAULT_OPTIONS,
   DEFAULT_MAP_SETTINGS,
   NEUTRAL_NAMES,
   OPENING_PROFILES,
+  opponentLimit,
   PLAYER_COLORS,
+  SLOW_TRAINING_ROUNDS,
   TECHNOLOGIES,
   UNITS,
 } from "../data/config";
 import { distance, generateMap, isWater, neighbors } from "../map/generate";
 import { hashSeed, seededRandom } from "../map/random";
+import { STORY_NATIONS, STORY_SIZE } from "../map/story";
+import { getNation, NATIONS, type NationOpening } from "../../nations/registry";
 import type {
   Action,
   ActionResult,
@@ -42,12 +45,22 @@ const skill = (u: Unit, id: UnitSkill): boolean =>
 export const getPlayerColor = (s: GameState, id: number): string =>
   s.players[id]?.color ?? "#aaa";
 export const populationNeeded = (c: City): number => c.level + 1;
-export const getCityCapacity = (c: City): number => c.level + 1;
+export const getCityCapacity = populationNeeded;
+export const getCityUnitCount = (s: GameState, c: City): number =>
+  s.units.filter(
+    (u) => u.owner === c.owner && u.homeCityId === c.id &&
+      !skill(u, "independent") && !u.independent,
+  ).length;
 export const getTrainingCost = (
   _s: GameState,
   _id: number,
   type: UnitType,
 ): number => UNITS[type].cost;
+export const getTrainingRounds = (
+  s: GameState,
+  _city: City,
+  _type: UnitType,
+): number => s.options.quickMode === false ? SLOW_TRAINING_ROUNDS : 0;
 export const getEmbassyCost = (_s: GameState, _id: number): number => 5;
 export const getUnitMaxHp = (u: Unit): number => u.maxHp;
 export const isAtPeace = (s: GameState, a: number, b: number): boolean =>
@@ -303,11 +316,16 @@ function discover(s: GameState, before: GameState): void {
         );
         p.resources += gift;
         const message = `初次接触${other.name}，获得 ${gift} 星。`;
+        const nation = getNation(other.civilization);
         event(s, {
           type: "info",
           player: p.id,
           message,
-          notice: { title: "初次接触", message },
+          notice: {
+            title: nation?.notices.firstContact.title ?? "初次接触",
+            message: nation ? `${nation.notices.firstContact.message}\n\n${message}` : message,
+            ...(nation && { nationId: nation.id }),
+          },
         });
       }
     }
@@ -351,6 +369,14 @@ function freshUnit(
       : {}),
   };
 }
+// Anonymous fair configurations also back old deterministic seeds and test fixtures.
+const anonymousFairDeposits: Record<string, NationOpening["fairDeposit"]> = {
+  organization: { count: 2, terrain: "plain", resource: "fruit" },
+  hunting: { count: 2, terrain: "forest", resource: "animal" },
+  fishing: { count: 2, terrain: "shallow", resource: "fish" },
+  farming: { count: 1, terrain: "plain", resource: "crop" },
+};
+
 export function createGame(input: GameOptions): GameState {
   const options: GameOptions = {
     ...DEFAULT_OPTIONS,
@@ -360,18 +386,26 @@ export function createGame(input: GameOptions): GameState {
     startingProfiles: input.startingProfiles ?? [],
     seed: input.seed?.trim() || "2026",
   };
+  const availableNations = options.scenario === "story" ? STORY_NATIONS : NATIONS;
+  const anonymous = options.scenario === "free" ||
+    (options.scenario === "fair" && options.civilization === "neutral");
+  const selectedNation = anonymous
+    ? undefined
+    : availableNations.find(nation => nation.id === options.civilization) ?? availableNations[0];
+  options.civilization = selectedNation?.id ?? "neutral";
+  const maxOpponents = selectedNation ? opponentLimit(options.scenario) : 10;
   options.aiCount =
     options.scenario === "story"
-      ? 4
-      : Math.min(10, Math.max(1, Math.floor(options.aiCount)));
+      ? maxOpponents
+      : Math.min(maxOpponents, Math.max(1, Math.floor(options.aiCount)));
   options.size =
     options.scenario === "story"
-      ? 32
+      ? STORY_SIZE
       : Math.min(64, Math.max(12, Math.floor(options.size)));
-  options.factionNames = Array.from({ length: options.aiCount + 1 }, (_, id) =>
+  options.factionNames = selectedNation ? [] : Array.from({ length: options.aiCount + 1 }, (_, id) =>
     (input.factionNames?.[id] ?? "").trim().slice(0, 20),
   );
-  options.startingProfiles = Array.from(
+  options.startingProfiles = selectedNation ? [] : Array.from(
     { length: options.aiCount + 1 },
     (_, id) => {
       const profile = input.startingProfiles?.[id];
@@ -380,46 +414,40 @@ export function createGame(input: GameOptions): GameState {
         : "random";
     },
   );
-  if (
-    options.scenario === "story" &&
-    !CIVILIZATIONS.some((c) => c.id === options.civilization)
-  )
-    options.civilization = "imperia";
-  if (options.scenario !== "story") options.civilization = "neutral";
   options.maxRounds =
     options.mode === "score" ? 30 : Math.max(30, options.maxRounds);
-  const map = generateMap(options),
-    chosen = CIVILIZATIONS.find((c) => c.id === options.civilization),
-    story = chosen
-      ? [chosen, ...CIVILIZATIONS.filter((c) => c !== chosen)]
-      : [];
+  const map = generateMap(options);
+  const rivals = availableNations.filter((nation) => nation !== selectedNation);
+  if (options.scenario === "fair" && selectedNation) {
+    const order = (id: string) => hashSeed(`${options.seed}:rival:${id}`);
+    rivals.sort((a, b) => order(a.id) - order(b.id));
+  }
+  const nations = selectedNation ? [selectedNation, ...rivals.slice(0, options.aiCount)] : [];
   const random = seededRandom(options.seed + ":names"),
     names = [...NEUTRAL_NAMES].sort(() => random() - 0.5);
-  const profiles = Array.from({ length: options.aiCount + 1 }, (_, id) => {
-    const selected =
-      options.scenario === "story"
-        ? story[id].openingProfile
-        : options.startingProfiles[id];
-    return (
-      OPENING_PROFILES.find((p) => p.id === selected) ??
-      OPENING_PROFILES[
-        hashSeed(`${options.seed}:opening:${id}`) % OPENING_PROFILES.length
-      ]
-    );
+  const openings = Array.from({ length: options.aiCount + 1 }, (_, id): NationOpening => {
+    const nation = nations[id];
+    if (nation) return nation.opening;
+    const profile = OPENING_PROFILES.find((p) => p.id === options.startingProfiles[id]) ??
+      OPENING_PROFILES[hashSeed(`${options.seed}:opening:${id}`) % OPENING_PROFILES.length];
+    return {
+      stars: profile.stars,
+      technologies: profile.technology ? [profile.technology] : [],
+      unit: profile.unit,
+      cityLevel: profile.cityLevel,
+      fairDeposit: anonymousFairDeposits[profile.id],
+    };
   });
   const players: Player[] = Array.from(
     { length: options.aiCount + 1 },
     (_, id) => ({
       id,
-      civilization: options.scenario === "story" ? story[id].id : "neutral",
-      name:
-        options.scenario === "story"
-          ? story[id].name
-          : options.factionNames[id]?.trim() || names[id],
-      color: options.scenario === "story" ? story[id].color : PLAYER_COLORS[id],
+      civilization: nations[id]?.id ?? "neutral",
+      name: nations[id]?.name ?? (options.factionNames[id] || names[id]),
+      color: nations[id]?.color ?? PLAYER_COLORS[id],
       isAI: id !== 0,
-      resources: profiles[id].stars,
-      technologies: profiles[id].technology ? [profiles[id].technology!] : [],
+      resources: openings[id].stars,
+      technologies: [...openings[id].technologies],
       explored: [],
       visible: [],
       eliminated: false,
@@ -486,47 +514,23 @@ export function createGame(input: GameOptions): GameState {
     const c = makeCity(
       tileId,
       `capital-${id}`,
-      options.scenario === "story"
-        ? story[id].capital
-        : `城市 ${String(id + 1).padStart(2, "0")}`,
+      nations[id]?.capital ?? `城市 ${String(id + 1).padStart(2, "0")}`,
       id,
     );
-    c.level = profiles[id].cityLevel;
-    s.units.push(freshUnit(s, id, profiles[id].unit, c, c.id, true));
-    const profile = profiles[id].id;
-    const adjacent = neighbors(s.tiles, s.options.size, c).filter(
-      (t) => !t.cityId,
-    );
-    if (
-      options.scenario === "fair" &&
-      ["organization", "hunting", "fishing", "farming"].includes(profile)
-    ) {
-      const count = profile === "farming" ? 1 : 2;
-      const desired =
-        profile === "hunting"
-          ? "forest"
-          : profile === "fishing"
-            ? "shallow"
-            : "plain";
-      const candidates = [
-        ...adjacent.filter((t) => t.terrain === desired),
-        ...adjacent.filter((t) => t.terrain !== desired),
-      ].filter(
-        (t) =>
-          !t.lighthouse &&
-          !(profile === "fishing" && options.mapType === "dryland"),
-      );
-      for (const t of candidates.slice(0, count)) {
-        t.terrain = desired;
-        t.resource =
-          profile === "organization"
-            ? "fruit"
-            : profile === "hunting"
-              ? "animal"
-              : profile === "fishing"
-                ? "fish"
-                : "crop";
-      }
+    const opening = openings[id];
+    c.level = opening.cityLevel;
+    s.units.push(freshUnit(s, id, opening.unit, c, c.id, true));
+    const deposit = opening.fairDeposit;
+    if (options.scenario !== "fair" || !deposit) return;
+    if (options.mapType === "dryland" && (deposit.terrain === "shallow" || deposit.terrain === "deep")) return;
+    const adjacent = neighbors(s.tiles, s.options.size, c).filter((t) => !t.cityId && !t.lighthouse);
+    const candidates = [
+      ...adjacent.filter((t) => t.terrain === deposit.terrain),
+      ...adjacent.filter((t) => t.terrain !== deposit.terrain),
+    ];
+    for (const tile of candidates.slice(0, deposit.count)) {
+      tile.terrain = deposit.terrain;
+      tile.resource = deposit.resource;
     }
   });
   map.villages.forEach((tileId, i) => {
@@ -642,8 +646,9 @@ function searchMovement(
   if (!u || u.owner !== s.currentPlayer || s.status !== "playing") return empty;
   if (!hasMovementAllowance(u)) return empty;
   const { known, occupancy } = index ?? movementIndex(s, s.players[u.owner]);
+  const origin = tileAt(s, u);
   const budget = UNITS[u.type].movement,
-    start = tileAt(s, u).id,
+    start = origin.id,
     costs = new Map([[start, 0]]),
     queue = [start],
     result = new Set<number>();
@@ -654,7 +659,7 @@ function searchMovement(
       spent = costs.get(id)!;
     if (
       id !== start &&
-      (isWater(from) !== isWater(tileAt(s, u)) ||
+      (isWater(from) !== isWater(origin) ||
         (!skill(u, "creep") &&
           neighbors(s.tiles, s.options.size, from).some((t) => {
             const e = occupancy.get(t.id);
@@ -670,12 +675,9 @@ function searchMovement(
     for (const to of neighbors(s.tiles, s.options.size, from)) {
       if (!known.has(to.id)) continue;
       const occupant = occupancy.get(to.id);
-      if (
-        occupant &&
-        (enforceHidden || isUnitVisible(s, occupant, u.owner)) &&
-        !skill(u, "creep")
-      )
-        continue;
+      const friendly = occupant?.owner === u.owner;
+      const occupied = occupant && (enforceHidden || isUnitVisible(s, occupant, u.owner));
+      if (occupied && !friendly && !skill(u, "creep")) continue;
       const step = movementCost(s, u, from, to);
       let cost = spent + step;
       if (
@@ -691,7 +693,11 @@ function searchMovement(
       costs.set(to.id, cost);
       previous.set(to.id, id);
       queue.push(to.id);
-      if (!occupant || (!enforceHidden && !isUnitVisible(s, occupant, u.owner))) {
+      // Occupancy does not stop a route through a friendly unit. Ending there
+      // is a swap only if both participants can make the direct step.
+      const canSwap = friendly && id === start && hasMovementAllowance(occupant) &&
+        movementCost(s, occupant, to, origin) <= UNITS[occupant.type].movement;
+      if (!occupied || canSwap) {
         if (firstOnly) return { start, reachable: [to.id], previous };
         result.add(to.id);
       }
@@ -717,12 +723,12 @@ export function getMovementPath(
   enforceHidden = false,
 ): number[] {
   if (!Number.isInteger(to) || !s.tiles[to]) return [];
-  const { start, reachable, previous } = searchMovement(
-    s,
-    s.units.find((u) => u.id === unitId),
-    enforceHidden,
-  );
+  const unit = s.units.find((u) => u.id === unitId);
+  const { start, reachable, previous } = searchMovement(s, unit, enforceHidden);
   if (start === null || !reachable.includes(to)) return [];
+  // A cheaper detour may reach this tile on the way elsewhere; a swap still
+  // uses the direct step from the actual starting position.
+  if (unitAt(s, s.tiles[to])?.owner === unit?.owner) return [start, to];
   const path = [to];
   let current = to;
   while (current !== start) {
@@ -843,14 +849,13 @@ function monumentReady(s: GameState, p: Player, id: MonumentId): boolean {
 function cityOfTile(s: GameState, id: number): City | undefined {
   return s.cities.find((c) => c.territory.includes(id));
 }
-export function canBuild(
+function canPlaceBuilding(
   s: GameState,
-  tileId: number,
+  t: Tile | undefined,
   id: BuildingId,
+  p: Player,
 ): boolean {
-  const t = s.tiles[tileId],
-    d = BUILDINGS[id],
-    p = s.players[s.currentPlayer];
+  const d = BUILDINGS[id];
   if (
     !t ||
     !d ||
@@ -858,8 +863,7 @@ export function canBuild(
     t.cityId ||
     t.ruin ||
     t.building ||
-    !p.visible.includes(tileId) ||
-    p.resources < d.cost ||
+    !p.visible.includes(t.id) ||
     (d.tech && !hasTech(p, d.tech)) ||
     !d.terrain.includes(t.terrain)
   )
@@ -867,7 +871,7 @@ export function canBuild(
   const occupant = unitAt(s, t);
   if (occupant && occupant.owner !== p.id) return false;
   if (d.resource && d.resource !== t.resource) return false;
-  const c = cityOfTile(s, tileId);
+  const c = cityOfTile(s, t.id);
   if (!c) return false;
   if (d.unique && c.territory.some((i) => s.tiles[i].building === id))
     return false;
@@ -922,6 +926,14 @@ export function canBuild(
     return false;
   return true;
 }
+
+export function canBuild(s: GameState, tileId: number, id: BuildingId): boolean {
+  const p = s.players[s.currentPlayer];
+  const cost = BUILDINGS[id]?.cost;
+  return cost !== undefined && p.resources >= cost &&
+    canPlaceBuilding(s, s.tiles[tileId], id, p);
+}
+
 const harvestRequirements = "采集需要对应科技、2 星与己方领土。";
 
 function harvestRestriction(s: GameState, tile: Tile | undefined, player: Player): string | null {
@@ -955,6 +967,16 @@ export function isTerritoryResourceHarvestable(s: GameState, tile: Tile, playerI
     harvestRestriction(s, tile, s.players[playerId]) === null;
 }
 
+export function isTerritoryResourceAvailable(s: GameState, tile: Tile, playerId: number): boolean {
+  if (tile.owner !== playerId) return false;
+  const resource = getVisibleResource(s, tile, playerId);
+  if (resource === "crop" || resource === "ore") {
+    const building = resource === "crop" ? "farm" : "mine";
+    return canPlaceBuilding(s, tile, building, s.players[playerId]);
+  }
+  return resource !== null && isTerritoryResourceHarvestable(s, tile, playerId);
+}
+
 export function validateAction(s: GameState, a: Action): string | null {
   if (s.status !== "playing") return "对局已结束。";
   const p = s.players[s.currentPlayer];
@@ -965,7 +987,6 @@ export function validateAction(s: GameState, a: Action): string | null {
     if (a.type === "MOVE")
       return Number.isInteger(a.to) &&
         s.tiles[a.to] &&
-        !unitAt(s, s.tiles[a.to]) &&
         getReachableTiles(s, u.id, true).includes(a.to)
         ? null
         : "目标不可达、被占据，或本回合不能移动。";
@@ -1065,16 +1086,13 @@ export function validateAction(s: GameState, a: Action): string | null {
       const c = s.cities.find((c) => c.id === a.cityId),
         d = UNITS[a.unitType];
       if (!c || c.owner !== p.id || !d?.trainable) return "无法训练该兵种。";
+      if (c.training) return "该城市已在训练单位。";
       if (d.tech && !hasTech(p, d.tech)) return "需要对应科技。";
-      if (p.resources < d.cost) return "星星不足。";
-      if (unitAt(s, c)) return "请移开城市中心驻军。";
-      return s.units.filter(
-        (u) =>
-          u.owner === p.id &&
-          u.homeCityId === c.id &&
-          !skill(u, "independent") &&
-          !u.independent,
-      ).length < getCityCapacity(c)
+      if (p.resources < getTrainingCost(s, p.id, a.unitType)) return "星星不足。";
+      const occupant = unitAt(s, c);
+      if (occupant && (getTrainingRounds(s, c, a.unitType) === 0 || occupant.owner !== p.id))
+        return "请先腾出城市中心。";
+      return getCityUnitCount(s, c) < getCityCapacity(c)
         ? null
         : "城市单位容量已满。";
     }
@@ -1316,7 +1334,6 @@ function nextTurn(s: GameState): void {
   const income = s.round > 1 ? getIncome(s, next) : 0;
   p.resources += income;
   p.stats.resourcesEarned += income;
-  for (const c of s.cities) if (c.owner === next) c.infiltratedRound = null;
   for (const u of s.units)
     if (u.owner === next) {
       u.moved = false;
@@ -1329,6 +1346,17 @@ function nextTurn(s: GameState): void {
     player: next,
     message: `第 ${s.round} 回合 · ${p.name}，收入 +${income} 星。`,
   });
+  for (const c of s.cities) {
+    if (c.owner !== next) continue;
+    c.infiltratedRound = null;
+    const order = c.training;
+    if (
+      !order || order.readyRound > s.round || unitAt(s, c) ||
+      getCityUnitCount(s, c) >= getCityCapacity(c)
+    ) continue;
+    s.units.push(freshUnit(s, next, order.unitType, c, c.id, true));
+    delete c.training;
+  }
 }
 function exhaust(u: Unit): void {
   u.moved = true;
@@ -1431,6 +1459,25 @@ function board(_s: GameState, u: Unit, from: Tile, to: Tile): void {
     u.attacked = true;
   }
 }
+function moveUnit(s: GameState, unit: Unit, from: Tile, to: Tile): UnitType {
+  const previousType = unit.type;
+  unit.x = to.x;
+  unit.y = to.y;
+  unit.moved = true;
+  if (unit.attacked) unit.escapeUsed = true;
+  board(s, unit, from, to);
+  unit.capturedTurn = to.cityId && cityAt(s, to)?.owner !== unit.owner ? s.round : null;
+  if (skill(unit, "hide")) unit.hidden = true;
+  event(s, {
+    type: "move",
+    player: unit.owner,
+    unitId: unit.id,
+    from: { x: from.x, y: from.y },
+    at: { x: to.x, y: to.y },
+    message: `${UNITS[unit.type].name}完成移动。`,
+  });
+  return previousType;
+}
 /** Capture the observer's knowledge at impact, before deaths, advances or the next AI order. */
 function recordStrike(
   s: GameState, attacker: Unit, defender: Unit, damage: number,
@@ -1532,27 +1579,12 @@ export function applyAction(source: GameState, a: Action): ActionResult {
     u = "unitId" in a ? s.units.find((u) => u.id === a.unitId)! : null;
   switch (a.type) {
     case "MOVE": {
-      const to = s.tiles[a.to],
-        from = tileAt(s, u!),
-        oldType = u!.type,
-        escaping = u!.attacked;
-      u!.x = to.x;
-      u!.y = to.y;
-      u!.moved = true;
-      if (escaping) u!.escapeUsed = true;
-      board(s, u!, from, to);
-      u!.capturedTurn =
-        to.cityId && cityAt(s, to)?.owner !== p.id ? s.round : null;
-      if (skill(u!, "hide")) u!.hidden = true;
-      event(s, {
-        type: "move",
-        player: p.id,
-        unitId: u!.id,
-        from: { x: from.x, y: from.y },
-        at: { x: to.x, y: to.y },
-        message: `${UNITS[u!.type].name}完成移动。`,
-      });
-      stompAfterMove(s, u!, oldType);
+      const mover = u!, to = s.tiles[a.to], from = tileAt(s, mover);
+      const teammate = unitAt(s, to);
+      const oldType = moveUnit(s, mover, from, to);
+      const teammateType = teammate && moveUnit(s, teammate, to, from);
+      stompAfterMove(s, mover, oldType);
+      if (teammate && teammateType) stompAfterMove(s, teammate, teammateType);
       break;
     }
     case "ATTACK": {
@@ -1701,6 +1733,7 @@ export function applyAction(source: GameState, a: Action): ActionResult {
         }
       }
       c.owner = p.id;
+      delete c.training;
       c.connected = false;
       c.connectionRewarded = false;
       c.infiltratedRound = null;
@@ -1728,9 +1761,14 @@ export function applyAction(source: GameState, a: Action): ActionResult {
       break;
     }
     case "TRAIN": {
-      const c = s.cities.find((c) => c.id === a.cityId)!;
-      p.resources -= UNITS[a.unitType].cost;
-      s.units.push(freshUnit(s, p.id, a.unitType, c, c.id));
+      const c = s.cities.find((c) => c.id === a.cityId)!,
+        rounds = getTrainingRounds(s, c, a.unitType);
+      p.resources -= getTrainingCost(s, p.id, a.unitType);
+      if (rounds > 0) {
+        c.training = { unitType: a.unitType, readyRound: s.round + rounds };
+      } else {
+        s.units.push(freshUnit(s, p.id, a.unitType, c, c.id));
+      }
       break;
     }
     case "UPGRADE_NAVAL":
@@ -1971,6 +2009,7 @@ export function applyAction(source: GameState, a: Action): ActionResult {
     case "RESIGN":
       for (const c of s.cities.filter((c) => c.owner === p.id)) {
         c.owner = null;
+        delete c.training;
         c.territory.forEach((id) => {
           s.tiles[id].owner = null;
         });

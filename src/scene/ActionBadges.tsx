@@ -6,7 +6,7 @@ import { Matrix4, Vector3 } from "three";
 import { validateAction } from "../game/rules/engine";
 import type { GameState } from "../game/types";
 import { terrainHeight } from "./models";
-import { factionForOwner } from "../factions/registry";
+import { factionForOwner } from "../nations/registry";
 import { MODEL_SETS } from "./factionModels";
 import "./actionBadges.css";
 

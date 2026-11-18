@@ -25,6 +25,8 @@ import type {
   UnitCue,
 } from "./motion";
 
+export const unitAppearDuration = (trained: boolean) => trained ? 0.32 : 0.2;
+
 const idleCue = (serial = 0): UnitCue => ({
   serial,
   issuedAt: 0,
@@ -292,7 +294,7 @@ interface Track {
   to: MotionVector;
   path: MotionPath;
   segment: number;
-  legs: { path: MotionPath; start: number; duration: number }[];
+  legs: { path: MotionPath; start: number; duration: number; swap?: boolean }[];
   moveDuration: number;
   moveDelay: number;
   moveYaw: number;
@@ -392,8 +394,10 @@ export function useUnitMotion(
       legs: (cue.journey ?? []).map((leg) => ({
         start: leg.start,
         duration: leg.duration,
+        swap: leg.swap,
         path: createMotionPath(
           leg.path.map((point) => positionOf(game, point, offset)),
+          leg.passing,
         ),
       })),
       moveDuration: duration,
@@ -436,6 +440,7 @@ export function useUnitMotion(
     let path = state.path;
     let moveDelay = state.moveDelay;
     let moveDuration = state.moveDuration;
+    let swap = false;
     if (state.legs.length) {
       let leg = state.legs[0];
       for (
@@ -447,12 +452,14 @@ export function useUnitMotion(
       path = leg.path;
       moveDelay = leg.start;
       moveDuration = leg.duration;
+      swap = !!leg.swap;
     }
     state.segment = sampleMotionPath(
       path,
       elapsed - moveDelay,
       moveDuration,
       output.current,
+      swap,
     );
     root.current.position.fromArray(output.current);
     const moveProgress = moveDuration
@@ -498,7 +505,7 @@ export function useUnitMotion(
     const gait = Math.sin(travel * Math.PI * 2) * (afloat ? 0.022 : 0.035) * envelope;
     const bob = (afloat ? 0.022 : 0.054) * envelope;
     const spawn = state.appear
-      ? easeOut(elapsed / (state.trained ? 0.32 : 0.2))
+      ? easeOut(elapsed / unitAppearDuration(state.trained))
       : 1;
     const spawnScale = state.appear
       ? 0.6 + 0.4 * spawn + Math.sin(spawn * Math.PI) * 0.08

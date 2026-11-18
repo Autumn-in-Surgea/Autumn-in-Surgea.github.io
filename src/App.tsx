@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
+import { useShallow } from "zustand/react/shallow";
 import {
   getAttackTargets,
   getPendingUpgradeCity,
@@ -29,26 +30,32 @@ type TargetOrder = {
   tileId: number;
 };
 
+const BoardScene = memo(GameScene);
+
 export default function App() {
   const {
-    game,
-    screen,
-    selectedTile,
-    selectedUnit,
-    select,
-    command,
-    busy: aiBusy,
-    playbackStep,
-    attachPlayback,
-    completePlayback,
-    eventNotice,
-    acknowledgeEvent,
-    notice,
-    setNotice,
-    resetKey,
-    sessionId,
-    settings,
-  } = useGameStore();
+    game, screen, selectedTile, selectedUnit, select, command, busy: aiBusy,
+    playbackStep, attachPlayback, completePlayback, eventNotice, acknowledgeEvent,
+    notice, setNotice, resetKey, sessionId, settings,
+  } = useGameStore(useShallow(state => ({
+    game: state.game,
+    screen: state.screen,
+    selectedTile: state.selectedTile,
+    selectedUnit: state.selectedUnit,
+    select: state.select,
+    command: state.command,
+    busy: state.busy,
+    playbackStep: state.playbackStep,
+    attachPlayback: state.attachPlayback,
+    completePlayback: state.completePlayback,
+    eventNotice: state.eventNotice,
+    acknowledgeEvent: state.acknowledgeEvent,
+    notice: state.notice,
+    setNotice: state.setNotice,
+    resetKey: state.resetKey,
+    sessionId: state.sessionId,
+    settings: state.settings,
+  })));
   const busy = aiBusy || !!playbackStep || !!eventNotice;
   const [panel, setPanel] = useState<Panel>(null),
     [aimedOrder, setAimedOrder] = useState<TargetOrder | null>(null),
@@ -108,17 +115,17 @@ export default function App() {
   const pendingUpgrade = game?.status === "playing" && game.currentPlayer === 0 && !busy
     ? getPendingUpgradeCity(game)
     : undefined;
-  function openActionTile(
+  const openActionTile = useCallback((
     tileId: number,
     kind: "upgrade" | "capture",
     unitId?: string,
-  ) {
+  ) => {
     if (busy) return;
     select(tileId, kind === "capture" ? unitId : null);
     setAimedOrder(null);
     setSelectionRequest((request) => request + 1);
-  }
-  function perform(action: Action) {
+  }, [busy, select]);
+  const perform = useCallback((action: Action) => {
     if (action.type === "END_TURN" && pendingUpgrade && game) {
       openActionTile(pendingUpgrade.y * game.options.size + pendingUpgrade.x, "upgrade");
       return;
@@ -135,7 +142,7 @@ export default function App() {
                 ? "research"
                 : "click",
       );
-  }
+  }, [command, game, openActionTile, pendingUpgrade, settings.sound]);
   function nextUnit() {
     if (!game || busy || game.currentPlayer !== 0) return;
     const available = getUnitsWithAvailableActions(game);
@@ -149,7 +156,7 @@ export default function App() {
     select(next.y * game.options.size + next.x, next.id);
     setAimedOrder(null);
   }
-  function clickTile(id: number) {
+  const clickTile = useCallback((id: number) => {
     if (screen !== "game" || !game || busy) return;
     const tile = game.tiles[id];
     const unit = game.units.find(
@@ -170,7 +177,7 @@ export default function App() {
       selectedUnit &&
       reachable.includes(id) &&
       id !== selectedTile &&
-      !unit
+      (!unit || unit.owner === 0)
     ) {
       perform({ type: "MOVE", unitId: selectedUnit, to: id });
       setAimedOrder(null);
@@ -180,7 +187,7 @@ export default function App() {
     select(id, selectingGround ? null : unit?.id ?? null);
     setAimedOrder(null);
     if (settings.sound) playSound("click");
-  }
+  }, [busy, game, perform, previewedOrder, reachable, screen, select, selectedTile, selectedUnit, settings.sound, targetOrders]);
   useEffect(() => {
     if (!notice) return;
     const timer = setTimeout(() => setNotice(""), 5500);
@@ -216,13 +223,14 @@ export default function App() {
   const resultKey = game
     ? `${sessionId}-${game.options.seed}-${game.round}-${game.winner}`
     : "";
+  const onResultReady = useCallback(() => setPresentedResult(resultKey), [resultKey]);
   return (
     <div
       className={`app ${screen === "menu" ? "is-menu" : "is-playing"} ${reducedMotion ? "reduce-motion" : ""}`}
     >
       {screen === "game" && game && (
         <div className="game-scene">
-          <GameScene
+          <BoardScene
             key={sessionId}
             game={game}
             selectedTile={selectedTile}
@@ -232,9 +240,11 @@ export default function App() {
             focusedTarget={target}
             onTileClick={clickTile}
             onActionBadge={openActionTile}
-            onResultReady={() => setPresentedResult(resultKey)}
+            onResultReady={onResultReady}
             resetKey={resetKey}
             reducedMotion={reducedMotion}
+            showCityDetails={settings.cityDetails === "map"}
+            showResourceHints={settings.showResources}
             playbackStep={playbackStep}
             attachPlayback={attachPlayback}
             onPlaybackDone={completePlayback}
@@ -258,7 +268,6 @@ export default function App() {
               onTech={() => setPanel("tech")}
               onDiplomacy={() => setPanel("diplomacy")}
               onSettings={() => setPanel("settings")}
-              nextUnit={nextUnit}
               target={target}
             />
           </>

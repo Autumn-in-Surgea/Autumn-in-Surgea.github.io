@@ -1,5 +1,5 @@
 import type { WitnessedMove } from "./combatEvents";
-import { observeMove } from "./visibleMove";
+import { observeMoves } from "./visibleMove";
 import type { GameEvent } from "../game/types";
 import { runAiTurnDetailed } from "../game/ai/ai";
 import type { AiRequest, AiResponse } from "./aiProtocol";
@@ -28,8 +28,7 @@ function runTurn(request: AiRequest): AiResponse {
   const combatEvents: GameEvent[] = [];
   const { state } = runAiTurnDetailed(request.state, undefined, (before, after, action) => {
     if (action.type !== "ATTACK" && action.type !== "MOVE") return;
-    const movement = observeMove(before, after, action);
-    if (movement) moves.push(movement);
+    moves.push(...observeMoves(before, after, action));
     const lastId = before.events.at(-1)?.id ?? 0;
     for (const event of after.events)
       if (event.id > lastId && event.combat?.targetVisible) combatEvents.push(event);

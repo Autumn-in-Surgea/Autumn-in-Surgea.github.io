@@ -31,6 +31,7 @@ export function chooseEconomic(s: GameState, k: Knowledge, threats: ThreatMap, p
   if (pending) return chooseCityReward(s, pending, k, threats, profile);
   const p = s.players[k.player], normal = profile.coordinated;
   const cities = k.ownCities, units = k.own, armyTarget = getArmyTarget(s);
+  const armySize = units.length + cities.filter((c) => c.training).length;
   const tiles = cities.flatMap((c) => c.territory.map((id) => s.tiles[id]))
     .filter((t) => t.owner === p.id && k.visible.has(t.id));
   const empty = tiles.filter((t) => !t.building && !t.cityId && !t.ruin);
@@ -54,8 +55,9 @@ export function chooseEconomic(s: GameState, k: Knowledge, threats: ThreatMap, p
       (upgrade ? 24 + (c.level === 4 ? 14 : 0) : 0) + horizon;
   };
   for (const c of cities) {
+    if (c.training) continue;
     const danger = threats.cityPressure.get(c.id) ?? 0;
-    if (units.length < armyTarget || danger > 3) {
+    if (armySize < armyTarget || danger > 3) {
       const nearby = units.filter((u) => distance(u, c) <= 4);
       const enemies = k.enemies.filter((u) => distance(u, c) <= 7);
       const counts = (type: UnitType) => nearby.filter((u) => u.type === type).length;
@@ -64,7 +66,7 @@ export function chooseEconomic(s: GameState, k: Knowledge, threats: ThreatMap, p
         : ["warrior", "rider", "archer", "swordsman", "defender"];
       for (const type of trainable) {
         const d = UNITS[type];
-        let score = units.length < 2 ? 72 : 29;
+        let score = armySize < 2 ? 72 : 29;
         score += danger ? Math.min(38, danger * 3) : 0;
         if (type === "warrior") score += p.resources < 5 ? 6 : 0;
         if (type === "rider") score += !enemies.length && counts("rider") < 2 ? 12 : 0;
@@ -79,7 +81,7 @@ export function chooseEconomic(s: GameState, k: Knowledge, threats: ThreatMap, p
           k.cities.some((city) => city.owner !== null && city.owner !== p.id && distance(city, c) <= 8) ? 7 : -40;
         // Prefer a second military city over wasting every star on far-away
         // reinforcements when immediate civilian development is affordable.
-        if (!danger && units.length > cities.length && d.cost > p.resources * 0.7) score -= 8;
+        if (!danger && armySize > cities.length && d.cost > p.resources * 0.7) score -= 8;
         offer({ type: "TRAIN", cityId: c.id, unitType: type }, score);
       }
     }

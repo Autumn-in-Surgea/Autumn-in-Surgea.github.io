@@ -1,10 +1,6 @@
-export type CivilizationId =
-  | "imperia"
-  | "determia"
-  | "nosta"
-  | "ida"
-  | "rina"
-  | "neutral";
+import type { NationId } from "../nations/registry";
+
+export type CivilizationId = NationId | "neutral";
 export type Terrain = "plain" | "forest" | "mountain" | "shallow" | "deep";
 export type Resource =
   | "fruit"
@@ -107,6 +103,7 @@ export interface GameOptions {
   seed: string;
   mode: "conquest" | "score";
   maxRounds: number;
+  quickMode?: boolean;
   factionNames: string[];
   startingProfiles: string[];
   mapSettings: MapSettings;
@@ -168,6 +165,7 @@ export interface City extends Position {
   borderExpanded: boolean;
   parks: number;
   infiltratedRound: number | null;
+  training?: { unitType: UnitType; readyRound: number };
 }
 export interface Unit extends Position {
   id: string;
@@ -199,6 +197,7 @@ export interface CombatWitness {
 export interface EventNotice {
   title: string;
   message: string;
+  nationId?: Exclude<CivilizationId, "neutral">;
 }
 export interface GameEvent {
   id: number;
@@ -275,18 +274,6 @@ export interface ActionResult {
   state: GameState;
   ok: boolean;
   error?: string;
-}
-export interface Civilization {
-  id: CivilizationId;
-  name: string;
-  english: string;
-  color: string;
-  lightColor: string;
-  symbol: string;
-  description: string;
-  bonus: string;
-  capital: string;
-  startingTech: string;
 }
 export interface UnitDefinition {
   id: UnitType;

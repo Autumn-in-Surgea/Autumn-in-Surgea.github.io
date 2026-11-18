@@ -1,36 +1,74 @@
-.selection-details {
-  width: min(100%, 44rem);
-  margin-inline: auto;
+.hud-selection-details .selection-nation-emblem {
+  inline-size: 28px;
+  block-size: 28px;
 }
-
-.selection-detail-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 7rem), 1fr));
-  gap: 0 1rem;
-  margin: 0;
+.selection-faction-color {
+  flex: none;
+  inline-size: 12px;
+  block-size: 12px;
+  border: 1px solid #b79d67;
+  border-radius: 50%;
 }
-
-.selection-detail-grid > div {
-  min-width: 0;
-  padding: 0.4rem 0;
-  border-bottom: 1px solid rgb(78 82 72 / 20%);
-}
-
-.selection-detail-grid dt {
-  margin-bottom: 0.15rem;
-  font-size: var(--font-size-small);
-  color: #555a50;
-}
-
-.selection-detail-grid dd {
-  margin: 0;
-  overflow-wrap: anywhere;
-  color: #203c3c;
-  font-size: var(--font-size-large);
+.hud-selection-title {
+  flex: none;
+  white-space: nowrap;
+  padding-inline-end: 8px;
+  border-inline-end: 1px solid #b79d67;
+  font-family: var(--font-display);
+  font-size: 16px;
   font-weight: 700;
+  color: #f4e5bf;
 }
-
-.selection-details p {
-  margin: 0.55rem 0;
-  line-height: 1.6;
+.selection-detail-grid {
+  display: flex;
+  flex: none;
+  align-items: center;
+  margin: 0;
+  gap: 7px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
+.selection-detail-grid > div {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+  padding-inline-end: 7px;
+  border-inline-end: 1px solid #b79d6780;
+}
+.selection-detail-grid dt { color: #c5cdd6; font-size: 12px; }
+.selection-detail-grid dd { margin: 0; color: #f7edd7; font-weight: 700; font-size: 13px; }
+.selection-city-meter {
+  display: inline-grid;
+  grid-template-columns: repeat(var(--slots), minmax(0, 1fr));
+  inline-size: min(calc(var(--slots) * 12px - 2px), 132px);
+  gap: min(2px, calc(36px / var(--slots)));
+  background: var(--track);
+  outline: 1px solid var(--track);
+  vertical-align: middle;
+}
+.selection-city-meter[data-deficit="true"] {
+  box-shadow: 0 2px var(--deficit);
+}
+.selection-city-slot {
+  display: grid;
+  place-items: center;
+  position: relative;
+  block-size: 8px;
+  background: var(--empty);
+  border-radius: 1px;
+  overflow: hidden;
+}
+.selection-city-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--population);
+}
+.selection-city-dot {
+  position: relative;
+  inline-size: min(5px, 86%);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--occupied);
+  box-shadow: 0 0 0 1px var(--track);
+}
+.hud-selection-description { flex: none; font-size: 12px; color: #c5cdd6; white-space: nowrap; }

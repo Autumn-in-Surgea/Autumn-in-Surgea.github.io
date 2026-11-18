@@ -17,6 +17,18 @@
   --font-size-small: 14px;
   --motion-ease: cubic-bezier(0.45, 0, 0.35, 1);
   --motion-enter: cubic-bezier(0.21, 0.64, 0.28, 1);
+  --menu-max-inline: 100dvh;
+  --chrome-ink: #22394f;
+  --chrome-deep: #101f32;
+  --chrome-raised: #3d5a78;
+  --chrome-hover: #476989;
+  --chrome-brass: #b39a62;
+  --chrome-gilt: #e4cea0;
+  --chrome-paper: #f3ead6;
+  --chrome-rule: #b8a37b;
+  --chrome-paper-texture:
+    repeating-linear-gradient(117deg, transparent 0 4px, #62432205 4px 5px, transparent 5px 11px),
+    linear-gradient(118deg, #fbf6e9, var(--chrome-paper));
   font-family: var(--font-body);
   color: #243c42;
   background: #f5f0e3;
@@ -25,9 +37,9 @@
   font-size: var(--font-size-small);
   line-height: 1.5;
   --paper: #f5f0e3;
-  --ink: #243c42;
+  --ink: var(--chrome-ink);
   --muted: #667269;
-  --green: #254d5a;
+  --green: var(--chrome-ink);
   --jade: #4d7162;
   --line: #cabc9d;
   --gold: #b59a55;
@@ -93,6 +105,7 @@ button,
 input,
 select {
   -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 ::selection {
   background: #e8e2d3;
@@ -892,25 +905,6 @@ a {
 .settings-game span:last-child {
   width: 100%;
   margin-top: 3px;
-}
-.resign-confirm {
-  margin-top: 20px;
-  background: #f5f0e3;
-  padding: 12px;
-  border-radius: 7px;
-}
-.resign-confirm p {
-  font-size: var(--font-size-small);
-  color: #826b36;
-  line-height: 1.8;
-  margin-bottom: 8px;
-}
-.resign-confirm button {
-  display: inline-flex;
-  font-size: var(--font-size-small);
-  min-height: 33px;
-  margin-right: 8px;
-  padding: 8px 13px;
 }
 .about-mark {
   display: block;

@@ -1,5 +1,5 @@
 import type { GameState, Position, UnitType } from "../game/types";
-import { freshCombatEvents, witnessedMoves } from "../workers/combatEvents";
+import { freshCombatEvents, witnessedMoves, type WitnessedMove } from "../workers/combatEvents";
 import { easeIn, easeInOut, easeOut, isVisibleTransition, movementDuration } from "./motion";
 
 export type Projectile = "arrow" | "stone" | "bolt" | "shell";
@@ -69,6 +69,8 @@ export interface TravelLeg {
   path: Position[];
   start: number;
   duration: number;
+  swap?: boolean;
+  passing?: number[];
 }
 export type CombatFrame = { issuedAt: number; strikes: Strike[]; journeys?: Map<string, TravelLeg[]> };
 
@@ -152,27 +154,33 @@ export function planEncounter(
   );
   for (const id of hiddenJourneys) journeys.delete(id);
   let moveIndex = 0;
+  function scheduleMove(move: WitnessedMove, start: number, swap = false) {
+    if (hiddenJourneys.has(move.unitId) || move.path.length < 2) return;
+    const path = move.path.map((id) => ({ x: after.tiles[id].x, y: after.tiles[id].y }));
+    let distance = 0;
+    for (let i = 1; i < path.length; i++)
+      distance += Math.hypot(path[i].x - path[i - 1].x, path[i].y - path[i - 1].y);
+    const duration = swap ? 0.38 : movementDuration(distance);
+    const journey = journeys.get(move.unitId) ?? [];
+    journey.push({ from: path[0], path, start, duration, swap, passing: move.passing });
+    journeys.set(move.unitId, journey);
+    ready.set(move.unitId, start + duration);
+  }
+
   function scheduleMoves(beforeId: number) {
     while (moveIndex < moves.length && moves[moveIndex].id < beforeId) {
       const move = moves[moveIndex++];
-      // A partially observed itinerary must never be bridged across unknown squares.
-      if (hiddenJourneys.has(move.unitId) || move.path.length < 2) continue;
-      const path = move.path.map((id) => ({
-        x: after.tiles[id].x,
-        y: after.tiles[id].y,
-      }));
-      let distance = 0;
-      for (let i = 1; i < path.length; i++)
-        distance += Math.hypot(
-          path[i].x - path[i - 1].x,
-          path[i].y - path[i - 1].y,
-        );
       const start = ready.get(move.unitId) ?? 0;
-      const duration = movementDuration(distance);
-      const journey = journeys.get(move.unitId) ?? [];
-      journey.push({ from: path[0], path, start, duration });
-      journeys.set(move.unitId, journey);
-      ready.set(move.unitId, start + duration);
+      const partner = moves[moveIndex];
+      if (move.swapWith && partner?.id === move.id && partner.unitId === move.swapWith &&
+        !hiddenJourneys.has(move.unitId) && !hiddenJourneys.has(partner.unitId)) {
+        const together = Math.max(start, ready.get(partner.unitId) ?? 0);
+        scheduleMove(move, together, true);
+        scheduleMove(partner, together, true);
+        moveIndex++;
+      } else {
+        scheduleMove(move, start);
+      }
     }
   }
   const seen = new Set(before.players[0].visible);

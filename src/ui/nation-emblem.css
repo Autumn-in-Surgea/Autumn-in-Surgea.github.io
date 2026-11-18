@@ -1,0 +1,54 @@
+.nation-emblem {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  inline-size: 33px;
+  block-size: 36px;
+}
+.nation-emblem.civ-emblem {
+  background: none;
+}
+.nation-emblem > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.nation-picker { margin-bottom: 12px; }
+.menu-page .nation-picker .civilization-grid { margin-bottom: 6px; }
+.nation-picker .civ-card { min-width: 0; gap: 3px; }
+.nation-picker .civ-card small {
+  display: block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 1.15;
+}
+.nation-picker .civ-check { top: 5px; right: 4px; }
+.nation-opening {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 13px;
+  margin: 0;
+  padding: 6px 8px;
+  color: var(--chrome-ink);
+  background: #e3d7bd82;
+  border-inline-start: 3px solid;
+}
+.nation-opening div { display: flex; align-items: baseline; column-gap: 4px; }
+.nation-opening dt { color: #5e625d; font-size: 12px; }
+.nation-opening dd { margin: 0; font-weight: 650; }
+
+.diplomacy-row .nation-emblem, .ranking .nation-emblem {
+  inline-size: 24px;
+  block-size: 26px;
+}
+.nation-name {
+  display: grid;
+  gap: 0;
+  line-height: 1.2;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.nation-name small { font-weight: 500; font-size: 11px; color: #5e625d; }

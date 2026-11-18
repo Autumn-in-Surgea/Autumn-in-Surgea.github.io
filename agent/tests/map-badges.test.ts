@@ -3,7 +3,7 @@ import { Matrix4, OrthographicCamera, Vector3 } from "three";
 import { getMapBadges, projectMapBadge } from "../../src/scene/ActionBadges";
 import { terrainHeight } from "../../src/scene/terrainElevation";
 import { MODEL_SETS } from "../../src/scene/factionModels";
-import { factionForOwner } from "../../src/factions/registry";
+import { factionForOwner } from "../../src/nations/registry";
 import { addCity, addUnit, battlefield } from "./helpers";
 
 describe("map action badges", () => {

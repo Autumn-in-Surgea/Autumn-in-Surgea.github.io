@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { applyAction, hashSeed } from "../../src/game";
+import { getNation } from "../../src/nations/registry";
 import { deserializeGame, serializeGame } from "../../src/store/save";
 import { addUnit, battlefield, newGame } from "./helpers";
 
@@ -24,6 +25,28 @@ describe("player event notices", () => {
     const next = applyAction(discovered, { type: "END_TURN" });
     expect(next.ok).toBe(true);
     expect(next.state.events.filter((entry) => entry.notice)).toEqual(notices);
+  });
+
+  it("uses the encountered nation's wording and records the emblem's nation ID", () => {
+    const game = battlefield();
+    const imperia = getNation("imperia")!;
+    const rina = getNation("rina")!;
+    game.options.civilization = imperia.id;
+    for (const [i, nation] of [imperia, rina].entries()) {
+      Object.assign(game.players[i], { civilization: nation.id, name: nation.name, metPlayers: [] });
+    }
+    const unit = addUnit(game, 0, "warrior", 1, 1);
+    addUnit(game, 1, "warrior", 10, 10);
+    const result = applyAction(game, { type: "MOVE", unitId: unit.id, to: 14 });
+    expect(result.ok).toBe(true);
+    const contact = result.state.events.find(event => event.player === 0 && event.notice)?.notice;
+    const reward = result.state.players[0].resources - game.players[0].resources;
+    expect(contact).toEqual({
+      title: rina.notices.firstContact.title,
+      nationId: rina.id,
+      message: `${rina.notices.firstContact.message}\n\n初次接触${rina.name}，获得 ${reward} 星。`,
+    });
+    expect(deserializeGame(serializeGame(result.state))).toEqual(result.state);
   });
 
   it.each([

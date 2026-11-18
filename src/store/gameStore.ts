@@ -1,10 +1,11 @@
 import { create } from "zustand";
 import { applyAction, createGame, getUnitsWithAvailableActions, tileAt } from "../game";
 import type { Action, EventNotice, GameOptions, GameState } from "../game/types";
+import { getNation } from "../nations/registry";
 import { deserializeGame, serializeGame } from "./save";
 import { aiWorker } from "../workers/aiClient";
 import { freshCombatEvents, rememberCombatEvents } from "../workers/combatEvents";
-import { observeMove } from "../workers/visibleMove";
+import { observeMoves } from "../workers/visibleMove";
 import { observedActionTile, type PlaybackStep } from "./actionPlayback";
 import { planStructurePlayback } from "./structurePlayback";
 export { deserializeGame, serializeGame } from "./save";
@@ -15,11 +16,15 @@ export interface Settings {
   sound: boolean;
   reducedMotion: boolean;
   showHints: boolean;
+  showResources: boolean;
+  cityDetails: "map" | "panel";
 }
 const defaultSettings: Settings = {
   sound: true,
   reducedMotion: false,
   showHints: false,
+  showResources: true,
+  cityDetails: "map",
 };
 function readSettings(): Settings {
   try {
@@ -30,6 +35,8 @@ function readSettings(): Settings {
       sound: saved.sound ?? defaultSettings.sound,
       reducedMotion: saved.reducedMotion ?? defaultSettings.reducedMotion,
       showHints: saved.showHints ?? defaultSettings.showHints,
+      showResources: typeof saved.showResources === "boolean" ? saved.showResources : defaultSettings.showResources,
+      cityDetails: saved.cityDetails === "panel" ? "panel" : defaultSettings.cityDetails,
     };
   } catch {
     return defaultSettings;
@@ -58,7 +65,10 @@ function savedNotices(raw: string): EventNotice[] {
   return pendingNotices.slice(0, 250).filter((notice): notice is EventNotice =>
     notice && typeof notice.title === "string" && typeof notice.message === "string" &&
     notice.title.length > 0 && notice.message.length > 0,
-  );
+  ).map(({ title, message, nationId }: EventNotice) => ({
+    title, message,
+    ...(nationId && getNation(nationId) ? { nationId } : {}),
+  }));
 }
 
 interface Store {
@@ -120,19 +130,20 @@ export const useGameStore = create<Store>((set, get) => {
     action: Action,
     selection?: Pick<Store, "selectedTile" | "selectedUnit">,
   ) {
-    const movement = observeMove(before, next, action);
+    const moves = observeMoves(before, next, action);
     const combat = freshCombatEvents(before, next);
-    if (movement || combat.length)
-      rememberCombatEvents(next, combat, movement ? [movement] : []);
+    if (moves.length || combat.length)
+      rememberCombatEvents(next, combat, moves);
     const count = notices.length;
     collectNotices(next, before.events.at(-1)?.id ?? 0);
     const structurePlan = playbackClients ? planStructurePlayback(before, next) : null;
     const focusTile = observedActionTile(before, next, action, combat) ??
+      moves.find(move => move.path.length > 0)?.path[0] ??
       structurePlan?.structures.keys().next().value ?? null;
     const visible = focusTile !== null || notices.length !== count ||
       (before.currentPlayer === 0 && action.type !== "END_TURN") ||
       ("targetPlayer" in action && action.targetPlayer === 0);
-    const step = structurePlan && visible
+    const step = structurePlan && focusTile !== null
       ? { id: ++sequence, focusTile: before.currentPlayer === 0 ? null : focusTile, ...structurePlan }
       : null;
     const finished = step
@@ -199,6 +210,8 @@ export const useGameStore = create<Store>((set, get) => {
     start: (options) => {
       const game = createGame(options);
       cancel();
+      const nation = getNation(game.players[0].civilization);
+      if (nation) notices.push({ ...nation.notices.opening, nationId: nation.id });
       collectNotices(game, 0);
       const saved = persist(game, notices);
       set({
@@ -236,9 +249,10 @@ export const useGameStore = create<Store>((set, get) => {
       );
       const selectionSpent = usedSelectedUnit &&
         (!unit || !getUnitsWithAvailableActions(next, [unit]).has(unit.id));
+      const clearSelection = selectionSpent || action.type === "END_TURN";
       publish(game, next, action, {
-        selectedUnit: selectionSpent ? null : unit?.id ?? null,
-        selectedTile: selectionSpent ? null : unit ? tileAt(next, unit).id : selectedTile,
+        selectedUnit: clearSelection ? null : unit?.id ?? null,
+        selectedTile: clearSelection ? null : unit ? tileAt(next, unit).id : selectedTile,
       });
       continueIfReady();
       return true;

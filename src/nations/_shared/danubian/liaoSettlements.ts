@@ -1,4 +1,4 @@
-import type { Miniature } from "../../scene/miniature";
+import type { Miniature } from "../../../scene/miniature";
 import { cityStreetDatum as ground } from "./cityMasonry";
 
 type Point = [number, number, number];

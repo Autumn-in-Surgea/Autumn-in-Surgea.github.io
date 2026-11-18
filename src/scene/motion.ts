@@ -83,9 +83,10 @@ export interface MotionPath {
   points: MotionVector[];
   lengths: number[];
   total: number;
+  clearance?: Map<number, [number, number]>;
 }
 /** Cache lengths once per action; frame sampling performs no allocations. */
-export function createMotionPath(points: MotionVector[]): MotionPath {
+export function createMotionPath(points: MotionVector[], passing?: number[]): MotionPath {
   const lengths = [0];
   for (let i = 1; i < points.length; i++)
     lengths.push(
@@ -95,13 +96,25 @@ export function createMotionPath(points: MotionVector[]): MotionPath {
           points[i][2] - points[i - 1][2],
         ),
     );
-  return { points, lengths, total: lengths.at(-1) ?? 0 };
+  let clearance: MotionPath["clearance"];
+  if (passing?.length) {
+    clearance = new Map();
+    for (const i of passing) {
+      const from = points[i - 1], to = points[i + 1];
+      if (!from || !to) continue;
+      const dx = to[0] - from[0], dz = to[2] - from[2];
+      const offset = 0.46 / (Math.hypot(dx, dz) || 1);
+      clearance.set(i, [-dz * offset, dx * offset]);
+    }
+  }
+  return { points, lengths, total: lengths.at(-1) ?? 0, clearance };
 }
 export function sampleMotionPath(
   path: MotionPath,
   elapsed: number,
   duration: number,
   out: MotionVector,
+  swap = false,
 ): number {
   const progress = duration <= 0 ? 1 : easeInOut(elapsed / duration);
   const distance = path.total * progress;
@@ -119,5 +132,16 @@ export function sampleMotionPath(
   out[0] = from[0] + (to[0] - from[0]) * fraction;
   out[1] = from[1] + (to[1] - from[1]) * easeInOut(fraction);
   out[2] = from[2] + (to[2] - from[2]) * fraction;
+  if (swap && length > 0 && fraction > 0 && fraction < 1) {
+    // Mirroring the endpoints reverses the direction of the perpendicular.
+    const side = 0.36 * Math.sin(Math.PI * fraction) ** 2 / length;
+    out[0] -= (to[2] - from[2]) * side;
+    out[2] += (to[0] - from[0]) * side;
+  } else if (path.clearance) {
+    const leave = path.clearance.get(segment - 1), arrive = path.clearance.get(segment);
+    const blend = easeInOut(fraction);
+    out[0] += (leave?.[0] ?? 0) * (1 - blend) + (arrive?.[0] ?? 0) * blend;
+    out[2] += (leave?.[1] ?? 0) * (1 - blend) + (arrive?.[1] ?? 0) * blend;
+  }
   return segment;
 }

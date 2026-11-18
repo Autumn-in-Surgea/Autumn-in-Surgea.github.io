@@ -8,6 +8,7 @@ import {
   getIncome,
   getScore,
   getTechCost,
+  isTerritoryResourceAvailable,
   isTerritoryResourceHarvestable,
   populationNeeded,
   TECHNOLOGIES,
@@ -123,6 +124,40 @@ describe("standard economy and city reward levels", () => {
       expect(result.state.tiles[tile.id].resource).toBeNull();
       expect(isTerritoryResourceHarvestable(result.state, result.state.tiles[tile.id], 0)).toBe(false);
       expect(result.state.cities[0].population).toBe(1);
+    },
+  );
+  it.each([
+    ["crop", "plain", "organization", "farming", "farm"],
+    ["ore", "mountain", "climbing", "mining", "mine"],
+  ] as const)(
+    "highlights %s when its building is unlocked regardless of stars",
+    (resource, terrain, discovery, technology, building) => {
+      const game = battlefield();
+      const player = game.players[0];
+      const tile = game.tiles[game.cities[0].territory.find((id) => !game.tiles[id].cityId)!];
+      Object.assign(tile, { resource, terrain });
+      const build = { type: "BUILD", tileId: tile.id, building } as const;
+      player.technologies = [discovery];
+      expect(isTerritoryResourceAvailable(game, tile, 0)).toBe(false);
+
+      player.technologies.push(technology);
+      player.resources = 0;
+      expect(isTerritoryResourceAvailable(game, tile, 0)).toBe(true);
+      expect(applyAction(game, build).ok).toBe(false);
+      expect(isTerritoryResourceAvailable(game, { ...tile, owner: 1 }, 0)).toBe(false);
+      expect(isTerritoryResourceAvailable(game, { ...tile, ruin: true }, 0)).toBe(false);
+
+      player.visible = player.visible.filter((id) => id !== tile.id);
+      expect(isTerritoryResourceAvailable(game, tile, 0)).toBe(false);
+      player.visible.push(tile.id);
+      addUnit(game, 1, "warrior", tile.x, tile.y);
+      expect(isTerritoryResourceAvailable(game, tile, 0)).toBe(false);
+      game.units = [];
+
+      player.resources = BUILDINGS[building].cost;
+      const result = applyAction(game, build);
+      expect(result.ok).toBe(true);
+      expect(isTerritoryResourceAvailable(result.state, result.state.tiles[tile.id], 0)).toBe(false);
     },
   );
   it("upgrades at two population and restricts rewards to the earned level", () => {

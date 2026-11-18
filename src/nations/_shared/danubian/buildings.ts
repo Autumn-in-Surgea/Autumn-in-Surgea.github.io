@@ -1,6 +1,6 @@
-import type { BuildingId } from "../../game/types";
-import { bridgeDeckHeight, type BuildingVisualTier } from "../../scene/buildingVisualTier";
-import { Miniature } from "../../scene/miniature";
+import type { BuildingId } from "../../../game/types";
+import { bridgeDeckHeight, type BuildingVisualTier } from "../../../scene/buildingVisualTier";
+import { Miniature } from "../../../scene/miniature";
 
 const stone = "#d6c29c",
   ivory = "#efe2bd",

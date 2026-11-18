@@ -1,4 +1,4 @@
-import { Miniature } from "../../scene/miniature";
+import { Miniature } from "../../../scene/miniature";
 import { cityStreetDatum } from "./cityMasonry";
 import { liaoVillage, liaoTown } from "./liaoSettlements";
 import { treatyShops, merchantQuarter, axialCapital } from "./civicDistricts";

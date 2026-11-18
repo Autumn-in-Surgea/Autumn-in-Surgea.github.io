@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { applyAction } from "../../src/game";
 import type { UnitType } from "../../src/game/types";
-import { observeMove } from "../../src/workers/visibleMove";
+import { observeMoves } from "../../src/workers/visibleMove";
 import {
   carryStrikes,
   incomingOffset,
@@ -185,9 +185,9 @@ describe("visible AI journeys", () => {
     const third = applyAction(second.state, escape);
     expect([first.ok, second.ok, third.ok]).toEqual([true, true, true]);
     const legs = [
-      observeMove(before, first.state, move)!,
-      observeMove(first.state, second.state, attack)!,
-      observeMove(second.state, third.state, escape)!,
+      ...observeMoves(before, first.state, move),
+      ...observeMoves(first.state, second.state, attack),
+      ...observeMoves(second.state, third.state, escape),
     ];
     rememberCombatEvents(
       third.state,
@@ -213,7 +213,7 @@ describe("visible AI journeys", () => {
     before.players[0].visible = [65, 67];
     const move = { type: "MOVE" as const, unitId: rider.id, to: 67 };
     const after = applyAction(before, move).state;
-    const path = observeMove(before, after, move)!;
+    const [path] = observeMoves(before, after, move);
     expect(path.path).toEqual([]);
     rememberCombatEvents(after, [], [path]);
     const plan = planEncounter(before, after);
@@ -229,7 +229,7 @@ it("preserves the remainder of a movement when an attack arrives in the next sna
   const move = { type: "MOVE" as const, unitId: archer.id, to: 5 * 12 + 6 };
   const moved = applyAction(before, move);
   expect(moved.ok).toBe(true);
-  rememberCombatEvents(moved.state, [], [observeMove(before, moved.state, move)!]);
+  rememberCombatEvents(moved.state, [], observeMoves(before, moved.state, move));
   const travel = planEncounter(before, moved.state);
   const attacked = applyAction(moved.state, { type: "ATTACK", unitId: archer.id, targetId: defender.id });
   expect(attacked.ok).toBe(true);
@@ -238,4 +238,58 @@ it("preserves the remainder of a movement when an attack arrives in the next sna
   expect(leg.start).toBeCloseTo(-0.06);
   expect(leg.path.at(-1)).toEqual({ x: 6, y: 5 });
   expect(next.strikes[0].start).toBeGreaterThanOrEqual(leg.start + leg.duration);
+});
+
+describe("friendly move presentation", () => {
+  it("schedules both sides of a swap together with opposing paths", () => {
+    const before = battlefield();
+    const a = addUnit(before, 0, "warrior", 4, 4);
+    const b = addUnit(before, 0, "archer", 5, 4);
+    const move = { type: "MOVE", unitId: a.id, to: 53 } as const;
+    const result = applyAction(before, move);
+    expect(result.ok).toBe(true);
+    const moves = observeMoves(before, result.state, move);
+    expect(moves).toMatchObject([
+      { unitId: a.id, path: [52, 53], swapWith: b.id },
+      { unitId: b.id, path: [53, 52], swapWith: a.id },
+    ]);
+    rememberCombatEvents(result.state, [], moves);
+    const { journeys } = planEncounter(before, result.state);
+    const [first] = journeys.get(a.id)!;
+    const [second] = journeys.get(b.id)!;
+    expect(first.swap && second.swap).toBe(true);
+    expect(second.start).toBe(first.start);
+    expect(second.duration).toBe(first.duration);
+    expect(second.path).toEqual([...first.path].reverse());
+  });
+
+  it("draws an ordinary move without hinting at a concealed swap partner", () => {
+    const before = battlefield();
+    before.currentPlayer = 1;
+    const a = addUnit(before, 1, "warrior", 4, 4);
+    const b = addUnit(before, 1, "cloak", 5, 4);
+    b.hidden = true;
+    const move = { type: "MOVE", unitId: a.id, to: 53 } as const;
+    const result = applyAction(before, move);
+    expect(result.ok).toBe(true);
+    result.state.players[0].visible = [52, 53];
+    const moves = observeMoves(before, result.state, move);
+    expect(moves.map(({ path, swapWith }) => [path, swapWith])).toEqual([[[52, 53], undefined], [[], undefined]]);
+    rememberCombatEvents(result.state, [], moves);
+    const plan = planEncounter(before, result.state);
+    expect(plan.journeys.get(a.id)?.[0]?.swap).toBe(false);
+    expect(plan.journeys.has(b.id)).toBe(false);
+  });
+
+  it("marks a friend on an intermediate square of the legal route", () => {
+    const before = battlefield();
+    const rider = addUnit(before, 0, "rider", 4, 4);
+    addUnit(before, 0, "warrior", 5, 4);
+    before.players[0].explored = [52, 53, 54];
+    const move = { type: "MOVE", unitId: rider.id, to: 54 } as const;
+    const result = applyAction(before, move);
+    expect(result.ok).toBe(true);
+    const [path] = observeMoves(before, result.state, move);
+    expect(path).toMatchObject({ path: [52, 53, 54], passing: [1] });
+  });
 });

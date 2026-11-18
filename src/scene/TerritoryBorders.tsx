@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { memo, useEffect, useMemo } from "react";
 import * as THREE from "three";
 import type { Player, Tile } from "../game/types";
 import { colorForOwner } from "./factionModels";
@@ -10,13 +10,13 @@ const material = new THREE.MeshBasicMaterial({
 });
 const ignoreRaycast = () => {};
 const directions = [[1, 0], [0, 1], [-1, 0], [0, -1]] as const;
-const bands = [[-0.028, 0], [-0.011, 0.84], [0.011, 0.84], [0.028, 0]] as const;
+const bands = [[-0.033, 0], [-0.019, 1], [0.019, 1], [0.033, 0]] as const;
 
 /** A single draw for the known frontier, including the short seams at changes of elevation. */
 export function makeTerritoryBorders(tiles: Tile[], players: Player[], explored: ReadonlySet<number>, size: number) {
   const positions: number[] = [], colors: number[] = [], indices: number[] = [];
   const corners = new Map<number, { x: number; z: number; low: number; high: number; owner: number }>();
-  const inks = players.map(p => new THREE.Color(colorForOwner(players, p.id)));
+  const inks = players.map(player => new THREE.Color(colorForOwner(players, player.id)));
   const offset = (size - 1) / 2;
   function section(x: number, y: number, z: number, nx: number, nz: number, ink: THREE.Color, connect: boolean) {
     const i = positions.length / 3;
@@ -41,7 +41,7 @@ export function makeTerritoryBorders(tiles: Tile[], players: Player[], explored:
         explored.has(adjacent) && tiles[adjacent].owner === owner) continue;
       const x = tile.x + nx / 2, z = tile.y + nz / 2;
       // Each colour sits just inside its own square. Neighbouring borders meet at grid corners.
-      for (const [distance, inset] of [[-0.5, 0], [-0.46, 0.024], [0.46, 0.024], [0.5, 0]] as const) {
+      for (const [distance, inset] of [[-0.5, 0], [-0.43, 0.049], [0.43, 0.049], [0.5, 0]] as const) {
         const cx = x - nz * distance, cz = z + nx * distance;
         section(cx - nx * inset, y, cz - nz * inset, nx, nz, ink, distance !== -0.5);
         if (inset) continue;
@@ -67,11 +67,29 @@ export function makeTerritoryBorders(tiles: Tile[], players: Player[], explored:
   return shape;
 }
 
-export function TerritoryBorders({ tiles, players, explored, size }: {
-  tiles: Tile[]; players: Player[]; explored: ReadonlySet<number>; size: number;
-}) {
+interface TerritoryProps {
+  tiles: Tile[];
+  players: Player[];
+  explored: ReadonlySet<number>;
+  size: number;
+}
+
+function sameBoundaries(before: TerritoryProps, after: TerritoryProps) {
+  if (before.size !== after.size || before.explored.size !== after.explored.size ||
+    before.players.length !== after.players.length ||
+    before.players.some((player, i) => player.color !== after.players[i].color)) return false;
+  if (before.tiles === after.tiles && before.explored === after.explored) return true;
+  for (const id of before.explored) {
+    const old = before.tiles[id], next = after.tiles[id];
+    if (!after.explored.has(id) || old.owner !== next.owner ||
+      (old.owner !== null && terrainHeight(old) !== terrainHeight(next))) return false;
+  }
+  return true;
+}
+
+export const TerritoryBorders = memo(function TerritoryBorders({ tiles, players, explored, size }: TerritoryProps) {
   const shape = useMemo(() => makeTerritoryBorders(tiles, players, explored, size), [tiles, players, explored, size]);
   useEffect(() => () => shape.dispose(), [shape]);
   return <mesh name="territory-borders" geometry={shape} material={material}
     renderOrder={1} dispose={null} raycast={ignoreRaycast} />;
-}
+}, sameBoundaries);

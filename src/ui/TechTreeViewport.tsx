@@ -36,13 +36,16 @@ function center(view: HTMLElement) {
 // Keep the same point on the tree under the moving pinch midpoint (or cursor).
 function zoomAt(view: HTMLElement, factor: number, from: Point, to: Point) {
   const oldScale = Number(view.style.getPropertyValue("--tech-scale")) || 1;
-  const scale = Math.min(2.4, Math.max(fitScale(view), oldScale * factor));
+  const width = view.clientWidth, height = view.clientHeight;
+  const fit = Math.min(1, width / treeSize, height / treeSize);
+  const scale = Math.min(2.4, Math.max(fit, oldScale * factor));
   const ratio = scale / oldScale;
-  const x = view.scrollLeft + from.x - view.scrollWidth / 2;
-  const y = view.scrollTop + from.y - view.scrollHeight / 2;
+  const oldExtent = treeSize * oldScale, extent = treeSize * scale;
+  const x = view.scrollLeft + from.x - Math.max(oldExtent, width) / 2;
+  const y = view.scrollTop + from.y - Math.max(oldExtent, height) / 2;
   if (scale !== oldScale) setScale(view, scale);
-  view.scrollLeft = view.scrollWidth / 2 + x * ratio - to.x;
-  view.scrollTop = view.scrollHeight / 2 + y * ratio - to.y;
+  view.scrollLeft = Math.max(extent, width) / 2 + x * ratio - to.x;
+  view.scrollTop = Math.max(extent, height) / 2 + y * ratio - to.y;
 }
 
 export function TechTreeViewport({ balance, children }: { balance: ReactNode; children: ReactNode }) {
@@ -82,8 +85,7 @@ export function TechTreeViewport({ balance, children }: { balance: ReactNode; ch
     const active = pointers.current;
     if (!active.size) dragged.current = false;
     if (active.size >= 2) return;
-    const rect = event.currentTarget.getBoundingClientRect();
-    active.set(event.pointerId, { x: event.clientX - rect.left, y: event.clientY - rect.top });
+    active.set(event.pointerId, { x: event.clientX, y: event.clientY });
     if (active.size > 1) dragged.current = true;
     // Capture on the button itself so a stationary tap keeps its normal click.
     const target = (event.target as Element).closest("button") ?? event.currentTarget;
@@ -95,15 +97,25 @@ export function TechTreeViewport({ balance, children }: { balance: ReactNode; ch
     const previous = active.get(event.pointerId);
     if (!previous) return;
     const view = event.currentTarget;
-    const rect = view.getBoundingClientRect();
-    const point = { x: event.clientX - rect.left, y: event.clientY - rect.top };
-    if (!dragged.current && Math.hypot(point.x - previous.x, point.y - previous.y) < 6) return;
+    const point = { x: event.clientX, y: event.clientY };
+    const dx = point.x - previous.x, dy = point.y - previous.y;
+    if (!dragged.current && dx * dx + dy * dy < 25) return;
     dragged.current = true;
+    if (active.size === 1) {
+      active.set(event.pointerId, point);
+      view.scrollLeft -= dx;
+      view.scrollTop -= dy;
+      return;
+    }
     const before = [...active.values()];
     active.set(event.pointerId, point);
     const after = [...active.values()];
-    const factor = active.size === 2 ? span(after) / Math.max(1, span(before)) : 1;
-    zoomAt(view, factor, midpoint(before), midpoint(after));
+    const rect = view.getBoundingClientRect();
+    const localMidpoint = (points: Point[]) => {
+      const point = midpoint(points);
+      return { x: point.x - rect.left, y: point.y - rect.top };
+    };
+    zoomAt(view, span(after) / Math.max(1, span(before)), localMidpoint(before), localMidpoint(after));
   }
 
   function release(event: PointerEvent<HTMLDivElement>) {

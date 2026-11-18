@@ -196,6 +196,10 @@ export interface CombatWitness {
   targetVisible: boolean;
   lethal: boolean;
 }
+export interface EventNotice {
+  title: string;
+  message: string;
+}
 export interface GameEvent {
   id: number;
   type:
@@ -214,6 +218,8 @@ export interface GameEvent {
   unitId?: string;
   damage?: number;
   combat?: CombatWitness;
+  /** An announcement for the player associated with this event. */
+  notice?: EventNotice;
 }
 export interface GameState {
   version: 2;

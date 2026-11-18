@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Matrix4, OrthographicCamera, Vector3 } from "three";
 import { getMapBadges, projectMapBadge } from "../../src/scene/ActionBadges";
+import { terrainHeight } from "../../src/scene/terrainElevation";
 import { MODEL_SETS } from "../../src/scene/factionModels";
 import { factionForOwner } from "../../src/factions/registry";
 import { addCity, addUnit, battlefield } from "./helpers";
@@ -65,7 +66,7 @@ describe("map action badges", () => {
         );
         const health = new Vector3(
           x,
-          0.015 + 0.08 + MODEL_SETS[modelSet].labelHeight(type),
+          terrainHeight(game.tiles[badge.tileId]) + 0.08 + MODEL_SETS[modelSet].labelHeight(type),
           z,
         ).project(camera);
         const healthLabelTop =

@@ -5,7 +5,7 @@ import {
   TECHNOLOGIES,
   UNITS,
 } from "../game/data/config";
-import type { GameState } from "../game/types";
+import type { EventNotice, GameState } from "../game/types";
 
 export const MAX_SAVE_BYTES = 8_000_000;
 const civilizationIds = new Set([
@@ -79,8 +79,12 @@ function booleans(value: Record<string, unknown>, keys: string[]): boolean {
   return keys.every((key) => typeof value[key] === "boolean");
 }
 
-export function serializeGame(game: GameState): string {
-  return JSON.stringify({ format: "autumn-v2", game });
+export function serializeGame(game: GameState, pendingNotices: readonly EventNotice[] = []): string {
+  return JSON.stringify({
+    format: "autumn-v2",
+    game,
+    ...(pendingNotices.length ? { pendingNotices } : {}),
+  });
 }
 
 /** Full structural/reference validation at the external JSON boundary; v1 is intentionally incompatible. */
@@ -519,6 +523,10 @@ export function deserializeGame(raw: string): GameState {
         (event.damage === undefined || count(event.damage)),
       "事件内容",
     );
+    if (event.notice !== undefined) {
+      const notice = record(event.notice, "事件提示");
+      check(text(notice.title) && text(notice.message), "事件提示");
+    }
     if (event.combat !== undefined) {
       const hit = record(event.combat, "战斗记录");
       check(event.type === "attack" && !!event.at && !!event.from &&

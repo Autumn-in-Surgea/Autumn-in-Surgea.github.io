@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
 import {
-  createGame,
-  DEFAULT_OPTIONS,
   getAttackTargets,
   getPendingUpgradeCity,
   getUnitsWithAvailableActions,
@@ -16,6 +14,7 @@ import GameScene from "./scene/GameScene";
 import { useGameStore } from "./store/gameStore";
 import { MainMenu, About } from "./ui/Menu";
 import { GameHUD } from "./ui/GameHUD";
+import { EventNotice } from "./ui/EventNotice";
 import {
   ResultsPanel,
   SettingsPanel,
@@ -38,13 +37,19 @@ export default function App() {
     selectedUnit,
     select,
     command,
-    busy,
+    busy: aiBusy,
+    playbackStep,
+    attachPlayback,
+    completePlayback,
+    eventNotice,
+    acknowledgeEvent,
     notice,
     setNotice,
     resetKey,
     sessionId,
     settings,
   } = useGameStore();
+  const busy = aiBusy || !!playbackStep || !!eventNotice;
   const [panel, setPanel] = useState<Panel>(null),
     [aimedOrder, setAimedOrder] = useState<TargetOrder | null>(null),
     [dismissedResult, setDismissedResult] = useState<string | null>(null);
@@ -63,18 +68,6 @@ export default function App() {
   useEffect(() => {
     setAimedOrder(null);
   }, [sessionId]);
-  const preview = useMemo(
-    () =>
-      createGame({
-        ...DEFAULT_OPTIONS,
-        size: 12,
-        aiCount: 3,
-        seed: "four-shades-diorama",
-        mapType: "lakes",
-      }),
-    [],
-  );
-  const current = screen === "game" && game ? game : preview;
   const reachable = useMemo(
     () =>
       game && selectedUnit && !busy
@@ -120,6 +113,7 @@ export default function App() {
     kind: "upgrade" | "capture",
     unitId?: string,
   ) {
+    if (busy) return;
     select(tileId, kind === "capture" ? unitId : null);
     setAimedOrder(null);
     setSelectionRequest((request) => request + 1);
@@ -196,7 +190,7 @@ export default function App() {
     const key = (e: KeyboardEvent) => {
       if (
         (e.target as HTMLElement)?.matches("input,select,textarea") ||
-        panel || document.querySelector('[role="dialog"][aria-modal="true"]') ||
+        eventNotice || panel || document.querySelector('[role="dialog"][aria-modal="true"]') ||
         screen !== "game"
       )
         return;
@@ -226,23 +220,27 @@ export default function App() {
     <div
       className={`app ${screen === "menu" ? "is-menu" : "is-playing"} ${reducedMotion ? "reduce-motion" : ""}`}
     >
-      <div className={screen === "menu" ? "menu-scene" : "game-scene"}>
-        <GameScene
-          key={`${screen}-${sessionId}`}
-          game={current}
-          selectedTile={screen === "game" ? selectedTile : null}
-          selectedUnit={screen === "game" ? selectedUnit : null}
-          reachable={screen === "game" ? reachable : []}
-          attackTargets={attackTargets}
-          focusedTarget={target}
-          onTileClick={clickTile}
-          onActionBadge={openActionTile}
-          onResultReady={() => setPresentedResult(resultKey)}
-          resetKey={resetKey}
-          reducedMotion={reducedMotion}
-          preview={screen === "menu"}
-        />
-      </div>
+      {screen === "game" && game && (
+        <div className="game-scene">
+          <GameScene
+            key={sessionId}
+            game={game}
+            selectedTile={selectedTile}
+            selectedUnit={selectedUnit}
+            reachable={reachable}
+            attackTargets={attackTargets}
+            focusedTarget={target}
+            onTileClick={clickTile}
+            onActionBadge={openActionTile}
+            onResultReady={() => setPresentedResult(resultKey)}
+            resetKey={resetKey}
+            reducedMotion={reducedMotion}
+            playbackStep={playbackStep}
+            attachPlayback={attachPlayback}
+            onPlaybackDone={completePlayback}
+          />
+        </div>
+      )}
       {screen === "menu" ? (
         <MainMenu
           onSettings={() => setPanel("settings")}
@@ -286,12 +284,19 @@ export default function App() {
         game?.status === "finished" &&
         presentedResult === resultKey &&
         dismissedResult !== resultKey &&
+        !busy &&
         !panel && (
           <ResultsPanel
             game={game}
             onClose={() => setDismissedResult(resultKey)}
           />
         )}{" "}
+      {screen === "game" && eventNotice && (
+        <EventNotice
+          notice={eventNotice}
+          onAcknowledge={acknowledgeEvent}
+        />
+      )}
       {screen === "menu" && notice && (
         <div className="toast" role="status">
           <span>{notice}</span>

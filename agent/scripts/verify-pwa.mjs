@@ -34,7 +34,7 @@ for (const license of ["genryu-OFL.txt", "resource-han-rounded-OFL.txt"]) {
 }
 for (const entry of await readdir(root, { recursive: true })) {
   const file = entry.split(path.sep).join("/");
-  if (!/\.(js|css|html|png|svg|ico|json|webmanifest|woff2?|wasm|mp3|wav|ogg)$/.test(file)) continue;
+  if (!/\.(js|css|html|png|jpg|svg|ico|json|webmanifest|woff2?|wasm|mp3|wav|ogg)$/.test(file)) continue;
   // A service worker and its importScripts dependencies use the browser's SW script cache.
   if (file === "sw.js" || /^workbox-[^/]+\.js$/.test(file)) continue;
   assert.ok(entries.has(file), `Build asset missing from precache: ${file}`);

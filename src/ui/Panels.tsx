@@ -21,7 +21,7 @@ import {
   getEmbassyCost,
 } from "../game";
 import type { Action, GameState, TechDefinition } from "../game/types";
-import { serializeGame, useGameStore } from "../store/gameStore";
+import { useGameStore } from "../store/gameStore";
 import { Modal, Cost, ResourceIcon } from "./Common";
 import { TechTreeViewport } from "./TechTreeViewport";
 import { scenarioLabels } from "./Menu";
@@ -242,14 +242,16 @@ export function DiplomacyPanel({
 }
 
 export function SettingsPanel({ onClose }: { onClose: () => void }) {
-  const { game, settings, updateSettings, save, menu, importSave, command, busy } =
+  const { game, settings, updateSettings, save, exportSave, menu, importSave, command, busy, playbackStep, eventNotice } =
     useGameStore();
   const [resign, setResign] = useState(false),
     file = useRef<HTMLInputElement>(null);
   const exportFile = () => {
     if (!game) return;
+    const raw = exportSave();
+    if (!raw) return;
     const url = URL.createObjectURL(
-      new Blob([serializeGame(game)], { type: "application/json" }),
+      new Blob([raw], { type: "application/json" }),
     );
     const link = document.createElement("a");
     link.href = url;
@@ -260,7 +262,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
   return (
     <Modal title="设置" onClose={onClose}>
       <div className="settings-body">
-        <PwaControls canUpdate={!busy} beforeUpdate={save} />
+        <PwaControls canUpdate={!busy && !playbackStep && !eventNotice} beforeUpdate={save} />
         {(
           [
             { key: "sound", icon: Volume2, title: "音效" },

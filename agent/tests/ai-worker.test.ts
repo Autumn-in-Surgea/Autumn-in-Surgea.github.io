@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AiWorkerClient, type WorkerPort } from "../../src/workers/aiClient";
 import type { AiRequest, AiResponse } from "../../src/workers/aiProtocol";
+import { applyAction, runAiTurnDetailed } from "../../src/game";
 import { newGame } from "./helpers";
 
 class FakeWorker implements WorkerPort {
@@ -17,6 +18,22 @@ class FakeWorker implements WorkerPort {
 afterEach(() => vi.useRealTimers());
 
 describe("AI worker lifecycle", () => {
+  it("requests and accepts only the ordered command plan for replay", async () => {
+    const worker = new FakeWorker();
+    const client = new AiWorkerClient(() => worker);
+    const state = newGame();
+    const result = client.plan(state);
+    const [request] = worker.postMessage.mock.calls[0];
+    expect(request).toMatchObject({ type: "PLAN_TURN", state });
+    const actions = [{ type: "END_TURN" }] as const;
+    worker.respond({ type: "TURN_PLAN", requestId: request.requestId, actions: [...actions] });
+    await expect(result).resolves.toEqual(actions);
+    const missingPlan = client.plan(state);
+    worker.respond({ type: "TURN_COMPLETE", requestId: request.requestId + 1, state });
+    await expect(missingPlan).rejects.toThrow("未返回行动计划");
+    client.cancel();
+  });
+
   it("waits for matching asynchronous replies and reuses the worker", async () => {
     const worker = new FakeWorker();
     const factory = vi.fn(() => worker);
@@ -78,4 +95,37 @@ describe("AI worker lifecycle", () => {
     await rejected;
     expect(worker.terminate).toHaveBeenCalledOnce();
   });
+});
+
+it("replays the worker plan to the same final state, including a required reward and end turn", async () => {
+  const fakeThread = {
+    onmessage: null as ((event: MessageEvent<AiRequest>) => void) | null,
+    postMessage: vi.fn<(response: AiResponse) => void>(),
+  };
+  vi.stubGlobal("self", fakeThread);
+  try {
+    await import("../../src/workers/ai.worker");
+    const initial = applyAction(newGame({ aiCount: 1 }), { type: "END_TURN" }).state;
+    const city = initial.cities.find((candidate) => candidate.owner === initial.currentPlayer)!;
+    city.level = 2;
+    city.pendingRewardLevels = [2];
+    const expected = runAiTurnDetailed(initial);
+    const data: AiRequest = { type: "PLAN_TURN", requestId: 12, state: structuredClone(initial) };
+    fakeThread.onmessage!({ data } as MessageEvent<AiRequest>);
+    expect(fakeThread.postMessage).toHaveBeenCalledOnce();
+    const [plan] = fakeThread.postMessage.mock.calls[0];
+    expect(plan).toEqual({ type: "TURN_PLAN", requestId: 12, actions: expected.actions });
+    if (plan.type !== "TURN_PLAN") throw new Error("Worker did not return a plan");
+    expect(plan.actions[0].type).toBe("CITY_REWARD");
+    expect(plan.actions.at(-1)?.type).toBe("END_TURN");
+    let replay = initial;
+    for (const action of plan.actions) {
+      const result = applyAction(replay, action);
+      expect(result.ok).toBe(true);
+      replay = result.state;
+    }
+    expect(replay).toEqual(expected.state);
+  } finally {
+    vi.unstubAllGlobals();
+  }
 });

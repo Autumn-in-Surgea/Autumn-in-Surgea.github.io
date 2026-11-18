@@ -49,7 +49,7 @@ export default defineConfig({
         // Include worker chunks as well as UI chunks. No gameplay request needs a server.
         globPatterns: [
           "licenses/*-OFL.txt",
-          "**/*.{js,css,html,png,svg,ico,json,webmanifest,woff,woff2,wasm,mp3,wav,ogg}",
+          "**/*.{js,css,html,png,jpg,svg,ico,json,webmanifest,woff,woff2,wasm,mp3,wav,ogg}",
         ],
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
         navigateFallback: "index.html",

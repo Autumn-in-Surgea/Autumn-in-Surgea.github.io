@@ -1,6 +1,7 @@
 import { factionForOwner, type ModelSetId } from "../factions/registry";
 import type { City, Player, UnitType } from "../game/types";
-import { buildingModel } from "./architecture";
+import { danubianBuilding } from "../factions/danubian/buildings";
+export { buildingVisualTier } from "./buildingVisualTier";
 import { resourceModel } from "./landscape";
 import { danubianCity } from "../factions/danubian/cities";
 import { danubianUnit } from "../factions/danubian/units";
@@ -13,7 +14,7 @@ const tallPieceLabels: Partial<Record<UnitType, number>> = {
 const danubian = {
   unit: danubianUnit,
   city: danubianCity,
-  building: buildingModel,
+  building: danubianBuilding,
   resource: resourceModel,
   labelHeight: (type: UnitType) => tallPieceLabels[type] ?? 0.84,
 };

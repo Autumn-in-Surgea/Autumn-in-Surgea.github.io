@@ -2,22 +2,45 @@ import { useEffect, useMemo } from "react";
 import * as THREE from "three";
 import { Miniature, miniatureMaterial } from "./miniature";
 
-// A narrow bevel catches the light around each square. All tiles share this mesh.
-function makeTileCap() {
-  const outline = new THREE.Shape();
-  const r = 0.483, cut = 0.023;
-  const corners = [[-r + cut,-r],[r-cut,-r],[r,-r+cut],[r,r-cut],
-    [r-cut,r],[-r+cut,r],[-r,r-cut],[-r,-r+cut]];
-  corners.forEach(([x, y], i) => i ? outline.lineTo(x, y) : outline.moveTo(x, y));
-  outline.closePath();
-  const mesh = new THREE.ExtrudeGeometry(outline, {
-    depth: 0.026, bevelEnabled: true, bevelSize: 0.01, bevelThickness: 0.009, bevelSegments: 1,
-  });
-  mesh.rotateX(-Math.PI / 2);
-  mesh.translate(0, -0.02, 0);
+// A polished face, two light-catching bevels and a rebated plinth. Each profile is
+// one instanced mesh, including on empty plains and open sea.
+type MouldingRing = readonly [height: number, halfWidth: number, cornerCut: number];
+
+function mouldedSquare(profile: readonly MouldingRing[]) {
+  const rings = profile.map(([y, r, cut]) => [
+    [-r+cut,y,-r], [r-cut,y,-r], [r,y,-r+cut], [r,y,r-cut],
+    [r-cut,y,r], [-r+cut,y,r], [-r,y,r-cut], [-r,y,-r+cut],
+  ]);
+  const positions: number[] = [];
+  const indices: number[] = [];
+  function polygon(points: number[][]) {
+    const first = positions.length / 3;
+    for (const point of points) positions.push(...point);
+    for (let i = 1; i < points.length - 1; i++) indices.push(first, first+i, first+i+1);
+  }
+  polygon(rings[0]);
+  for (let i = 1; i < rings.length; i++) {
+    const low = rings[i-1], high = rings[i];
+    for (let side = 0; side < high.length; side++) {
+      const next = (side+1) % high.length;
+      polygon([low[side], high[side], high[next], low[next]]);
+    }
+  }
+  polygon(rings[rings.length - 1].slice().reverse());
+  const mesh = new THREE.BufferGeometry();
+  mesh.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  mesh.setIndex(indices);
+  mesh.computeVertexNormals();
   return mesh;
 }
-export const tileCap = makeTileCap();
+export const tileCap = mouldedSquare([
+  [-0.036, 0.477, 0.026], [-0.027, 0.494, 0.030], [-0.007, 0.494, 0.030],
+  [0.007, 0.487, 0.028], [0.015, 0.472, 0.025],
+]);
+export const tilePlinth = mouldedSquare([
+  [-0.50, 0.484, 0.032], [-0.42, 0.500, 0.034], [-0.29, 0.500, 0.034],
+  [-0.19, 0.484, 0.030], [0.50, 0.484, 0.030],
+]);
 function makeFrame(size: number) {
   const frame = new Miniature();
   function block(x: number, y: number, z: number, w: number, h: number, d: number, color: string, turn = 0) {

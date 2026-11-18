@@ -302,10 +302,12 @@ function discover(s: GameState, before: GameState): void {
           3 * Math.max(1, Math.ceil(getScore(s, other.id) / 1000)),
         );
         p.resources += gift;
+        const message = `初次接触${other.name}，获得 ${gift} 星。`;
         event(s, {
           type: "info",
           player: p.id,
-          message: `初次接触${other.name}，获得 ${gift} 星。`,
+          message,
+          notice: { title: "初次接触", message },
         });
       }
     }
@@ -1755,70 +1757,80 @@ export function applyAction(source: GameState, a: Action): ActionResult {
         s.cities
           .filter((c) => c.owner === p.id && c.capitalOf !== null)
           .sort((a, b) => b.level - a.level)[0];
-      const rewards = [
-        "stars",
-        "unit",
-        ...(available.length ? ["tech"] : []),
-        ...(capital ? ["population"] : []),
-        ...(area(s, t, 2).some((t) => !p.explored.includes(t.id))
-          ? ["explorer"]
-          : []),
-      ];
+      const rewards: ("stars" | "unit" | "tech" | "population" | "explorer")[] = ["stars", "unit"];
+      if (available.length) rewards.push("tech");
+      if (capital) rewards.push("population");
+      if (area(s, t, 2).some((tile) => !p.explored.includes(tile.id)))
+        rewards.push("explorer");
       const reward =
         rewards[hashSeed(`${s.options.seed}:ruin:${t.id}`) % rewards.length];
-      if (reward === "stars") {
-        p.resources += 10;
-        event(s, {
-          type: "info",
-          player: p.id,
-          at: t,
-          message: "遗迹中发现 10 星。",
-        });
-      }
-      if (reward === "population") addPopulation(s, capital!, 3);
-      if (reward === "tech")
-        p.technologies.push(
-          available[hashSeed(s.options.seed + t.id) % available.length].id,
-        );
-      if (reward === "explorer") explore(s, p, t);
-      if (reward === "unit") {
-        const home = u!.homeCityId,
-          water = isWater(t),
-          destination = neighbors(s.tiles, s.options.size, t).find(
-            (next) =>
-              !unitAt(s, next) && Number.isFinite(movementCost(s, u!, t, next)),
+      let message: string;
+      switch (reward) {
+        case "stars":
+          p.resources += 10;
+          message = "遗迹中发现 10 星。";
+          break;
+        case "population":
+          addPopulation(s, capital!, 3);
+          message = `${capital!.name}获得 3 人口。`;
+          break;
+        case "tech": {
+          const tech = available[hashSeed(s.options.seed + t.id) % available.length];
+          p.technologies.push(tech.id);
+          message = `获得科技「${tech.name}」。`;
+          break;
+        }
+        case "explorer": {
+          const explored = p.explored.length;
+          explore(s, p, t);
+          const revealed = p.explored.length - explored;
+          message = revealed
+            ? `探索者揭开了 ${revealed} 格地图。`
+            : "探索者勘察了遗迹周边。";
+          break;
+        }
+        case "unit": {
+          const home = u!.homeCityId,
+            water = isWater(t),
+            destination = neighbors(s.tiles, s.options.size, t).find(
+              (next) =>
+                !unitAt(s, next) && Number.isFinite(movementCost(s, u!, t, next)),
+            );
+          if (destination) {
+            u!.x = destination.x;
+            u!.y = destination.y;
+            board(s, u!, t, destination);
+          } else s.units = s.units.filter((other) => other.id !== u!.id);
+          const friend = freshUnit(
+            s,
+            p.id,
+            water ? "rammer" : "swordsman",
+            t,
+            home,
           );
-        if (destination) {
-          u!.x = destination.x;
-          u!.y = destination.y;
-          board(s, u!, t, destination);
-        } else s.units = s.units.filter((other) => other.id !== u!.id);
-        const friend = freshUnit(
-          s,
-          p.id,
-          water ? "rammer" : "swordsman",
-          t,
-          home,
-        );
-        friend.independent = true;
-        friend.veteran = true;
-        friend.maxHp = water ? 15 : 20;
-        friend.hp = friend.maxHp;
-        if (water)
-          friend.carried = {
-            type: "warrior",
-            maxHp: 15,
-            kills: 0,
-            veteran: true,
-          };
-        s.units.push(friend);
-        event(s, {
-          type: "info",
-          player: p.id,
-          at: t,
-          message: "遗迹中发现一支老兵部队。",
-        });
+          friend.independent = true;
+          friend.veteran = true;
+          friend.maxHp = water ? 15 : 20;
+          friend.hp = friend.maxHp;
+          if (water)
+            friend.carried = {
+              type: "warrior",
+              maxHp: 15,
+              kills: 0,
+              veteran: true,
+            };
+          s.units.push(friend);
+          message = "遗迹中发现一支老兵部队。";
+          break;
+        }
       }
+      event(s, {
+        type: "info",
+        player: p.id,
+        at: { x: t.x, y: t.y },
+        message,
+        notice: { title: "遗迹奖励", message },
+      });
       break;
     }
     case "RESEARCH":

@@ -7,31 +7,12 @@ import type { AiRequest, AiResponse } from "./aiProtocol";
 // No DOM, store, rendering, or network access belongs in the AI worker.
 self.onmessage = (event: MessageEvent<AiRequest>) => {
   const request = event.data;
-  if (request.type !== "RUN_TURN") return;
+  if (request.type !== "RUN_TURN" && request.type !== "PLAN_TURN") return;
   let response: AiResponse;
   try {
-    const moves: WitnessedMove[] = [];
-    const combatEvents: GameEvent[] = [];
-    const { state } = runAiTurnDetailed(
-      request.state,
-      undefined,
-      (before, after, action) => {
-        if (action.type !== "ATTACK" && action.type !== "MOVE") return;
-        const movement = observeMove(before, after, action);
-        if (movement) moves.push(movement);
-        const lastId = before.events.at(-1)?.id ?? 0;
-        for (const event of after.events)
-          if (event.id > lastId && event.combat?.targetVisible)
-            combatEvents.push(event);
-      },
-    );
-    response = {
-      type: "TURN_COMPLETE",
-      requestId: request.requestId,
-      state,
-      combatEvents,
-      moves,
-    };
+    response = request.type === "PLAN_TURN"
+      ? { type: "TURN_PLAN", requestId: request.requestId, actions: runAiTurnDetailed(request.state).actions }
+      : runTurn(request);
   } catch (error) {
     response = {
       type: "TURN_ERROR",
@@ -41,3 +22,17 @@ self.onmessage = (event: MessageEvent<AiRequest>) => {
   }
   self.postMessage(response);
 };
+
+function runTurn(request: AiRequest): AiResponse {
+  const moves: WitnessedMove[] = [];
+  const combatEvents: GameEvent[] = [];
+  const { state } = runAiTurnDetailed(request.state, undefined, (before, after, action) => {
+    if (action.type !== "ATTACK" && action.type !== "MOVE") return;
+    const movement = observeMove(before, after, action);
+    if (movement) moves.push(movement);
+    const lastId = before.events.at(-1)?.id ?? 0;
+    for (const event of after.events)
+      if (event.id > lastId && event.combat?.targetVisible) combatEvents.push(event);
+  });
+  return { type: "TURN_COMPLETE", requestId: request.requestId, state, combatEvents, moves };
+}

@@ -25,8 +25,8 @@ function squareBorder(radius: number, thickness: number) {
 
 const plainOutline = squareBorder(0.474, 0.027);
 const plainMaterials = {
-  reachable: new THREE.MeshBasicMaterial({ color: "#487d69", transparent: true, opacity: 0.86, depthWrite: false }),
-  hover: new THREE.MeshBasicMaterial({ color: "#f6f0d9", transparent: true, opacity: 0.72, depthWrite: false }),
+  reachable: new THREE.MeshBasicMaterial({ color: "#487d69", transparent: true, opacity: 0.86, depthTest: false, depthWrite: false }),
+  hover: new THREE.MeshBasicMaterial({ color: "#f6f0d9", transparent: true, opacity: 0.72, depthTest: false, depthWrite: false }),
 };
 const squareGlow = new THREE.PlaneGeometry(1.13, 1.13).rotateX(-Math.PI / 2);
 const ringGlow = new THREE.PlaneGeometry(0.98, 0.98).rotateX(-Math.PI / 2);
@@ -44,6 +44,7 @@ function luminousMaterial(kind: Highlight, round: boolean) {
     },
     transparent: true,
     depthWrite: false,
+    depthTest: false,
     toneMapped: false,
     vertexShader: `
       varying vec2 tilePoint;

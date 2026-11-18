@@ -1,135 +1,140 @@
 .app.is-menu {
   min-height: 0;
-  background: #415350 url("../../设定/bg.png") 60% 30% / cover no-repeat;
+  background: #2a3541 url("../../设定/bg.png") 62% 30% / cover no-repeat;
 }
-.menu-scene { position: absolute; inset: -12%; }
+
 .menu-shell {
   position: absolute;
   inset: 0;
   display: grid;
-  place-items: center;
-  pointer-events: none;
+  grid-template-rows: minmax(0, 1fr) max-content minmax(max-content, 1fr);
+  padding: max(8px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right))
+    max(8px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
+  overflow: auto;
+  overscroll-behavior: contain;
   isolation: isolate;
 }
+
 .menu-shell::before {
   content: "";
-  position: absolute;
+  position: fixed;
   z-index: -1;
   inset: 0;
-  background: radial-gradient(ellipse at center, #17343533 0%, #19333352 60%, #1930328c);
-}
-.menu-copy {
-  position: relative;
-  width: min(450px, calc(100% - 40px));
-  padding: clamp(22px, 4vh, 38px) clamp(24px, 4vw, 52px);
-  pointer-events: auto;
-  text-align: center;
-  border: 1px solid #dfcea5;
-  border-radius: 5px;
-  background: radial-gradient(ellipse at 50% 0%, #fffaf0, #f4edda 85%);
-  box-shadow: 0 0 0 3px #324642, 0 0 0 4px #ad996b, 0 18px 54px #11272666;
-}
-.menu-copy::before {
-  content: "";
-  position: absolute;
-  inset: 7px;
-  border: 1px solid #c9b88e;
   pointer-events: none;
-  background:
-    linear-gradient(45deg, #a38a50 50%, transparent 50%) left bottom,
-    linear-gradient(135deg, #a38a50 50%, transparent 50%) left top,
-    linear-gradient(225deg, #a38a50 50%, transparent 50%) right top,
-    linear-gradient(315deg, #a38a50 50%, transparent 50%) right bottom;
-  background-size: 6px 6px;
-  background-repeat: no-repeat;
+  background: radial-gradient(ellipse min(560px, 80vw) min(380px, 62svh) at center,
+    #142332d3 10%, #142332bc 32%, #14233278 56%, #14233216 83%, transparent 100%);
 }
-.menu-crest { display: flex; justify-content: center; align-items: center; gap: 12px; }
-.menu-crest svg { width: 52px; height: 52px; }
-.menu-crest::before, .menu-crest::after {
-  content: "";
-  width: 49px;
-  border-top: 1px solid #b19a67;
+
+.menu-copy {
+  grid-row: 2;
+  justify-self: center;
+  width: min(100%, 450px);
+  padding-block: clamp(5px, 1.15svh, 16px);
+  text-align: center;
 }
+
 .menu-copy h1 {
-  margin: 5px 0 0;
-  font: 700 clamp(48px, 6.5vw, 76px)/1.2 var(--font-display);
-  letter-spacing: .065em;
-  text-indent: .065em;
-  color: #243f42;
-  white-space: nowrap;
+  margin: 0;
+  color: #fff4da;
+  font: 700 clamp(52px, 7.2vw, 94px)/1.13 var(--font-display);
+  letter-spacing: .085em;
+  text-indent: .085em;
+  text-shadow: 0 3px 18px #102432de;
 }
+
 .menu-copy h1 > span {
   display: block;
-  font-size: clamp(20px, 2.2vw, 27px);
-  line-height: 1.4;
-  letter-spacing: .035em;
-  text-indent: 0;
-  color: #64583b;
+  margin-block-start: 7px;
+  color: #ffe9b9;
+  font-size: clamp(21px, 2.45vw, 32px);
+  line-height: 1.23;
+  letter-spacing: .04em;
+  text-indent: .04em;
 }
+
 .menu-actions {
-  margin: clamp(20px, 3.6vh, 34px) auto 0;
+  margin: clamp(18px, 3.4svh, 33px) auto 0;
   display: grid;
-  width: min(100%, 304px);
-  gap: 10px;
+  width: min(100%, 348px);
+  gap: clamp(8px, 1.25svh, 12px);
 }
+
 .menu-actions button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
   position: relative;
-  border: 1px solid #92805a;
-  border-radius: 4px;
-  color: #283f40;
-  background: #fffaf0;
-  font-size: 18px;
-  font-weight: 550;
-  line-height: 1.3;
-  box-shadow: inset 0 0 0 3px #fffaf0, inset 0 0 0 4px #d7c9a7;
-}
-.menu-actions > button { min-height: 55px; padding: 10px 36px; letter-spacing: .08em; }
-.menu-actions > button > svg:last-child { position: absolute; right: 14px; }
-.menu-actions .menu-start {
-  background: #294d51;
-  color: #fff8e6;
-  border-color: #203d40;
-  box-shadow: inset 0 0 0 3px #294d51, inset 0 0 0 4px #ae9c68, 0 2px 4px #443a271a;
-  font-size: 21px;
+  display: grid;
+  place-items: center;
+  height: clamp(53px, 7svh, 65px);
+  padding: 0 38px;
+  border: 1px solid #ffe8b96e;
+  border-radius: 5px;
+  color: #fff7e0;
+  background: #142735a1;
+  font-size: clamp(18px, 2.4vw, 22px);
   font-weight: 650;
+  line-height: 1.25;
+  letter-spacing: .06em;
+  text-shadow: 0 1px 4px #10212b;
 }
-.menu-actions button:disabled { opacity: 1; color: #838373; background: #eae5d6; border-color: #b8ad93; box-shadow: none; }
-.menu-actions button:hover:not(:disabled) { background: #f0e7cf; border-color: #6d5b39; }
-.menu-actions .menu-start:hover:not(:disabled) { background: #365e61; color: white; }
-.menu-links { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.menu-links button { min-height: 45px; font-size: 17px; }
-.menu-footer {
+
+.menu-actions button > svg {
   position: absolute;
-  bottom: max(12px, env(safe-area-inset-bottom));
-  inset-inline: clamp(14px, 3vw, 44px);
+  inset-inline-start: 15px;
+  color: #f8dfab;
+}
+
+.menu-actions .menu-start {
+  background: #294f56db;
+  border-color: #ffe3a6b3;
+}
+
+.menu-actions button:hover:not(:disabled) {
+  background: #346673f2;
+  border-color: #ffe6af;
+}
+
+.menu-actions button:disabled {
+  opacity: .74;
+  color: #e3dccb;
+  border-color: #fff4d94a;
+  background: #263444b3;
+}
+
+.menu-actions button:disabled > svg {
+  color: #d5cdb8;
+}
+
+.menu-footer {
+  grid-row: 3;
+  align-self: end;
   display: flex;
   align-items: end;
   justify-content: space-between;
   gap: 12px;
+  margin-inline: auto;
+  width: min(100%, 1440px);
   color: #fff6dc;
+  text-shadow: 0 1px 3px #102432, 0 0 8px #102432;
 }
+
 .menu-footer .pwa-controls { margin: 0; }
-.menu-footer .pwa-status, .menu-footer .pwa-message { color: #fff6dc; text-shadow: 0 1px 4px #153335; }
-.menu-footer .pwa-button { color: #263f40; }
-.menu-footer .edition { margin-left: auto; font-variant-numeric: tabular-nums; }
-@media (max-height: 600px) {
-  .menu-copy { padding-block: 15px; }
-  .menu-copy h1 { font-size: clamp(38px, 8vh, 52px); }
-  .menu-copy h1 > span { font-size: 19px; }
-  .menu-crest svg { width: 29px; height: 29px; }
-  .menu-actions { margin-top: 10px; gap: 6px; }
-  .menu-actions > button { min-height: 44px; }
+.menu-footer .pwa-status, .menu-footer .pwa-message { color: inherit; }
+.menu-footer .pwa-button { color: #263f40; text-shadow: none; }
+.menu-footer .edition { margin-inline-start: auto; font-variant-numeric: tabular-nums; }
+
+@media (max-width: 480px) {
+  .menu-copy { width: min(100%, 340px); }
+  .menu-shell::before {
+    background: radial-gradient(ellipse 75vw min(340px, 55svh) at center,
+      #142332d9 18%, #142332c4 45%, #14233277 72%, transparent 100%);
+  }
+  .menu-copy h1 { font-size: clamp(44px, 15vw, 64px); }
+  .menu-actions { width: min(100%, 286px); }
 }
-@media (max-height: 425px) {
-  .menu-copy { width: min(490px, calc(100% - 34px)); padding: 13px 24px; }
-  .menu-crest { display: none; }
-  .menu-actions { grid-template-columns: 1fr 1fr; width: 100%; }
-  .menu-links { grid-column: span 2; }
-  .menu-actions > button { padding: 8px; }
-  .menu-actions > button > svg:last-child { display: none; }
-  .menu-footer { bottom: 5px; }
+
+@media (max-height: 440px) {
+  .menu-copy { padding-block: 0; }
+  .menu-copy h1 { font-size: clamp(32px, 10svh, 49px); }
+  .menu-copy h1 > span { margin-block-start: 3px; font-size: 17px; }
+  .menu-actions { margin-block-start: 8px; gap: 4px; }
+  .menu-actions button { height: 44px; font-size: 18px; }
 }

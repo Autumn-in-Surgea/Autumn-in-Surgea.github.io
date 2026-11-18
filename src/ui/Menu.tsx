@@ -1,3 +1,4 @@
+import { terrainColors } from "../scene/terrainColors";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
@@ -5,7 +6,6 @@ import {
   Settings2,
   Info,
   Shuffle,
-  ChevronRight,
   Check,
   Flag,
 } from "lucide-react";
@@ -14,7 +14,6 @@ import { CIVILIZATIONS, DEFAULT_OPTIONS, OPENING_PROFILES } from "../game";
 import { generateMap } from "../game/map/generate";
 import type { GameOptions, MapSettings, Tile } from "../game/types";
 import { hasSavedGame, useGameStore } from "../store/gameStore";
-import { AutumnMark } from "./AutumnMark";
 import { Modal } from "./Common";
 import { PwaControls } from "../pwa/PwaControls";
 import "../styles/title-screen.css";
@@ -46,38 +45,33 @@ export function MainMenu({
     <>
       <main className="menu-shell">
         <section className="menu-copy" aria-labelledby="game-title">
-          <div className="menu-crest" aria-hidden="true"><AutumnMark /></div>
           <h1 id="game-title">
             {GAME_NAME_ZH}
             <span lang="en">{GAME_NAME_EN}</span>
           </h1>
-          <nav className="menu-actions">
+          <nav className="menu-actions" aria-label="主菜单">
             <button
-              className="primary menu-start"
+              className="menu-start"
               onClick={() => setSetup(true)}
             >
+              <ArrowRight aria-hidden="true" size={21} />
               <span>开始新游戏</span>
-              <ArrowRight size={20} />
             </button>
             <button
-              className="menu-secondary"
               disabled={!game && !hasSavedGame()}
               onClick={() => (game ? resume() : load())}
             >
-              <Play size={17} />
+              <Play aria-hidden="true" size={21} />
               <span>继续游戏</span>
-              <ChevronRight size={16} />
             </button>
-            <div className="menu-links">
-              <button onClick={onSettings}>
-                <Settings2 size={16} />
-                设置
-              </button>
-              <button onClick={onAbout}>
-                <Info size={16} />
-                关于
-              </button>
-            </div>
+            <button onClick={onSettings}>
+              <Settings2 aria-hidden="true" size={21} />
+              <span>设置</span>
+            </button>
+            <button onClick={onAbout}>
+              <Info aria-hidden="true" size={21} />
+              <span>关于</span>
+            </button>
           </nav>
         </section>
         <footer className="menu-footer">
@@ -520,17 +514,10 @@ function MapPreview({
   useEffect(() => {
     const ctx = ref.current?.getContext("2d");
     if (!ctx) return;
-    const colors = {
-      plain: "#b5bb94",
-      forest: "#4d7162",
-      mountain: "#a8aaa0",
-      shallow: "#7ea5aa",
-      deep: "#426b80",
-    };
     const w = 480 / size;
     ctx.clearRect(0, 0, 480, 480);
     for (const t of tiles) {
-      ctx.fillStyle = colors[t.terrain];
+      ctx.fillStyle = terrainColors[t.terrain];
       ctx.fillRect(t.x * w, t.y * w, Math.ceil(w), Math.ceil(w));
     }
     starts.forEach((p, i) => {

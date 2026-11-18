@@ -1,5 +1,5 @@
 import { rememberCombatEvents } from "./combatEvents";
-import type { GameState } from "../game/types";
+import type { Action, GameState } from "../game/types";
 import type { AiRequest, AiResponse } from "./aiProtocol";
 
 export interface WorkerPort {
@@ -13,14 +13,15 @@ export interface WorkerPort {
 const createWorker = (): WorkerPort =>
   new Worker(new URL("./ai.worker.ts", import.meta.url), { type: "module" });
 
+type AiSuccess = Exclude<AiResponse, { type: "TURN_ERROR" }>;
+
 /** One reusable worker; cancellation terminates computation, not just its callback. */
 export class AiWorkerClient {
   private worker: WorkerPort | null = null;
   private sequence = 0;
   private pending: {
     id: number;
-    input: GameState;
-    resolve: (state: GameState) => void;
+    resolve: (response: AiSuccess) => void;
     reject: (error: Error) => void;
     timer: ReturnType<typeof setTimeout>;
   } | null = null;
@@ -30,7 +31,21 @@ export class AiWorkerClient {
     private timeoutMs = 120_000,
   ) {}
 
-  run(state: GameState): Promise<GameState> {
+  async run(state: GameState): Promise<GameState> {
+    const response = await this.request("RUN_TURN", state);
+    if (response.type !== "TURN_COMPLETE") throw new Error("AI 未返回回合状态。");
+    if (response.combatEvents)
+      rememberCombatEvents(response.state, response.combatEvents, response.moves, state);
+    return response.state;
+  }
+
+  async plan(state: GameState): Promise<Action[]> {
+    const response = await this.request("PLAN_TURN", state);
+    if (response.type !== "TURN_PLAN") throw new Error("AI 未返回行动计划。");
+    return response.actions;
+  }
+
+  private request(type: AiRequest["type"], state: GameState): Promise<AiSuccess> {
     if (this.pending) return Promise.reject(new Error("AI 回合仍在计算。"));
     return new Promise((resolve, reject) => {
       try {
@@ -42,12 +57,8 @@ export class AiWorkerClient {
             if (!pending || response.requestId !== pending.id) return;
             clearTimeout(pending.timer);
             this.pending = null;
-            if (response.type === "TURN_COMPLETE") {
-              if (response.combatEvents) {
-                rememberCombatEvents(response.state, response.combatEvents, response.moves, pending.input);
-              }
-              pending.resolve(response.state);
-            } else pending.reject(new Error(response.error));
+            if (response.type === "TURN_ERROR") pending.reject(new Error(response.error));
+            else pending.resolve(response);
           };
           this.worker.onerror = (event) => {
             event.preventDefault?.();
@@ -57,8 +68,8 @@ export class AiWorkerClient {
         }
         const id = ++this.sequence;
         const timer = setTimeout(() => this.fail(new Error("AI 计算超时，请重试。")), this.timeoutMs);
-        this.pending = { id, input: state, resolve, reject, timer };
-        this.worker.postMessage({ type: "RUN_TURN", requestId: id, state });
+        this.pending = { id, resolve, reject, timer };
+        this.worker.postMessage({ type, requestId: id, state });
       } catch (error) {
         const reason = error instanceof Error ? error : new Error("AI 工作线程不可用。");
         this.fail(reason);

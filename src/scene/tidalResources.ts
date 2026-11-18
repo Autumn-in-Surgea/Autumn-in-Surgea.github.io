@@ -53,12 +53,25 @@ function trout(m: Miniature, x: number, z: number, size: number, heading: number
     face("#d9c18c", ...gill.reverse());
   }
 
-  const dorsal: Point[] = [[-0.071, 0.112, 0], [0.022, 0.123, 0], [-0.039, 0.173, 0]];
-  face("#a68059", ...dorsal);
-  face("#b99369", ...dorsal.reverse());
-  const pectoral: Point[] = [[0.063, 0.079, 0.048], [0.032, 0.067, 0.078], [0.085, 0.085, 0.042]];
-  face("#b89362", ...pectoral);
-  face("#aa8259", ...pectoral.reverse());
+  // A folded enamel fin has a raised spine, a swept tip and two distinct
+  // planes under the fixed camera. Small fins balance the tail on either flank.
+  const finRoot: Point = [-0.069, 0.108, 0], finFront: Point = [0.027, 0.127, 0];
+  const peak: Point = [-0.034, 0.175, 0], back: Point = [-0.053, 0.162, 0];
+  for (const side of [-1, 1]) {
+    const ridge: Point = [-0.023, 0.138, side*0.008];
+    const fan = [[finRoot, back, ridge], [back, peak, ridge], [peak, finFront, ridge], [finRoot, ridge, finFront]];
+    for (const [i, corners] of fan.entries()) {
+      face(i === 2 ? "#d8ac77" : "#ad845f", ...(side < 0 ? corners.reverse() : corners));
+    }
+    const shoulder: Point = [0.067, 0.083, side*0.047];
+    const tip: Point = [0.013, 0.055, side*0.091], root: Point = [0.088, 0.077, side*0.04];
+    const fold: Point = [0.051, 0.079, side*0.066];
+    for (const [i, corners] of [[shoulder, tip, fold], [fold, tip, root]].entries()) {
+      const exterior = side < 0 ? corners.reverse() : corners;
+      face(i ? "#ad825d" : "#d5af7c", ...exterior);
+      face("#a88464", ...exterior.slice().reverse());
+    }
+  }
 }
 
 export function fishShoal() {
@@ -113,6 +126,15 @@ export function seaStar() {
       m.part("crown","#f2d19b",...radial(angle,length*u,y,bend[i]*u*u),w,w*0.56,w,0,angle);
     }
   }
-  m.part("crown", "#edb17c", 0.002,0.101,-0.005, 0.085,0.038,0.073,0,0.36);
+  // Five grooves meet around a shallow central rosette.
+  const inner = angles.map(angle => radial(angle, 0.042, 0.111));
+  const outer = angles.map((angle,i) => radial(angle, 0.077, 0.092, bend[i]*0.025));
+  const centre: Point = [0,0.118,0];
+  for (let i = 0; i < angles.length; i++) {
+    const next = (i+1) % angles.length;
+    top("#f2c692", centre, inner[i], inner[next]);
+    top("#d99168", inner[i], outer[i], inner[next]);
+    top("#e6a77a", inner[next], outer[i], outer[next]);
+  }
   return m.finish();
 }

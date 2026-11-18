@@ -26,7 +26,16 @@ function bevelBox() {
   return unitBounds(geometry);
 }
 
+// Turned profiles produce a few broad, polished planes, like cuts on a wooden
+// chessman. These small prototypes bake into the same per-asset buffer.
+function turnedProfile(sides: number, profile: [radius: number, height: number][]) {
+  return unitBounds(new THREE.LatheGeometry(profile.map(([r, y]) => new THREE.Vector2(r, y)), sides));
+}
+
 const prototypes = {
+  foliage: turnedProfile(8, [[0,-0.5], [0.31,-0.41], [0.5,-0.15], [0.46,0.17], [0.28,0.41], [0.06,0.5], [0,0.5]]),
+  whorl: turnedProfile(8, [[0,-0.5], [0.37,-0.5], [0.5,-0.35], [0.34,-0.06], [0.18,0.23], [0.025,0.5], [0,0.5]]),
+  crystal: turnedProfile(6, [[0,-0.5], [0.36,-0.41], [0.49,-0.25], [0.47,0.28], [0.25,0.41], [0,0.5]]),
   box: new THREE.BoxGeometry(1, 1, 1),
   bevel: bevelBox(),
   disc: new THREE.CylinderGeometry(0.5, 0.5, 1, 20),
@@ -45,6 +54,13 @@ export const miniatureMaterial = new THREE.MeshStandardMaterial({
   metalness: 0.1,
   flatShading: true,
 });
+
+export function setMiniatureColor(target: THREE.Color, color: string) {
+  const { h, s, l } = target.set(color).getHSL({ h: 0, s: 0, l: 0 }, THREE.SRGBColorSpace);
+  return target.setHSL(
+    h, Math.min(1, s * 1.13), l + 0.027 * Math.sin(Math.PI * l), THREE.SRGBColorSpace,
+  );
+}
 
 // Bake a coloured assembly into a single indexed mesh. No model part needs its
 // own material, draw call, raycast, or React component after the sculpt is built.
@@ -92,7 +108,7 @@ export class Miniature {
     this.point.fromArray(points[1]).sub(this.origin.fromArray(points[0]));
     this.point.cross(this.edge.fromArray(points[2]).sub(this.origin)).normalize();
     const start = this.positions.length / 3;
-    this.color.set(color);
+    setMiniatureColor(this.color, color);
     for (const p of points) {
       this.positions.push(...p);
       this.normals.push(this.point.x, this.point.y, this.point.z);
@@ -106,7 +122,7 @@ export class Miniature {
     const normals = geometry.getAttribute("normal");
     const base = this.positions.length / 3;
     this.normalMatrix.getNormalMatrix(this.matrix);
-    this.color.set(color);
+    setMiniatureColor(this.color, color);
     for (let i = 0; i < positions.count; i++) {
       this.point.fromBufferAttribute(positions, i).applyMatrix4(this.matrix);
       this.positions.push(this.point.x, this.point.y, this.point.z);

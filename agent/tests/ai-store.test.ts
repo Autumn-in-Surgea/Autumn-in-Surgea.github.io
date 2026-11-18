@@ -1,15 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { GameState } from "../../src/game/types";
+import type { Action, GameState } from "../../src/game/types";
 import { applyAction, DEFAULT_OPTIONS, getAttackTargets, getReachableTiles, tileAt } from "../../src/game";
 
 const jobs = vi.hoisted(() => ({
-  pending: [] as { resolve: (state: GameState) => void; reject: (error: Error) => void }[],
-  run: vi.fn<(state: GameState) => Promise<GameState>>(),
+  pending: [] as { resolve: (actions: Action[]) => void; reject: (error: Error) => void }[],
+  plan: vi.fn<(state: GameState) => Promise<Action[]>>(),
   cancel: vi.fn(),
 }));
 vi.mock("../../src/workers/aiClient", () => ({ aiWorker: jobs }));
 import { useGameStore } from "../../src/store/gameStore";
-import { deserializeGame } from "../../src/store/save";
+import { deserializeGame, serializeGame } from "../../src/store/save";
 import { addUnit, battlefield } from "./helpers";
 
 beforeEach(() => {
@@ -19,24 +19,34 @@ beforeEach(() => {
     setItem: (key: string, value: string) => values.set(key, value),
   });
   jobs.pending = [];
-  jobs.run.mockReset();
+  jobs.plan.mockReset();
   jobs.cancel.mockReset();
-  jobs.run.mockImplementation(() => new Promise((resolve, reject) => jobs.pending.push({ resolve, reject })));
+  jobs.plan.mockImplementation(() => new Promise((resolve, reject) => jobs.pending.push({ resolve, reject })));
   useGameStore.getState().start({ ...structuredClone(DEFAULT_OPTIONS), size: 12, aiCount: 2 });
 });
 
 describe("worker and game session coordination", () => {
+  it("restores unread reward notices and removes them from the save after acknowledgement", () => {
+    const game = battlefield();
+    const notice = { title: "探索遗迹", message: "获得 10 星。" };
+    const get = useGameStore.getState;
+    get().importSave(serializeGame(game, [notice]));
+    expect(get().eventNotice).toEqual(notice);
+    expect(get().command({ type: "END_TURN" })).toBe(false);
+    get().acknowledgeEvent();
+    get().load();
+    expect(get().eventNotice).toBeNull();
+    expect(deserializeGame(get().exportSave()!)).toEqual(game);
+  });
+
   it("advances multiple opponents asynchronously, checkpoints each turn, and returns control", async () => {
     expect(useGameStore.getState().command({ type: "END_TURN" })).toBe(true);
     expect(useGameStore.getState().busy).toBe(true);
-    expect(jobs.run).toHaveBeenCalledTimes(1);
-    let state = useGameStore.getState().game!;
-    state = applyAction(state, { type: "END_TURN" }).state;
-    jobs.pending[0].resolve(state);
-    await vi.waitFor(() => expect(jobs.run).toHaveBeenCalledTimes(2));
+    expect(jobs.plan).toHaveBeenCalledTimes(1);
+    jobs.pending[0].resolve([{ type: "END_TURN" }]);
+    await vi.waitFor(() => expect(jobs.plan).toHaveBeenCalledTimes(2));
     expect(deserializeGame(localStorage.getItem("four-shades-of-autumn.save.v2")!).currentPlayer).toBe(2);
-    state = applyAction(state, { type: "END_TURN" }).state;
-    jobs.pending[1].resolve(state);
+    jobs.pending[1].resolve([{ type: "END_TURN" }]);
     await vi.waitFor(() => expect(useGameStore.getState().busy).toBe(false));
     expect(useGameStore.getState().game?.currentPlayer).toBe(0);
     expect(useGameStore.getState().game?.round).toBe(2);
@@ -44,12 +54,11 @@ describe("worker and game session coordination", () => {
 
   it("pauses in the menu and ignores stale completion after starting another game", async () => {
     useGameStore.getState().command({ type: "END_TURN" });
-    const previous = useGameStore.getState().game!;
     useGameStore.getState().menu();
     expect(useGameStore.getState().busy).toBe(false);
     useGameStore.getState().start({ ...structuredClone(DEFAULT_OPTIONS), size: 12, aiCount: 1, seed: "replacement" });
     const fresh = useGameStore.getState().game;
-    jobs.pending[0].resolve(applyAction(previous, { type: "END_TURN" }).state);
+    jobs.pending[0].resolve([{ type: "END_TURN" }]);
     await Promise.resolve();
     expect(useGameStore.getState().game).toBe(fresh);
     expect(useGameStore.getState().game?.options.seed).toBe("replacement");
@@ -60,15 +69,120 @@ describe("worker and game session coordination", () => {
     useGameStore.getState().command({ type: "END_TURN" });
     useGameStore.getState().menu();
     useGameStore.getState().load();
-    expect(jobs.run).toHaveBeenCalledTimes(2);
+    expect(jobs.plan).toHaveBeenCalledTimes(2);
     jobs.pending[1].reject(new Error("worker failed"));
     await vi.waitFor(() => expect(useGameStore.getState().aiError).toBe("worker failed"));
     expect(useGameStore.getState().busy).toBe(false);
     expect(useGameStore.getState().game?.currentPlayer).toBe(1);
     useGameStore.getState().advanceAI();
-    expect(jobs.run).toHaveBeenCalledTimes(3);
+    expect(jobs.plan).toHaveBeenCalledTimes(3);
     expect(useGameStore.getState().aiError).toBe("");
     useGameStore.getState().menu();
+  });
+
+  it("keeps AI actions and turn hand-off behind the scene's per-action acknowledgement", async () => {
+    const game = battlefield();
+    const first = addUnit(game, 1, "warrior", 4, 4);
+    const second = addUnit(game, 1, "warrior", 6, 6);
+    const actions: Action[] = [
+      { type: "MOVE", unitId: first.id, to: 4 * 12 + 5 },
+      { type: "MOVE", unitId: second.id, to: 6 * 12 + 7 },
+      { type: "END_TURN" },
+    ];
+    useGameStore.setState({ game });
+    const get = useGameStore.getState;
+    const detach = get().attachPlayback();
+    try {
+      expect(get().command({ type: "END_TURN" })).toBe(true);
+      jobs.pending[0].resolve(actions);
+      await vi.waitFor(() => expect(get().playbackStep).not.toBeNull());
+      const firstStep = get().playbackStep!;
+      const stateAfterFirst = get().game;
+      expect(stateAfterFirst?.units.find((unit) => unit.id === first.id)?.x).toBe(5);
+      expect(stateAfterFirst?.units.find((unit) => unit.id === second.id)?.x).toBe(6);
+      expect(get().command({ type: "END_TURN" })).toBe(false);
+      get().completePlayback(firstStep.id + 1);
+      await Promise.resolve();
+      expect(get().game).toBe(stateAfterFirst);
+      expect(get().busy).toBe(true);
+
+      get().completePlayback(firstStep.id);
+      await vi.waitFor(() => expect(get().playbackStep?.id).toBe(firstStep.id + 1));
+      expect(get().game?.units.find((unit) => unit.id === second.id)?.x).toBe(7);
+      expect(get().game?.currentPlayer).toBe(1);
+      get().completePlayback(get().playbackStep!.id);
+      await vi.waitFor(() => expect(get().busy).toBe(false));
+      const expected = actions.reduce((state, action) => applyAction(state, action).state,
+        applyAction(game, { type: "END_TURN" }).state);
+      expect(get().game).toEqual(expected);
+    } finally {
+      get().menu();
+      detach();
+    }
+  });
+
+  it("waits for a rewarded discovery to be acknowledged before starting the opposing turn", () => {
+    const game = battlefield();
+    game.players[0].metPlayers = [];
+    addUnit(game, 1, "warrior", 2, 2);
+    useGameStore.setState({ game });
+    const get = useGameStore.getState;
+    const detach = get().attachPlayback();
+    try {
+      expect(get().command({ type: "END_TURN" })).toBe(true);
+      expect(get().eventNotice).toBeNull();
+      expect(get().playbackStep).not.toBeNull();
+      expect(jobs.plan).not.toHaveBeenCalled();
+      get().completePlayback(get().playbackStep!.id);
+      expect(get().eventNotice?.title).toBe("初次接触");
+      expect(get().game?.players[0].resources).toBeGreaterThan(game.players[0].resources);
+      expect(jobs.plan).not.toHaveBeenCalled();
+      get().acknowledgeEvent();
+      expect(get().eventNotice).toBeNull();
+      expect(jobs.plan).toHaveBeenCalledOnce();
+    } finally {
+      get().menu();
+      detach();
+    }
+  });
+
+  it("holds the remaining planned actions while a discovery from an opponent's move is open", async () => {
+    const game = battlefield();
+    game.currentPlayer = 1;
+    game.players[0].metPlayers = [];
+    game.players[0].visible = game.players[0].explored = game.tiles
+      .filter((tile) => tile.x <= 4 && tile.y <= 5)
+      .map((tile) => tile.id);
+    const first = addUnit(game, 1, "warrior", 5, 3);
+    const second = addUnit(game, 1, "warrior", 5, 5);
+    useGameStore.setState({ game });
+    const get = useGameStore.getState;
+    const detach = get().attachPlayback();
+    try {
+      get().advanceAI();
+      jobs.pending[0].resolve([
+        { type: "MOVE", unitId: first.id, to: 3 * 12 + 4 },
+        { type: "MOVE", unitId: second.id, to: 5 * 12 + 4 },
+        { type: "END_TURN" },
+      ]);
+      await vi.waitFor(() => expect(get().playbackStep).not.toBeNull());
+      expect(get().eventNotice).toBeNull();
+      get().completePlayback(get().playbackStep!.id);
+      await vi.waitFor(() => expect(get().eventNotice?.title).toBe("初次接触"));
+      expect(get().busy).toBe(true);
+      expect(get().game?.units.find((unit) => unit.id === second.id)?.x).toBe(5);
+
+      get().acknowledgeEvent();
+      await vi.waitFor(() => expect(get().playbackStep).not.toBeNull());
+      expect(get().game?.units.find((unit) => unit.id === second.id)?.x).toBe(4);
+      get().completePlayback(get().playbackStep!.id);
+      await vi.waitFor(() => expect(get().busy).toBe(false));
+      expect(get().game?.currentPlayer).toBe(0);
+      expect(get().eventNotice).toBeNull();
+    } finally {
+      get().menu();
+      detach();
+    }
   });
 });
 

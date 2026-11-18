@@ -1,13 +1,14 @@
 import type { WitnessedMove } from "./combatEvents";
-import type { GameState, GameEvent } from "../game/types";
+import type { Action, GameState, GameEvent } from "../game/types";
 
 export interface AiRequest {
-  type: "RUN_TURN";
+  type: "RUN_TURN" | "PLAN_TURN";
   requestId: number;
   state: GameState;
 }
 
 export type AiResponse =
+  | { type: "TURN_PLAN"; requestId: number; actions: Action[] }
   | {
       type: "TURN_COMPLETE";
       requestId: number;

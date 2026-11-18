@@ -18,14 +18,18 @@ import { factionForOwner } from "../factions/registry";
 import type { ModelSetId } from "../factions/registry";
 import { colorForOwner, MODEL_SETS } from "./factionModels";
 import { SceneQuality } from "./SceneQuality";
-import { RoadInlay } from "./RoadInlay";
-import { BoardFrame, tileCap } from "./BoardFrame";
+import { knownTerrainHeight, terrainCapOffset } from "./terrainElevation";
+import { TerrainInlays } from "./TerrainInlays";
+import { TerritoryBorders } from "./TerritoryBorders";
+import { TileScenery } from "./TileScenery";
+import { buildTileTiers, type StructureChange } from "../store/structurePlayback";
+import { BoardFrame, tileCap, tilePlinth } from "./BoardFrame";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import type { City, GameEvent, GameState, Player, Tile } from "../game/types";
-import { getUnitsWithAvailableActions, getVisibleResource, isTerritoryResourceHarvestable, UNITS } from "../game";
+import type { City, GameEvent, GameState, Tile } from "../game/types";
+import { getUnitsWithAvailableActions, UNITS } from "../game";
 import { PlaybackContext, useBoardClock, usePlaybackClock } from "./playbackClock";
 import { ShotEffect, projectileName } from "./ShotEffect";
-import { carryStrikes, collapseDuration, planEncounter } from "./combatMotion";
+import { carryStrikes, collapseDuration, hitFeedbackDuration, planEncounter } from "./combatMotion";
 import type { CombatFrame, Strike } from "./combatMotion";
 import { usePresentedUnits, useUnitMotion } from "./unitMotion";
 import { getMapBadges, MapBadgeButtons, MapBadgePositions } from "./ActionBadges";
@@ -34,18 +38,15 @@ import { easeInOut, easeOut, getFreshEvents } from "./motion";
 import type { PresentedUnit } from "./motion";
 import { LAND_UNIT_RENDER_ORDER } from "./unitModels";
 import { SelectionHalo, SquareOutline } from "./boardHighlights";
+import { ForeignTerritory, foreignTerritoryBrightness, isForeignTerritory } from "./territoryMaterials";
+import { terrainColors } from "./terrainColors";
+import { ACTION_GAP_MS, type PlaybackStep } from "../store/actionPlayback";
 
 import {
-  BuildingModel,
-  CityModel,
   geometry,
   material,
   Piece,
-  Resources,
-  RuinModel,
-  LighthouseModel,
   WorldModelLibrary,
-  TerrainDetails,
   terrainHeight,
   UnitModel,
 } from "./models";
@@ -60,24 +61,14 @@ export interface GameSceneProps {
   onTileClick: (id: number) => void;
   onActionBadge?: OpenBadge;
   onResultReady?: () => void;
+  playbackStep?: PlaybackStep | null;
+  attachPlayback?: () => () => void;
+  onPlaybackDone?: (id: number) => void;
   resetKey: number;
   reducedMotion?: boolean;
   preview?: boolean;
 }
 
-const palettes = {
-  plain: ["#b5bb94"],
-  forest: ["#7e977b", "#91a483", "#849777", "#969e7e"],
-  mountain: ["#b5ab95", "#c7bca3", "#b3ae9f", "#c7bfab"],
-  shallow: ["#739f9b", "#81aba2", "#799f99", "#81a99e"],
-  deep: ["#406e7a", "#497c82", "#456f79", "#527e83"],
-};
-const borders: [number, number, number, number, number][] = [
-  [-1, 0, -0.49, 0, 0],
-  [1, 0, 0.49, 0, 0],
-  [0, -1, 0, -0.49, 1],
-  [0, 1, 0, 0.49, 1],
-];
 const mapCameraOffset = new THREE.Vector3(13, 17, 13);
 const mapViewAngles = new THREE.Spherical().setFromVector3(mapCameraOffset);
 
@@ -86,10 +77,11 @@ function CameraRig({
   resetKey,
   preview,
   selectedTile,
+  playbackStep,
   reducedMotion,
 }: Pick<
   GameSceneProps,
-  "game" | "resetKey" | "preview" | "selectedTile" | "reducedMotion"
+  "game" | "resetKey" | "preview" | "selectedTile" | "playbackStep" | "reducedMotion"
 >) {
   const { camera, gl, size } = useThree();
   const cameraControls = useRef<OrbitControls | null>(null);
@@ -172,6 +164,21 @@ function CameraRig({
   useEffect(() => {
     camera.updateProjectionMatrix();
   }, [size, camera]);
+  useLayoutEffect(() => {
+    const tileId = playbackStep?.focusTile;
+    const controls = cameraControls.current;
+    if (tileId == null || !controls) return;
+    const offset = (n - 1) / 2;
+    const point = new THREE.Vector3(tileId % n - offset, 0, Math.floor(tileId / n) - offset);
+    camera.updateMatrixWorld();
+    const projected = panStep.current.copy(point).project(camera);
+    if (Math.abs(projected.x) <= 0.76 && Math.abs(projected.y) <= 0.72) return;
+    automaticPan.current = null;
+    camera.position.add(point).sub(controls.target);
+    controls.target.copy(point);
+    controls.update();
+    camera.updateMatrixWorld();
+  }, [camera, n, playbackStep]);
   useEffect(() => {
     const controls = cameraControls.current;
     if (!controls) return;
@@ -332,6 +339,7 @@ function Label({
 function BoardTiles({ game, ...props }: {
   game: GameState;
   explored: Set<number>;
+  visible: Set<number>;
   offset: number;
   onClick: (id: number) => void;
   onHover: (id: number | null) => void;
@@ -349,9 +357,10 @@ function BoardTiles({ game, ...props }: {
   return <>{patches.map((tiles) => <BoardPatch key={tiles[0].id} tiles={tiles} {...props} />)}</>;
 }
 
-function BoardPatch({ tiles, explored, offset, onClick, onHover }: {
+function BoardPatch({ tiles, explored, visible, offset, onClick, onHover }: {
   tiles: Tile[];
   explored: Set<number>;
+  visible: Set<number>;
   offset: number;
   onClick: (id: number) => void;
   onHover: (id: number | null) => void;
@@ -364,7 +373,8 @@ function BoardPatch({ tiles, explored, offset, onClick, onHover }: {
     const color = new THREE.Color();
     tiles.forEach((tile, i) => {
       const known = explored.has(tile.id);
-      const surface = known ? terrainHeight(tile) : 0.015;
+      const surface = knownTerrainHeight(tile, known);
+      const brightness = visible.has(tile.id) && isForeignTerritory(tile.owner) ? foreignTerritoryBrightness : 1;
       transform.position.set(
         tile.x - offset,
         (surface - 0.33) / 2,
@@ -373,23 +383,20 @@ function BoardPatch({ tiles, explored, offset, onClick, onHover }: {
       transform.scale.set(0.984, surface + 0.30, 0.984);
       transform.updateMatrix();
       baseRef.current!.setMatrixAt(i, transform.matrix);
-      baseRef.current!.setColorAt(i, color.set(known ? "#85755e" : "#78837b"));
+      baseRef.current!.setColorAt(i, color.set(known ? "#907e65" : "#798681").multiplyScalar(brightness));
       transform.position.y = surface;
       transform.scale.set(1, 1, 1);
       transform.updateMatrix();
       topRef.current!.setMatrixAt(i, transform.matrix);
-      const swatches = palettes[tile.terrain];
-      const surfaceColor = known
-        ? swatches[(tile.x * 3 + tile.y * 7) % swatches.length]
-        : (tile.x + tile.y) % 2 ? "#a0aca0" : "#9ba79c";
-      topRef.current!.setColorAt(i, color.set(surfaceColor));
+      const surfaceColor = known ? terrainColors[tile.terrain] : "#a2aca5";
+      topRef.current!.setColorAt(i, color.set(surfaceColor).multiplyScalar(brightness));
     });
     for (const mesh of [baseRef.current, topRef.current]) {
       mesh.instanceMatrix.needsUpdate = true;
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
       mesh.computeBoundingSphere();
     }
-  }, [tiles, explored, offset]);
+  }, [tiles, explored, visible, offset]);
   const click = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
     if (e.delta < 6 && e.instanceId !== undefined)
@@ -404,7 +411,7 @@ function BoardPatch({ tiles, explored, offset, onClick, onHover }: {
     <>
       <instancedMesh
         ref={baseRef}
-        args={[geometry.box, material("#ffffff"), tiles.length]}
+        args={[tilePlinth, material("#ffffff"), tiles.length]}
         receiveShadow
         dispose={null}
         onClick={click}
@@ -442,6 +449,9 @@ const TileView = memo(function TileView({
   showCityNames,
   showHarvestHints,
   city,
+  tier,
+  change,
+  issuedAt,
   hovered,
   onHover,
 }: {
@@ -459,16 +469,15 @@ const TileView = memo(function TileView({
   showCityNames: boolean;
   showHarvestHints: boolean;
   city?: City;
+  tier: number;
+  change?: StructureChange;
+  issuedAt: number;
   hovered: boolean;
   onHover: (id: number | null) => void;
 }) {
   const explored = knownTiles.has(tile.id);
-  const surface = explored ? terrainHeight(tile) : 0.015;
-  const ownerColor = colorForOwner(game.players, tile.owner);
-  const { modelSet } = factionForOwner(game.players, tile.owner);
-  const resource = explored ? getVisibleResource(game, tile, 0) : null;
-  const harvestable = showHarvestHints && !!resource && visible &&
-    isTerritoryResourceHarvestable(game, tile, 0);
+  const surface = knownTerrainHeight(tile, explored);
+  const cityLabelOffset = city && city.owner !== null && city.level >= 5 ? 0.49 : 0.42;
   const click = (event: ThreeEvent<MouseEvent>) => {
     event.stopPropagation();
     if (event.delta < 6) onClick(tile.id);
@@ -490,54 +499,23 @@ const TileView = memo(function TileView({
       onPointerOut={leave}
     >
       {explored && (
-        <group position={[0, surface + 0.015, 0]}>
-          {(tile.road || !!city || tile.building === "bridge" || tile.building === "port") && (
-            <RoadInlay tile={tile} tiles={game.tiles} size={game.options.size} explored={knownTiles} />
-          )}
-          <TerrainDetails tile={tile} simple={simple} />
-          {resource && (!simple || harvestable) && (
-            <Resources
-              modelSet={modelSet}
-              tile={{ ...tile, resource }}
-              highlight={harvestable}
-            />
-          )}
-          {tile.ruin && !city && <RuinModel />}
-          {tile.lighthouse && <LighthouseModel />}
-          {tile.building && (
-            <BuildingModel type={tile.building} color={ownerColor} modelSet={modelSet} />
-          )}
-          {city && (
-            <AnimatedCity
+        <group position={[0, surface + terrainCapOffset, 0]}>
+          <ForeignTerritory.Provider value={visible && isForeignTerritory(tile.owner)}>
+            <TileScenery
+              game={game}
+              tile={tile}
               city={city}
-              players={game.players}
+              tier={tier}
+              knownTiles={knownTiles}
+              visible={visible}
+              simple={simple}
+              showHarvestHints={showHarvestHints}
+              change={change}
+              issuedAt={issuedAt}
+              surfaceY={surface + terrainCapOffset}
               reducedMotion={reducedMotion}
             />
-          )}
-          {tile.owner !== null &&
-            borders.map(([dx, dy, x, z, horizontal], i) => {
-              const nx = tile.x + dx,
-                ny = tile.y + dy;
-              const neighbor =
-                nx >= 0 &&
-                ny >= 0 &&
-                nx < game.options.size &&
-                ny < game.options.size
-                  ? game.tiles[ny * game.options.size + nx]
-                  : undefined;
-              if (neighbor?.owner === tile.owner) return null;
-              return (
-                <Piece
-                  key={i}
-                  position={[x, 0.029, z]}
-                  scale={
-                    horizontal ? [0.98, 0.018, 0.035] : [0.035, 0.018, 0.98]
-                  }
-                  color={ownerColor}
-                  opacity={0.8}
-                />
-              );
-            })}
+          </ForeignTerritory.Provider>
           {!visible && (
             <Piece
               position={[0, 0.017, 0]}
@@ -553,7 +531,7 @@ const TileView = memo(function TileView({
               color="#e3decb"
               opacity={visible ? 1 : 0.8}
               // Equal x/z offsets put the top of the plate at the screen-facing corner.
-              position={[0.42, 0.015, 0.42]}
+              position={[cityLabelOffset, 0.015, cityLabelOffset]}
             />
           )}
         </group>
@@ -680,6 +658,7 @@ function AnimatedUnit({
           type={unit.type}
           color={color}
           actionsSpent={actionsSpent}
+          foreignTerritory={isForeignTerritory(tile.owner)}
           foreground={!UNITS[unit.type].skills.includes("water")}
         />
       </group>
@@ -698,113 +677,18 @@ function AnimatedUnit({
   );
 }
 
-function AnimatedCity({
-  city,
-  players,
-  reducedMotion,
-}: {
-  city: City;
-  players: readonly Player[];
-  reducedMotion: boolean;
-}) {
-  const group = useRef<THREE.Group>(null);
-  const previous = useRef({ level: city.level, owner: city.owner });
-  const progress = useRef(1);
-  useLayoutEffect(() => {
-    if (
-      previous.current.level !== city.level ||
-      previous.current.owner !== city.owner
-    )
-      progress.current = 0;
-    previous.current = { level: city.level, owner: city.owner };
-  }, [city.level, city.owner]);
-  useFrame((_, delta) => {
-    if (!group.current || progress.current >= 1) return;
-    progress.current = reducedMotion
-      ? 1
-      : Math.min(1, progress.current + Math.min(delta, 0.05) / 0.46);
-    const time = progress.current;
-    const pulse = time < 0.36
-      ? easeInOut(time / 0.36)
-      : 1 - easeInOut((time - 0.36) / 0.64);
-    group.current.scale.set(
-      1 + pulse * 0.035,
-      1 + pulse * 0.105,
-      1 + pulse * 0.035,
-    );
-    group.current.position.y = pulse * 0.014;
-  });
-  return (
-    <group ref={group}>
-      <CityModel city={city} players={players} />
-    </group>
-  );
-}
-
-function WaterRipples({
-  tiles,
-  offset,
-  explored,
-  reducedMotion,
-}: {
-  tiles: Tile[];
-  offset: number;
-  explored: Set<number>;
-  reducedMotion: boolean;
-}) {
-  const group = useRef<THREE.Group>(null);
-  const playback = usePlaybackClock();
-  const waters = tiles.filter(
-    (tile) =>
-      explored.has(tile.id) &&
-      (tile.terrain === "shallow" || tile.terrain === "deep") &&
-      tile.id % 3 === 0,
-  );
-  useLayoutEffect(() => {
-    if (reducedMotion) group.current?.children.forEach(child => { child.position.y = 0; });
-  }, [reducedMotion]);
-  useFrame(() => {
-    if (!group.current || reducedMotion) return;
-    const phase = playback.time * 0.0013;
-    group.current.children.forEach((child, i) => {
-      child.position.y = Math.sin(phase + waters[i].id * 2.4) * 0.012;
-    });
-  });
-  return (
-    <group ref={group}>
-      {waters.map((tile) => (
-        <group key={tile.id}>
-          <Piece
-            position={[
-              tile.x - offset + 0.07,
-              terrainHeight(tile) + 0.05,
-              tile.y - offset + 0.22,
-            ]}
-            scale={[0.26, 0.008, 0.018]}
-            color="#a2c6c2"
-            opacity={0.5}
-          />
-          <Piece
-            position={[
-              tile.x - offset - 0.09,
-              terrainHeight(tile) + 0.05,
-              tile.y - offset - 0.16,
-            ]}
-            scale={[0.13, 0.008, 0.012]}
-            color="#b7d0c7"
-            opacity={0.4}
-          />
-        </group>
-      ))}
-    </group>
-  );
-}
-
 type SceneEffect = GameEvent & {
   strike?: Strike;
   issuedAt?: number;
   feedback?: "build" | "harvest" | "road" | "terrain";
 };
+
+function tileFeedbackFor(old: Tile, tile: Tile): SceneEffect["feedback"] {
+  if (old.building !== tile.building && tile.building) return "build";
+  if (!old.road && tile.road) return "road";
+  if (old.terrain !== tile.terrain) return "terrain";
+  if (old.resource && !tile.resource && !tile.building) return "harvest";
+}
 
 function EventEffect({
   event,
@@ -844,7 +728,7 @@ function EventEffect({
     [accent],
   );
   useEffect(() => () => ringMaterial.dispose(), [ringMaterial]);
-  const duration = reducedMotion ? 0.65 : event.feedback ? 0.85 : 1.05;
+  const duration = reducedMotion ? 0.65 : event.strike ? hitFeedbackDuration : event.feedback ? 0.85 : 1.05;
   useFrame(({ camera, size }) => {
     const elapsed = event.strike && event.issuedAt !== undefined
       ? (playback.time - event.issuedAt) / 1000 - (reducedMotion ? 0 : event.strike.impact)
@@ -958,7 +842,7 @@ function FogReveal({
     const transform = new THREE.Object3D();
     newly.forEach((id, i) => {
       const tile = game.tiles[id];
-      transform.position.set(tile.x - offset, 0.16, tile.y - offset);
+      transform.position.set(tile.x - offset, terrainHeight(tile) + terrainCapOffset + 0.13, tile.y - offset);
       transform.scale.set(0.99, 0.3, 0.99);
       transform.updateMatrix();
       mesh.current!.setMatrixAt(i, transform.matrix);
@@ -1031,17 +915,7 @@ function Effects({
     }
     for (const tile of game.tiles) {
       if (!visible.has(tile.id)) continue;
-      const old = before.tiles[tile.id];
-      const feedback =
-        old.building !== tile.building && tile.building
-          ? "build"
-          : !old.road && tile.road
-            ? "road"
-            : old.terrain !== tile.terrain
-              ? "terrain"
-              : old.resource && !tile.resource && !tile.building
-                ? "harvest"
-                : undefined;
+      const feedback = tileFeedbackFor(before.tiles[tile.id], tile);
       if (feedback)
         fresh.push({
           id: visualId.current--,
@@ -1089,6 +963,8 @@ function World({
   focusedTarget,
   onTileClick,
   onResultReady,
+  playbackStep,
+  onPlaybackDone,
   resetKey,
   reducedMotion = false,
   preview = false,
@@ -1113,11 +989,10 @@ function World({
     [game, preview],
   );
   const targets = useMemo(() => new Set(attackTargets), [attackTargets]);
-  const targetTiles = new Set(
-    game.units
-      .filter((u) => targets.has(u.id))
-      .map((u) => u.y * game.options.size + u.x),
-  );
+  const targetTiles = useMemo(() => new Set(
+    game.units.filter((unit) => targets.has(unit.id)).map((unit) => unit.y * game.options.size + unit.x),
+  ), [game.units, game.options.size, targets]);
+  const buildingTiers = useMemo(() => buildTileTiers(game.cities, game.tiles.length), [game.cities, game.tiles.length]);
   const cityById = useMemo(
     () => new Map(game.cities.map((city) => [city.id, city])),
     [game.cities],
@@ -1171,10 +1046,12 @@ function World({
         ...view.ids,
         ...reachable,
         ...targetTiles,
+        ...(playbackStep?.structures.keys() ?? []),
         ...(selectedTile === null ? [] : [selectedTile]),
         ...(hoveredTile === null ? [] : [hoveredTile]),
+        ...(playbackStep?.focusTile == null ? [] : [playbackStep.focusTile]),
       ]),
-    [view.ids, reachable, targetTiles, selectedTile, hoveredTile],
+    [view.ids, reachable, targetTiles, selectedTile, hoveredTile, playbackStep],
   );
   const displayTiles = useMemo(
     () =>
@@ -1190,8 +1067,50 @@ function World({
   const pendingCombat = useRef<CombatFrame>({ strikes: [], issuedAt: 0 });
   const combat = useMemo(() => {
     const issuedAt = playback.time;
-    return { ...planEncounter(previousFrame.current, game, pendingCombat.current, issuedAt), issuedAt };
-  }, [game, preview, playback]);
+    const before = previousFrame.current;
+    return {
+      ...planEncounter(before, game, pendingCombat.current, issuedAt),
+      issuedAt,
+      boardFeedback: getFreshEvents(before, game).some((event) =>
+        event.at && visible.has(event.at.y * game.options.size + event.at.x) &&
+        (event.type === "upgrade" || event.type === "capture"),
+      ),
+      tileFeedback: game.tiles.some((tile) =>
+        visible.has(tile.id) && !!tileFeedbackFor(before.tiles[tile.id], tile),
+      ),
+    };
+  }, [game, preview, playback, visible]);
+  const playbackDeadline = useRef<{ id: number; end: number } | null>(null);
+  useLayoutEffect(() => {
+    if (!playbackStep) {
+      playbackDeadline.current = null;
+      return;
+    }
+    const id = playbackStep.id;
+    if (playbackDeadline.current?.id === id && !reducedMotion) return;
+    let seconds = reducedMotion ? 0.12 : 0.46;
+    if (combat.boardFeedback)
+      seconds = reducedMotion ? 0.65 : 1.05;
+    else if (combat.tileFeedback)
+      seconds = reducedMotion ? 0.65 : 0.85;
+    if (reducedMotion && combat.strikes.length) seconds = Math.max(seconds, 0.65);
+    if (!reducedMotion) {
+      seconds = Math.max(seconds, playbackStep.structureDuration);
+      for (const strike of combat.strikes)
+        seconds = Math.max(seconds, strike.impact + (strike.lethal ? collapseDuration : hitFeedbackDuration));
+      for (const journey of combat.journeys.values()) {
+        const last = journey.at(-1);
+        if (last) seconds = Math.max(seconds, last.start + last.duration);
+      }
+    }
+    playbackDeadline.current = { id, end: combat.issuedAt + seconds * 1000 + ACTION_GAP_MS };
+  }, [combat, playbackStep, reducedMotion]);
+  useFrame(() => {
+    const deadline = playbackDeadline.current;
+    if (!deadline || playback.time < deadline.end) return;
+    playbackDeadline.current = null;
+    onPlaybackDone?.(deadline.id);
+  }, 0);
   useLayoutEffect(() => {
     previousFrame.current = game;
     pendingCombat.current = {
@@ -1205,7 +1124,8 @@ function World({
     if (preview || game.status !== "finished" || resultAnnounced.current) return;
     const { strikes, issuedAt } = pendingCombat.current;
     const elapsed = (playback.time - issuedAt) / 1000;
-    if (!reducedMotion && strikes.some(strike => elapsed < strike.impact + collapseDuration)) return;
+    if (!reducedMotion && (elapsed < (playbackStep?.structureDuration ?? 0) ||
+      strikes.some(strike => elapsed < strike.impact + collapseDuration))) return;
     resultAnnounced.current = true;
     onResultReady?.();
   });
@@ -1227,6 +1147,7 @@ function World({
         resetKey={resetKey}
         preview={preview}
         selectedTile={selectedTile}
+        playbackStep={playbackStep}
         reducedMotion={reducedMotion}
       />
       <MapBadgePositions
@@ -1234,12 +1155,12 @@ function World({
         badgeButtons={badgeButtons}
         renderedIds={renderedIds}
       />
-      <ambientLight intensity={0.65} color="#f5f0e3" />
-      <hemisphereLight args={["#dbe6df", "#677c72", 0.9]} />
+      <ambientLight intensity={0.71} color="#f2f7ff" />
+      <hemisphereLight args={["#e3f0f8", "#829489", 0.94]} />
       <directionalLight
         position={[-7, 15, 8]}
-        intensity={1.8}
-        color="#fff4dd"
+        intensity={1.84}
+        color="#fff9ef"
         castShadow
         shadow-mapSize-width={1024}
         shadow-mapSize-height={1024}
@@ -1255,29 +1176,20 @@ function World({
       <directionalLight
         position={[8, 6, -10]}
         intensity={0.3}
-        color="#d4e2df"
+        color="#e1ecfa"
       />
-      <mesh
-        rotation={[-Math.PI / 2, 0, 0]}
-        position={[0, -0.39, 0]}
-        receiveShadow
-      >
-        <planeGeometry args={[100, 100]} />
-        {preview ? (
-          <shadowMaterial transparent opacity={0.12} />
-        ) : (
-          <meshStandardMaterial color="#d5dcd6" roughness={1} />
-        )}
-      </mesh>
       <group>
         <BoardFrame size={game.options.size} />
         <BoardTiles
           game={game}
           explored={explored}
+          visible={visible}
           offset={offset}
           onClick={onTileClick}
           onHover={setHoveredTile}
         />
+        {!view.simple && <TerrainInlays game={game} tileIds={view.ids} visible={visible} />}
+        <TerritoryBorders tiles={game.tiles} players={game.players} explored={explored} size={game.options.size} />
         {displayTiles.map((tile) => (
           <TileView
             key={tile.id}
@@ -1295,16 +1207,13 @@ function World({
             showCityNames={!preview}
             showHarvestHints={!preview && game.status === "playing" && game.currentPlayer === 0}
             city={tile.cityId ? cityById.get(tile.cityId) : undefined}
+            tier={buildingTiers[tile.id]}
+            change={playbackStep?.structures.get(tile.id)}
+            issuedAt={combat.issuedAt}
             hovered={hoveredTile === tile.id}
             onHover={setHoveredTile}
           />
         ))}
-        <WaterRipples
-          tiles={view.simple ? [] : displayTiles}
-          offset={offset}
-          explored={explored}
-          reducedMotion={reducedMotion}
-        />
         {visibleUnits.map((record) => (
           <AnimatedUnit
             key={record.unit.id}
@@ -1361,26 +1270,35 @@ class SceneBoundary extends Component<
   }
 }
 
-function WebGLUnavailable({ onMount }: { onMount: (failed: boolean) => void }) {
-  useEffect(() => { onMount(true); }, [onMount]);
-  return <div className="scene-error">此浏览器未启用 WebGL，请开启硬件加速后刷新。</div>;
-}
-
 function hitPriority(object: THREE.Object3D) {
   if (object instanceof THREE.Sprite) return object.renderOrder;
   return object.renderOrder === LAND_UNIT_RENDER_ORDER ? LAND_UNIT_RENDER_ORDER : 0;
+}
+
+function visibleBoardHit({ object, point, face }: THREE.Intersection) {
+  for (let node: THREE.Object3D | null = object; node; node = node.parent) {
+    if (!node.visible) return false;
+  }
+  if (!(object instanceof THREE.Mesh)) return true;
+  const material: THREE.Material | undefined = Array.isArray(object.material)
+    ? object.material[face?.materialIndex ?? 0] : object.material;
+  return !material?.clippingPlanes?.some(plane => plane.distanceToPoint(point) < 0);
 }
 
 const sceneEvents: typeof events = (store) => ({
   ...events(store),
   // Plates extend below their tile. Resolve overlaps in the same order they are drawn.
   filter: (hits) => hits
-    .filter(({ object }) => !(object instanceof THREE.Sprite) || object.visible)
+    .filter(visibleBoardHit)
     .sort((a, b) => hitPriority(b.object) - hitPriority(a.object)),
 });
 
 export default function GameScene(props: GameSceneProps) {
   const [unavailable, setUnavailable] = useState(false);
+  useLayoutEffect(() => props.preview ? undefined : props.attachPlayback?.(), [props.preview, props.attachPlayback]);
+  useEffect(() => {
+    if (unavailable && props.playbackStep) props.onPlaybackDone?.(props.playbackStep.id);
+  }, [unavailable, props.playbackStep, props.onPlaybackDone]);
   useEffect(() => {
     if (unavailable && props.game.status === "finished") props.onResultReady?.();
   }, [unavailable, props.game.status, props.onResultReady]);
@@ -1424,11 +1342,12 @@ export default function GameScene(props: GameSceneProps) {
               powerPreference: "high-performance",
             }}
             onCreated={({ gl }) => {
+              gl.localClippingEnabled = true;
               gl.shadowMap.type = THREE.PCFSoftShadowMap;
-              gl.setClearColor("#d5dcd6", props.preview ? 0 : 1);
+              gl.setClearColor("#090e1b", 0);
             }}
             fallback={
-              <WebGLUnavailable onMount={setUnavailable} />
+              <div className="scene-error">此浏览器未启用 WebGL，请开启硬件加速后刷新。</div>
             }
           >
             <MapLabelStyle.Provider value={labelStyle}>

@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import type { Tile } from "../game/types";
+export { terrainHeight } from "./terrainElevation";
 
 // Original geometric assets. Shared GPU resources live for the application lifetime.
 export const geometry = {
@@ -65,15 +65,5 @@ export function Piece({
     />
   );
 }
-export function terrainHeight(tile: Tile) {
-  return tile.terrain === "deep"
-    ? -0.12
-    : tile.terrain === "shallow"
-      ? -0.07
-      : tile.terrain === "mountain"
-        ? 0.09
-        : 0.015;
-}
-
 export { TerrainDetails, Resources, CityModel, BuildingModel, RuinModel, LighthouseModel, WorldModelLibrary } from "./worldModels";
 export { UnitModel } from "./unitModels";

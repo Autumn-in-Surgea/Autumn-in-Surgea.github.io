@@ -17,6 +17,7 @@ const contactHold = 0.034;
 const contactRebound = 0.105;
 const rangedRecovery = 0.27;
 export const collapseDuration = 0.58;
+export const hitFeedbackDuration = 0.46;
 
 // Distance from the centre of each miniature to its leading base or bow.
 const pieceReach: Partial<Record<UnitType, number>> = {
@@ -72,7 +73,7 @@ export interface TravelLeg {
 export type CombatFrame = { issuedAt: number; strikes: Strike[]; journeys?: Map<string, TravelLeg[]> };
 
 export const strikeReadyAt = (strike: Strike) =>
-  strike.impact + (strike.contact ? contactRecovery : 0.1);
+  strike.impact + (strike.lethal ? collapseDuration : hitFeedbackDuration) + 0.12;
 
 export function strikeMotionEndsAt(strike: Strike): number {
   return strike.contact ? strike.impact + contactRecovery : strike.launch + rangedRecovery;
@@ -268,7 +269,7 @@ export function carryStrikes(
 ): Strike[] {
   const age = (newTime - previousTime) / 1000;
   return (strikes ?? [])
-    .filter((strike) => strike.impact + 0.35 > age)
+    .filter((strike) => strikeReadyAt(strike) > age)
     .map((strike) => ({
       ...strike,
       start: strike.start - age,

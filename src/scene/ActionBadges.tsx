@@ -48,12 +48,13 @@ export function getMapBadges(game: GameState): MapBadge[] {
     const x = city.x - offset;
     const z = city.y - offset;
     const unit = garrisons.get(tileId);
+    const highRise = city.owner !== null && city.level >= 6;
     if (city.owner === 0 && city.pendingRewardLevels.length > 0) {
       badges.push({
         action: "upgrade",
         tileId,
         cityName: city.name,
-        position: [x - 0.12, floor + 1.05, z - 0.12],
+        position: [x - 0.12, floor + (highRise ? 1.24 : 1.05), z - 0.12],
       });
     } else if (
       city.owner !== 0 &&
@@ -69,7 +70,7 @@ export function getMapBadges(game: GameState): MapBadge[] {
         // A garrison stands forward of the city. Leave its HP number visible below the flag.
         position: [
           x + 0.24,
-          floor + MODEL_SETS[modelSet].labelHeight(unit.type) + 0.34,
+          floor + Math.max(MODEL_SETS[modelSet].labelHeight(unit.type) + 0.34, highRise ? 1.69 : 0),
           z + 0.24,
         ],
       });

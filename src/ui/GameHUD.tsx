@@ -1,3 +1,4 @@
+import { terrainColors } from "../scene/terrainColors";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowUp, BrainCircuit, Building2, Check, Flag, Handshake, LocateFixed,
@@ -28,7 +29,7 @@ export function GameHUD({
   onSettings, nextUnit, target,
 }: Props) {
   const {
-    selectedTile, selectedUnit, busy, aiError, advanceAI, resetCamera, select,
+    selectedTile, selectedUnit, busy, playbackStep, eventNotice, aiError, advanceAI, resetCamera, select,
     settings, updateSettings, notice, setNotice,
   } = useGameStore();
   const [mapOpen, setMapOpen] = useState(false);
@@ -64,8 +65,9 @@ export function GameHUD({
   const cities = game.cities.filter(city => city.owner === 0).length;
   const units = game.units.filter(unit => unit.owner === 0).length;
   const score = getScore(game, 0);
-  const turnLabel = busy ? "等待对手" : upgradePending ? "选择升级奖励" : "结束回合";
-  const canEndTurn = !busy && game.status === "playing" && game.currentPlayer === 0;
+  const locked = busy || !!playbackStep || !!eventNotice;
+  const turnLabel = playbackStep ? "播放行动" : busy ? "等待对手" : upgradePending ? "选择升级奖励" : "结束回合";
+  const canEndTurn = !locked && game.status === "playing" && game.currentPlayer === 0;
   const showHint = settings.showHints && !active && !notice && !aiError;
 
   function closeSelection() {
@@ -127,7 +129,7 @@ export function GameHUD({
                 <SelectionControls
                   key={`${contextTile}-${contextUnit}-${selectionRequest}`}
                   game={game}
-                  busy={busy}
+                  busy={locked}
                   tileId={contextTile}
                   unit={unit}
                   city={city}
@@ -149,7 +151,7 @@ export function GameHUD({
               onCommand({ type: "END_TURN" });
             }}
           >
-            {busy ? <span className="spinner" aria-hidden="true" /> : upgradePending ? <ArrowUp size={22} /> : <Check size={22} />}
+            {busy || playbackStep ? <span className="spinner" aria-hidden="true" /> : upgradePending ? <ArrowUp size={22} /> : <Check size={22} />}
             <strong>{turnLabel}</strong>
           </button>
         </div>
@@ -190,10 +192,7 @@ function MiniMap({ game, onChoose }: { game: GameState; onChoose: (id: number) =
     for (const tile of game.tiles) {
       ctx.fillStyle = !explored.has(tile.id) ? "#d6dace"
         : tile.cityId ? tile.owner === null ? "#f7f0dc" : game.players[tile.owner].color
-        : tile.terrain === "shallow" ? "#88a8a0"
-        : tile.terrain === "deep" ? "#527f86"
-        : tile.terrain === "mountain" ? "#929989"
-        : tile.terrain === "forest" ? "#869d80" : "#b5bb94";
+        : terrainColors[tile.terrain];
       ctx.fillRect(tile.x * cell, tile.y * cell, Math.ceil(cell), Math.ceil(cell));
     }
   }, [game, size]);

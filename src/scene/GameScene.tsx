@@ -33,6 +33,7 @@ import type { MapBadgesProps, OpenBadge } from "./ActionBadges";
 import { easeInOut, getFreshEvents } from "./motion";
 import type { PresentedUnit } from "./motion";
 import { LAND_UNIT_RENDER_ORDER } from "./unitModels";
+import { SelectionHalo, SquareOutline } from "./boardHighlights";
 
 import {
   BuildingModel,
@@ -79,6 +80,9 @@ const borders: [number, number, number, number, number][] = [
 const civilizationColor = (game: GameState, owner: number | null) =>
   owner === null ? "#a79a7d" : (game.players[owner]?.color ?? "#7a9275");
 
+const mapCameraOffset = new THREE.Vector3(13, 17, 13);
+const mapViewAngles = new THREE.Spherical().setFromVector3(mapCameraOffset);
+
 function CameraRig({
   game,
   resetKey,
@@ -90,20 +94,20 @@ function CameraRig({
   "game" | "resetKey" | "preview" | "selectedTile" | "reducedMotion"
 >) {
   const { camera, gl, size } = useThree();
-  const controls = useMemo(
-    () => new OrbitControls(camera, gl.domElement),
-    [camera, gl.domElement],
-  );
+  const cameraControls = useRef<OrbitControls | null>(null);
   const seed = game.options.seed;
   const n = game.options.size;
   const focus =
     game.cities.find((city) => city.capitalOf === 0) ?? game.cities[0];
-  const center = useRef(new THREE.Vector3());
-  const initialZoom = useRef(50);
   const panTarget = useRef<THREE.Vector3 | null>(null);
   const panStep = useRef(new THREE.Vector3());
-  useEffect(() => {
+  useLayoutEffect(() => {
+    // Binding in render leaks listeners when React discards a render.
+    const controls = new OrbitControls(camera);
+    cameraControls.current = controls;
     controls.enableRotate = false;
+    controls.minPolarAngle = controls.maxPolarAngle = mapViewAngles.phi;
+    controls.minAzimuthAngle = controls.maxAzimuthAngle = mapViewAngles.theta;
     controls.enableDamping = true;
     controls.dampingFactor = 0.14;
     controls.screenSpacePanning = true;
@@ -120,31 +124,47 @@ function CameraRig({
     const cancelAutomaticPan = () => {
       panTarget.current = null;
     };
+    const choosePanAction = (event: PointerEvent) => {
+      if (event.pointerType === "touch") return;
+      // OrbitControls swaps the rotate and pan bindings when a modifier is held.
+      const action = event.ctrlKey || event.metaKey || event.shiftKey
+        ? THREE.MOUSE.ROTATE
+        : THREE.MOUSE.PAN;
+      controls.mouseButtons.LEFT = controls.mouseButtons.RIGHT = action;
+    };
+    const canvas = gl.domElement;
+    canvas.addEventListener("pointerdown", choosePanAction, true);
     controls.addEventListener("start", cancelAutomaticPan);
+    controls.connect(canvas);
     return () => {
+      canvas.removeEventListener("pointerdown", choosePanAction, true);
       controls.removeEventListener("start", cancelAutomaticPan);
       controls.dispose();
+      cameraControls.current = null;
     };
-  }, [controls, n]);
-  useEffect(() => {
+  }, [camera, gl, n]);
+  useLayoutEffect(() => {
+    const controls = cameraControls.current;
+    if (!controls) return;
     const offset = (n - 1) / 2;
     const x = preview ? 0 : (focus?.x ?? offset) - offset;
     const z = preview ? 0 : (focus?.y ?? offset) - offset;
     panTarget.current = null;
-    center.current.set(x, 0, z);
-    controls.target.copy(center.current);
-    camera.position.set(x + 13, 17, z + 13);
-    camera.lookAt(center.current);
-    // Keep useful tiles in view on both wide desktop screens and narrow windows.
-    initialZoom.current = preview
+    // Consume any damped drag before resetting, so momentum cannot shift the new view.
+    controls.enableDamping = false;
+    controls.update();
+    controls.enableDamping = true;
+    controls.target.set(x, 0, z);
+    camera.position.copy(controls.target).add(mapCameraOffset);
+    camera.zoom = preview
       ? Math.min(size.width / (n * 1.5), size.height / (n * 1.13))
       : Math.max(31, Math.min(size.width / 13, size.height / 9));
-    camera.zoom = initialZoom.current;
     camera.updateProjectionMatrix();
     controls.update();
+    camera.updateMatrixWorld();
     // A new seed or explicit reset reframes the map; actions preserve the user's camera.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [seed, n, resetKey, preview, camera, controls]);
+  }, [seed, n, resetKey, preview, camera, gl]);
   useEffect(() => {
     camera.updateProjectionMatrix();
   }, [size, camera]);
@@ -159,18 +179,17 @@ function CameraRig({
     );
     camera.updateMatrixWorld();
     const projected = point.clone().project(camera);
-    // Frame only a newly selected tile outside the space between HUD controls.
-    // Other commands and already visible selections preserve the user's camera.
+    // Reframe tiles near the edge of the board viewport when selected.
     if (
-      projected.x < -0.7 ||
-      projected.x > 0.35 ||
-      projected.y < -0.65 ||
-      projected.y > 0.6
+      Math.abs(projected.x) > 0.84 ||
+      Math.abs(projected.y) > 0.78
     ) {
       panTarget.current = point.setY(0);
     }
   }, [selectedTile, preview, n, camera]);
   useFrame((_, delta) => {
+    const controls = cameraControls.current;
+    if (!controls) return;
     if (panTarget.current) {
       panStep.current.subVectors(panTarget.current, controls.target);
       const arrived = panStep.current.lengthSq() < 0.0001;
@@ -191,6 +210,7 @@ function CameraRig({
     camera.position.y += dy;
     camera.position.z += z - controls.target.z;
     controls.target.set(x, controls.target.y + dy, z);
+    camera.updateMatrixWorld();
   });
   return null;
 }
@@ -272,39 +292,6 @@ function Label({
         opacity={opacity}
       />
     </sprite>
-  );
-}
-
-function SquareOutline({
-  color,
-  height,
-  opacity = 1,
-  thickness = 0.035,
-}: {
-  color: string;
-  height: number;
-  opacity?: number;
-  thickness?: number;
-}) {
-  return (
-    <group position={[0, height, 0]}>
-      {[-0.48, 0.48].map((p) => (
-        <group key={p}>
-          <Piece
-            position={[p, 0, 0]}
-            scale={[thickness, 0.025, 0.99]}
-            color={color}
-            opacity={opacity}
-          />
-          <Piece
-            position={[0, 0, p]}
-            scale={[0.99, 0.025, thickness]}
-            color={color}
-            opacity={opacity}
-          />
-        </group>
-      ))}
-    </group>
   );
 }
 
@@ -536,20 +523,13 @@ const TileView = memo(function TileView({
             scale={[0.075, 0.018, 0.075]}
             color="#376954"
           />
-          <SquareOutline
-            color="#487d69"
-            height={surface + 0.053}
-            opacity={0.95}
-            thickness={0.028}
-          />
+          {!hovered && <SquareOutline kind="reachable" height={surface + 0.053} />}
         </>
       )}
       {(selected || targeted || hovered) && (
         <SquareOutline
-          color={targeted ? "#b85d4d" : selected ? "#b59a55" : "#f0eedc"}
+          kind={targeted ? "target" : selected ? "selection" : "hover"}
           height={surface + 0.06}
-          thickness={selected ? 0.055 : 0.03}
-          opacity={hovered && !selected ? 0.65 : 1}
         />
       )}
     </group>
@@ -601,30 +581,6 @@ const CityLabel = memo(function CityLabel({
     </group>
   );
 });
-
-function SelectionHalo({ reducedMotion }: { reducedMotion: boolean }) {
-  const ring = useRef<THREE.Mesh>(null);
-  const age = useRef(0);
-  useFrame((_, delta) => {
-    age.current += delta;
-    if (ring.current)
-      ring.current.scale.setScalar(
-        reducedMotion
-          ? 1
-          : 1 + Math.sin(Math.min(1, age.current / 0.3) * Math.PI) * 0.2,
-      );
-  });
-  return (
-    <mesh
-      ref={ring}
-      geometry={geometry.ring}
-      material={material("#b59a55")}
-      rotation={[-Math.PI / 2, 0, 0]}
-      position={[0, 0.035, 0]}
-      dispose={null}
-    />
-  );
-}
 
 // The panel reads the resolved rules immediately. On the board the HP badge
 // changes on contact, even when several AI hits arrived in a single snapshot.
@@ -697,17 +653,8 @@ function AnimatedUnit({
         if (event.delta < 6) onClick(tile.id);
       }}
     >
-      {selected && !cue.dying && (
-        <SelectionHalo reducedMotion={reducedMotion} />
-      )}
-      {targeted && !cue.dying && (
-        <mesh
-          geometry={geometry.ring}
-          material={material("#c15f4c")}
-          rotation={[-Math.PI / 2, 0, 0]}
-          position={[0, 0.035, 0]}
-          dispose={null}
-        />
+      {(selected || targeted) && !cue.dying && (
+        <SelectionHalo kind={targeted ? "target" : "selection"} reducedMotion={reducedMotion} />
       )}
       <group ref={model}>
         <UnitModel

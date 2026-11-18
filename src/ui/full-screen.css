@@ -1,0 +1,451 @@
+.menu-page {
+  --menu-page-max: 760px;
+  --menu-page-inset: clamp(12px, 3vw, 36px);
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  background: linear-gradient(150deg, #faf5e9 30%, #eee6d4);
+  color: var(--ink);
+  outline: none;
+  animation: menu-page-in 180ms ease-out;
+}
+
+.menu-page-wide {
+  --menu-page-max: 1180px;
+}
+
+.menu-page-width {
+  width: 100%;
+  max-width: var(--menu-page-max);
+  margin-inline: auto;
+  padding-left: max(var(--menu-page-inset), env(safe-area-inset-left));
+  padding-right: max(var(--menu-page-inset), env(safe-area-inset-right));
+}
+
+.menu-page-header {
+  padding-top: env(safe-area-inset-top);
+  border-bottom: 1px solid #cabc9d91;
+  background: #fbf6ea;
+}
+
+.menu-page-heading {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: clamp(48px, 8vh, 64px);
+  text-align: center;
+}
+
+.menu-page-heading h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(21px, 2.5vw, 27px);
+  color: var(--green);
+  overflow-wrap: anywhere;
+}
+
+.menu-page-back {
+  position: absolute;
+  left: max(var(--menu-page-inset), env(safe-area-inset-left));
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 7px;
+  border-radius: 6px;
+  color: var(--green);
+  font-weight: 700;
+}
+
+.menu-page-back:hover {
+  background: #ede5d2;
+}
+
+.menu-page-heading > div {
+  min-width: 0;
+  padding-inline: clamp(43px, 10vw, 84px);
+}
+
+.menu-page-scroll {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+  scroll-padding: 12px;
+}
+
+.menu-page-content {
+  padding-top: clamp(10px, 2.25vh, 20px);
+  padding-bottom: max(18px, env(safe-area-inset-bottom));
+}
+
+.menu-page-footer {
+  padding-block: 6px max(6px, env(safe-area-inset-bottom));
+  border-top: 1px solid #cabc9d91;
+  background: #fbf6ea;
+}
+
+.menu-page :is(.setup-body, .settings-body, .diplomacy-body, .about-body, .results-content) {
+  padding: 0;
+}
+
+.menu-page .setting-row {
+  min-height: 46px;
+  padding-block: 7px;
+  gap: 10px;
+}
+
+.menu-page .setting-row:hover {
+  color: var(--green);
+  background: #ede5d253;
+}
+
+.menu-page .setting-row strong {
+  font-size: 16px;
+}
+
+.menu-page .save-actions {
+  margin-top: 12px;
+  gap: 8px;
+}
+
+.menu-page .settings-game {
+  margin: 6px 0 12px;
+  padding: 8px 10px;
+}
+
+.menu-page .settings-game span:last-child {
+  width: auto;
+  margin: 0;
+}
+
+.menu-page :is(.settings-body, .results-content) .text-action {
+  min-height: 44px;
+  padding-block: 7px;
+}
+
+.menu-page .diplomacy-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px 14px;
+  padding-block: 8px;
+}
+
+.menu-page .diplomacy-row header {
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.menu-page .diplomacy-row header h3 {
+  overflow-wrap: anywhere;
+}
+
+.menu-page .diplomacy-row > div {
+  flex-wrap: wrap;
+}
+
+.menu-page .diplomacy-row .secondary {
+  min-height: 44px;
+  padding: 6px 10px;
+}
+
+.menu-page .result-stats {
+  margin-block: 12px;
+  padding-block: 10px;
+}
+
+.menu-page .ranking {
+  margin-block: 12px;
+}
+
+.menu-page .ranking > div {
+  padding-block: 7px;
+}
+
+.new-setup {
+  --setup-control-height: 42px;
+}
+
+.menu-page .scenario-tabs {
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.menu-page .scenario-tabs button {
+  min-height: var(--setup-control-height);
+  padding: 6px 8px;
+}
+
+.menu-page .civilization-grid {
+  margin-bottom: 12px;
+}
+
+.menu-page .new-setup .civ-card {
+  padding: 6px;
+}
+
+.menu-page .civ-emblem {
+  width: 33px;
+  height: 36px;
+  margin-bottom: 2px;
+}
+
+.menu-page .new-setup .setup-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px 14px;
+}
+
+.menu-page .setup-grid label {
+  min-width: 0;
+}
+
+.menu-page .setup-grid label > span {
+  margin-bottom: 4px;
+}
+
+.menu-page :is(.setup-grid select, .seed-input) {
+  height: var(--setup-control-height);
+}
+
+.menu-page .seed-input button {
+  min-width: var(--setup-control-height);
+  min-height: var(--setup-control-height);
+  align-items: center;
+  justify-content: center;
+}
+
+.menu-page .faction-settings,
+.menu-page .setup-geography {
+  margin-top: 14px;
+  padding-top: 10px;
+}
+
+.menu-page .faction-settings summary {
+  min-height: 30px;
+  margin-bottom: 6px;
+}
+
+.menu-page .faction-inputs {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr));
+  gap: 7px 14px;
+}
+
+.menu-page .faction-inputs label {
+  grid-template-columns: 34px minmax(0, 1fr) minmax(0, 1fr);
+  gap: 6px;
+}
+
+.menu-page .faction-inputs :is(input, select) {
+  grid-column: auto;
+  min-height: var(--setup-control-height);
+  padding: 5px 7px;
+}
+
+.menu-page .setup-geography {
+  border-top: 1px solid var(--line);
+}
+
+.menu-page .setup-geography h3 {
+  margin-bottom: 8px;
+  font-size: 16px;
+  color: var(--green);
+}
+
+.menu-page .setup-geography-free .setup-geography-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
+  gap: 12px clamp(14px, 4vw, 32px);
+  align-items: start;
+}
+
+.menu-page .generation-settings {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 14px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.menu-page .generation-settings label,
+.menu-page .spawn-editor label {
+  gap: 4px;
+}
+
+.menu-page .generation-settings input {
+  block-size: 24px;
+  margin: 0;
+}
+
+.menu-page :is(.generation-settings, .spawn-editor) select {
+  min-height: var(--setup-control-height);
+  padding-block: 5px;
+}
+
+.menu-page .spawn-editor p {
+  margin-top: 4px;
+}
+
+.menu-page .setup-map-column {
+  min-width: 0;
+  max-width: 330px;
+  width: 100%;
+  gap: 5px;
+  margin-inline: 0;
+}
+
+.menu-page .setup-map {
+  display: block;
+  border: 0;
+  border-radius: 5px;
+}
+
+.menu-page .setup-map.editable {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.menu-page-footer .setup-footer {
+  flex-direction: row;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  gap: 10px;
+}
+
+.menu-page-footer .setup-footer .primary {
+  min-height: 44px;
+  padding: 8px 17px;
+  white-space: nowrap;
+}
+
+.menu-page-footer .setup-error {
+  margin: 0 0 8px;
+  padding: 5px 9px;
+}
+
+.menu-page .tech-balance,
+.menu-page .tech-legend {
+  padding-inline: 0;
+}
+
+.menu-page .tech-balance {
+  padding-top: 0;
+}
+
+.menu-page .radial-tech-scroll {
+  overflow: visible;
+}
+
+.menu-page .radial-tech-tree {
+  width: min(100%, 690px, max(610px, calc(100dvh - 126px)));
+  min-width: 0;
+  margin: 0 auto;
+}
+
+@media (max-width: 720px) {
+  .menu-page .new-setup .setup-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .menu-page .setup-geography-free .setup-geography-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .menu-page .setup-map-column {
+    max-width: 285px;
+    margin-inline: auto;
+  }
+
+  .menu-page .radial-tech-tree {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+    gap: 5px;
+    width: 100%;
+    aspect-ratio: auto;
+    margin-block: 8px;
+  }
+
+  .menu-page :is(.tech-connections, .tech-center) {
+    display: none;
+  }
+
+  .menu-page .radial-tech {
+    position: static;
+    flex-direction: row;
+    justify-content: space-between;
+    width: 100%;
+    height: auto;
+    min-height: 44px;
+    transform: none;
+    text-align: left;
+    padding: 8px 10px;
+  }
+
+  .menu-page .radial-tech:not(:disabled):active {
+    transform: scale(0.98);
+  }
+
+  .menu-page .radial-tech[data-tier="1"] {
+    grid-column: 1 / -1;
+    margin-top: 5px;
+    font-weight: 700;
+  }
+}
+
+@media (max-width: 560px) {
+  .menu-page .diplomacy-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .menu-page .diplomacy-row header {
+    min-height: 24px;
+  }
+}
+
+@media (max-width: 430px) {
+  .menu-page-back span {
+    display: none;
+  }
+
+  .menu-page .scenario-tabs button {
+    padding-inline: 3px;
+  }
+
+  .menu-page .generation-settings {
+    column-gap: 12px;
+  }
+}
+
+@media (pointer: coarse) {
+  .new-setup {
+    --setup-control-height: 44px;
+  }
+
+  .menu-page .generation-settings input {
+    block-size: 28px;
+  }
+}
+
+@keyframes menu-page-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .menu-page {
+    animation: none;
+  }
+}
+
+.reduce-motion .menu-page {
+  animation: none;
+}

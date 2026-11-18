@@ -50,21 +50,16 @@ export function TechPanel({
   roots.forEach((root, i) => {
     const angle = -Math.PI / 2 + (i * Math.PI * 2) / 5;
     nodes.push({ tech: root, ...point(angle, 16) });
-    const children = TECHNOLOGIES.filter((t) =>
-      t.prerequisites.includes(root.id),
-    );
-    children.forEach((child, j) => {
-      const branchAngle = angle + (j === 0 ? -0.29 : 0.29);
-      nodes.push({ tech: child, ...point(branchAngle, 30), parent: root.id });
-      TECHNOLOGIES.filter((t) => t.prerequisites.includes(child.id)).forEach(
-        (leaf) =>
-          nodes.push({
-            tech: leaf,
-            ...point(branchAngle, 43),
-            parent: child.id,
-          }),
-      );
-    });
+    const branches = TECHNOLOGIES
+      .filter(tech => tech.prerequisites.includes(root.id))
+      .map((tech, index) => ({ tech, angle: angle + (index === 0 ? -0.29 : 0.29) }));
+    for (const branch of branches)
+      nodes.push({ tech: branch.tech, ...point(branch.angle, 30), parent: root.id });
+    for (const branch of branches) {
+      for (const leaf of TECHNOLOGIES.filter(tech => tech.prerequisites.includes(branch.tech.id))) {
+        nodes.push({ tech: leaf, ...point(branch.angle, 43), parent: branch.tech.id });
+      }
+    }
   });
   return (
     <Modal title="科技树" onClose={onClose} wide>
@@ -125,6 +120,7 @@ export function TechPanel({
             return (
               <button
                 key={tech.id}
+                data-tier={tech.tier}
                 className={`radial-tech ${done ? "researched" : ready ? "researchable" : "locked"}`}
                 style={{ left: `${x}%`, top: `${y}%` }}
                 disabled={done || !!reason || game.currentPlayer !== 0}
@@ -380,50 +376,6 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
               ))}
           </>
         )}
-      </div>
-    </Modal>
-  );
-}
-
-export function HelpPanel({ onClose }: { onClose: () => void }) {
-  return (
-    <Modal title="操作说明" onClose={onClose}>
-      <div className="help-body">
-        {[
-          [
-            "01",
-            "移动",
-            "点击己方单位，再点击绿色地块。拖动地图平移，滚轮缩放。不同兵种的行动能力由技能决定。",
-          ],
-          [
-            "02",
-            "建设",
-            "点击城市训练单位。点击领土内的资源进行采集或建设。城市升级后选择奖励。",
-          ],
-          ["03", "科技", "科技树中点击可研究的科技。城市越多，研究费用越高。"],
-          [
-            "04",
-            "战斗",
-            "点击红色目标查看伤害，确认后攻击。单位进入村庄或敌方城市，下一回合可占领。",
-          ],
-          [
-            "05",
-            "回合",
-            "点击结束回合，其他阵营依次行动。统治模式消灭所有对手；完美模式在 30 回合后结算。",
-          ],
-        ].map(([n, title, desc]) => (
-          <div key={n} className="help-step">
-            <span>{n}</span>
-            <div>
-              <h3>{title}</h3>
-              <p>{desc}</p>
-            </div>
-          </div>
-        ))}
-        <div className="keyboard-hints">
-          <kbd>Esc</kbd>取消<kbd>N</kbd>下一单位<kbd>T</kbd>科技<kbd>Enter</kbd>
-          结束回合
-        </div>
       </div>
     </Modal>
   );

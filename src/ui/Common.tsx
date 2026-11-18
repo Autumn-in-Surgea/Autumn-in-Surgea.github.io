@@ -1,84 +1,95 @@
 import { useEffect, useRef } from "react";
-import type { ReactNode } from "react";
-import { X } from "lucide-react";
+import type { KeyboardEvent, ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { ArrowLeft } from "lucide-react";
+import "./full-screen.css";
+
+const menuControls = "button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], summary, [tabindex='0']";
+
 export function Modal({
   title,
   subtitle,
   children,
   onClose,
   wide = false,
+  footer,
 }: {
   title: string;
   subtitle?: string;
   children: ReactNode;
   onClose: () => void;
   wide?: boolean;
+  footer?: ReactNode;
 }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const closeRef = useRef(onClose);
+  const ref = useRef<HTMLElement>(null);
   useEffect(() => {
-    closeRef.current = onClose;
-  }, [onClose]);
-  useEffect(() => {
-    const previous = document.activeElement as HTMLElement;
+    const previous = document.activeElement;
     ref.current?.focus();
-    const key = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeRef.current();
-      if (e.key === "Tab") {
-        const nodes = ref.current?.querySelectorAll<HTMLElement>(
-          'button:not(:disabled), input, select, [tabindex="0"]',
-        );
-        if (!nodes?.length) return;
-        const first = nodes[0],
-          last = nodes[nodes.length - 1];
-        if (
-          e.shiftKey &&
-          (document.activeElement === first ||
-            document.activeElement === ref.current)
-        ) {
-          e.preventDefault();
-          last.focus();
-        } else if (!e.shiftKey && document.activeElement === last) {
-          e.preventDefault();
-          first.focus();
-        }
-      }
-    };
-    document.addEventListener("keydown", key);
     return () => {
-      document.removeEventListener("keydown", key);
-      previous?.focus();
+      if (previous instanceof HTMLElement && previous.isConnected) previous.focus({ preventScroll: true });
     };
   }, []);
-  return (
-    <div
-      className="modal-backdrop"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
+
+  function handleKey(event: KeyboardEvent<HTMLElement>) {
+    // Full-screen menus own the keyboard while the board is underneath them.
+    event.stopPropagation();
+    if (event.key === "Escape") {
+      event.preventDefault();
+      onClose();
+    }
+    if (event.key !== "Tab") return;
+    const nodes = Array.from(event.currentTarget.querySelectorAll<HTMLElement>(menuControls))
+      .filter(node => node.tabIndex >= 0 && node.getClientRects().length > 0);
+    if (!nodes.length) return;
+    const first = nodes[0];
+    const last = nodes[nodes.length - 1];
+    const active = document.activeElement;
+    if (event.shiftKey && (active === first || active === ref.current)) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && active === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
+  return createPortal(
+    <section
+      className={`menu-page${wide ? " menu-page-wide" : ""}`}
+      ref={ref}
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+      tabIndex={-1}
+      onKeyDown={handleKey}
     >
-      <div
-        className={`modal ${wide ? "modal-wide" : ""}`}
-        ref={ref}
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-        tabIndex={-1}
-      >
-        <header className="modal-heading">
+      <header className="menu-page-header">
+        <div className="menu-page-width menu-page-heading">
+          <button className="menu-page-back" onClick={onClose} aria-label="关闭">
+            <ArrowLeft aria-hidden="true" size={24} />
+            <span>返回</span>
+          </button>
           <div>
             {subtitle && <span className="eyebrow">{subtitle}</span>}
             <h2>{title}</h2>
           </div>
-          <button className="icon-button" onClick={onClose} aria-label="关闭">
-            <X size={21} />
-          </button>
-        </header>
-        {children}
+        </div>
+      </header>
+      <div className="menu-page-scroll">
+        <div className="menu-page-width menu-page-content">
+          {children}
+        </div>
       </div>
-    </div>
+      {footer && (
+        <footer className="menu-page-footer">
+          <div className="menu-page-width">{footer}</div>
+        </footer>
+      )}
+    </section>,
+    document.querySelector(".app") ?? document.body,
   );
 }
+
 export function ResourceIcon({ size = 15 }: { size?: number }) {
   return (
     <svg

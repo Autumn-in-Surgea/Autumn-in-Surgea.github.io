@@ -27,9 +27,9 @@ export const mapLabels: Record<GameOptions["mapType"], string> = {
   waterworld: "水世界",
 };
 export const scenarioLabels = {
+  fair: "公平模式",
   story: "故事模式",
   free: "自由模式",
-  fair: "公平模式",
 };
 const randomSeed = () => Math.random().toString(36).slice(2, 10);
 
@@ -103,13 +103,17 @@ function NewGame({ onClose }: { onClose: () => void }) {
   const [spawnIndex, setSpawnIndex] = useState(0);
   const story = options.scenario === "story",
     free = options.scenario === "free";
+  const manualSpawns = free && options.mapSettings.spawnMode === "custom";
   const change = (patch: Partial<GameOptions>) => {
     setError("");
     setOptions((o) => ({ ...o, ...patch }));
   };
-  const mapChange = (patch: Partial<MapSettings>) =>
+  const mapChange = (patch: Partial<MapSettings>) => {
+    setError("");
     setOptions((o) => ({ ...o, mapSettings: { ...o.mapSettings, ...patch } }));
+  };
   const preview = useMemo(() => {
+    if (options.scenario === "fair") return null;
     try {
       return generateMap({
         ...options,
@@ -142,7 +146,43 @@ function NewGame({ onClose }: { onClose: () => void }) {
     setSpawnIndex(0);
   };
   return (
-    <Modal title="新游戏" onClose={onClose} wide>
+    <Modal
+      title="新游戏"
+      onClose={onClose}
+      wide
+      footer={
+        <>
+          {error && (
+            <p role="alert" className="setup-error">
+              {error}
+            </p>
+          )}
+          <div className="setup-footer">
+            <span>
+              {options.mode === "conquest" ? "消灭所有对手" : "30 回合后结算分数"}
+            </span>
+            <button
+              className="primary"
+              onClick={() => {
+                try {
+                  start({
+                    ...options,
+                    seed: options.seed.trim() || randomSeed(),
+                    maxRounds: 30,
+                  });
+                  onClose();
+                } catch (e) {
+                  setError(e instanceof Error ? e.message : "无法生成地图");
+                }
+              }}
+            >
+              开始游戏
+              <ArrowRight size={18} />
+            </button>
+          </div>
+        </>
+      }
+    >
       <div className="setup-body new-setup">
         <div className="scenario-tabs" role="group" aria-label="游戏模式">
           {(Object.keys(scenarioLabels) as GameOptions["scenario"][]).map(
@@ -150,6 +190,7 @@ function NewGame({ onClose }: { onClose: () => void }) {
               <button
                 key={s}
                 className={options.scenario === s ? "selected" : ""}
+                aria-pressed={options.scenario === s}
                 onClick={() => switchScenario(s)}
               >
                 {scenarioLabels[s]}
@@ -177,233 +218,137 @@ function NewGame({ onClose }: { onClose: () => void }) {
             ))}
           </div>
         )}
-        <div className="setup-columns">
-          <div className="setup-config">
-            <div className="setup-grid">
-              <label>
-                <span>地图大小</span>
-                <select
-                  aria-label="地图大小"
-                  disabled={story}
-                  value={options.size}
-                  onChange={(e) => {
-                    change({ size: Number(e.target.value) });
-                    mapChange({ customSpawns: [] });
-                  }}
-                >
-                  {[12, 16, 20, 24, 32, 48, 64].map((n) => (
-                    <option key={n} value={n}>
-                      {n} × {n}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>地图类型</span>
-                <select
-                  aria-label="地图类型"
-                  disabled={story}
-                  value={options.mapType}
-                  onChange={(e) => {
-                    const mapType = e.target.value as GameOptions["mapType"];
-                    const preset = {
-                      dryland: [1, 4],
-                      lakes: [0.76, 6],
-                      continents: [0.57, 3.2],
-                      archipelago: [0.32, 8],
-                      waterworld: [0.08, 10],
-                    }[mapType];
-                    change({
-                      mapType,
-                      ...(free
-                        ? {
-                            mapSettings: {
-                              ...options.mapSettings,
-                              landRatio: preset[0],
-                              noiseScale: preset[1],
-                              customSpawns: [],
-                            },
-                          }
-                        : {}),
-                    });
-                  }}
-                >
-                  {Object.entries(mapLabels).map(([id, label]) => (
-                    <option key={id} value={id}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>AI 对手</span>
-                <select
-                  aria-label="AI 对手"
-                  disabled={story}
-                  value={options.aiCount}
-                  onChange={(e) => {
-                    const aiCount = Number(e.target.value);
-                    change({
-                      aiCount,
-                      mapSettings: {
-                        ...options.mapSettings,
-                        customSpawns: options.mapSettings.customSpawns.slice(
-                          0,
-                          aiCount + 1,
-                        ),
-                      },
-                    });
-                    setSpawnIndex(0);
-                  }}
-                >
-                  {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
-                    <option value={n} key={n}>
-                      {n}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>AI 难度</span>
-                <select
-                  value={options.difficulty}
-                  onChange={(e) =>
-                    change({
-                      difficulty: e.target.value as GameOptions["difficulty"],
-                    })
-                  }
-                >
-                  <option value="easy">简单</option>
-                  <option value="normal">普通</option>
-                </select>
-              </label>
-              <label>
-                <span>胜利条件</span>
-                <select
-                  value={options.mode}
-                  onChange={(e) =>
-                    change({ mode: e.target.value as GameOptions["mode"] })
-                  }
-                >
-                  <option value="conquest">统治</option>
-                  <option value="score">完美 · 30 回合</option>
-                </select>
-              </label>
-              <label>
-                <span>随机种子</span>
-                <div className="seed-input">
-                  <input
-                    aria-label="随机种子"
-                    disabled={story}
-                    maxLength={64}
-                    value={options.seed}
-                    onChange={(e) => change({ seed: e.target.value })}
-                  />
-                  <button
-                    disabled={story}
-                    aria-label="生成随机种子"
-                    onClick={() => change({ seed: randomSeed() })}
-                  >
-                    <Shuffle size={16} />
-                  </button>
-                </div>
-              </label>
-            </div>
-            {free && (
-              <div className="generation-settings">
-                {(
-                  [
-                    ["landRatio", "陆地比例", 0.05, 1, 0.01],
-                    ["forestRatio", "森林比例", 0, 0.8, 0.01],
-                    ["mountainRatio", "山地比例", 0, 0.4, 0.02],
-                    ["resourceDensity", "资源密度", 0.1, 0.9, 0.05],
-                    ["villageDensity", "村庄密度", 0.015, 0.08, 0.005],
-                    ["noiseScale", "噪声频率", 2, 12, 0.1],
-                  ] as const
-                ).map(([key, label, min, max, step]) => (
-                  <label key={key}>
-                    <span>
-                      {label}
-                      <b>
-                        {key === "noiseScale"
-                          ? options.mapSettings[key]
-                          : `${Math.round(options.mapSettings[key] * 1000) / 10}%`}
-                      </b>
-                    </span>
-                    <input
-                      aria-label={label}
-                      type="range"
-                      min={min}
-                      max={max}
-                      step={step}
-                      value={options.mapSettings[key]}
-                      onChange={(e) =>
-                        mapChange({ [key]: Number(e.target.value) })
+        <div className="setup-grid">
+          <label>
+            <span>地图大小</span>
+            <select
+              aria-label="地图大小"
+              disabled={story}
+              value={options.size}
+              onChange={(e) => {
+                change({ size: Number(e.target.value) });
+                mapChange({ customSpawns: [] });
+                setSpawnIndex(0);
+              }}
+            >
+              {[12, 16, 20, 24, 32, 48, 64].map((n) => (
+                <option key={n} value={n}>
+                  {n} × {n}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>地图类型</span>
+            <select
+              aria-label="地图类型"
+              disabled={story}
+              value={options.mapType}
+              onChange={(e) => {
+                const mapType = e.target.value as GameOptions["mapType"];
+                const preset = {
+                  dryland: [1, 4],
+                  lakes: [0.76, 6],
+                  continents: [0.57, 3.2],
+                  archipelago: [0.32, 8],
+                  waterworld: [0.08, 10],
+                }[mapType];
+                if (free) setSpawnIndex(0);
+                change({
+                  mapType,
+                  ...(free
+                    ? {
+                        mapSettings: {
+                          ...options.mapSettings,
+                          landRatio: preset[0],
+                          noiseScale: preset[1],
+                          customSpawns: [],
+                        },
                       }
-                    />
-                  </label>
-                ))}
-                <label className="spawn-mode">
-                  <span>出生点</span>
-                  <select
-                    aria-label="出生点"
-                    value={options.mapSettings.spawnMode}
-                    onChange={(e) =>
-                      mapChange({
-                        spawnMode: e.target.value as MapSettings["spawnMode"],
-                      })
-                    }
-                  >
-                    <option value="balanced">均匀分布</option>
-                    <option value="random">随机</option>
-                    <option value="custom">手动设置</option>
-                  </select>
-                </label>
-              </div>
-            )}
-          </div>
-          <div className="setup-map-column">
-            {preview && (
-              <MapPreview
-                tiles={preview.tiles}
-                size={options.size}
-                starts={
-                  free && options.mapSettings.spawnMode === "custom"
-                    ? options.mapSettings.customSpawns
-                    : preview.starts.map((id) => preview.tiles[id])
-                }
-                editable={free && options.mapSettings.spawnMode === "custom"}
-                onSelect={setSpawn}
+                    : {}),
+                });
+              }}
+            >
+              {Object.entries(mapLabels).map(([id, label]) => (
+                <option key={id} value={id}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>AI 对手</span>
+            <select
+              aria-label="AI 对手"
+              disabled={story}
+              value={options.aiCount}
+              onChange={(e) => {
+                const aiCount = Number(e.target.value);
+                change({
+                  aiCount,
+                  mapSettings: {
+                    ...options.mapSettings,
+                    customSpawns: options.mapSettings.customSpawns.slice(
+                      0,
+                      aiCount + 1,
+                    ),
+                  },
+                });
+                setSpawnIndex(0);
+              }}
+            >
+              {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
+                <option value={n} key={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>AI 难度</span>
+            <select
+              value={options.difficulty}
+              onChange={(e) =>
+                change({
+                  difficulty: e.target.value as GameOptions["difficulty"],
+                })
+              }
+            >
+              <option value="easy">简单</option>
+              <option value="normal">普通</option>
+            </select>
+          </label>
+          <label>
+            <span>胜利条件</span>
+            <select
+              value={options.mode}
+              onChange={(e) =>
+                change({ mode: e.target.value as GameOptions["mode"] })
+              }
+            >
+              <option value="conquest">统治</option>
+              <option value="score">完美 · 30 回合</option>
+            </select>
+          </label>
+          <label>
+            <span>随机种子</span>
+            <div className="seed-input">
+              <input
+                aria-label="随机种子"
+                disabled={story}
+                maxLength={64}
+                value={options.seed}
+                onChange={(e) => change({ seed: e.target.value })}
               />
-            )}
-            <span className="setup-map-label">
-              {story
-                ? "固定地图"
-                : `${mapLabels[options.mapType]} · ${options.size} × ${options.size}`}
-            </span>
-            {free && options.mapSettings.spawnMode === "custom" && (
-              <div className="spawn-editor">
-                <label>
-                  设置出生点
-                  <select
-                    aria-label="选择出生玩家"
-                    value={spawnIndex}
-                    onChange={(e) => setSpawnIndex(Number(e.target.value))}
-                  >
-                    {Array.from({ length: options.aiCount + 1 }, (_, i) => (
-                      <option value={i} key={i}>
-                        {i === 0 ? "玩家" : `AI ${i}`}{" "}
-                        {options.mapSettings.customSpawns[i]
-                          ? `(${options.mapSettings.customSpawns[i].x + 1}, ${options.mapSettings.customSpawns[i].y + 1})`
-                          : "未设置"}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <p>点击地图上的平原或森林。</p>
-              </div>
-            )}
-          </div>
+              <button
+                disabled={story}
+                aria-label="生成随机种子"
+                onClick={() => change({ seed: randomSeed() })}
+              >
+                <Shuffle size={16} />
+              </button>
+            </div>
+          </label>
         </div>
         {!story && (
           <details className="faction-settings" open>
@@ -453,34 +398,106 @@ function NewGame({ onClose }: { onClose: () => void }) {
             </div>
           </details>
         )}
-        {error && (
-          <p role="alert" className="setup-error">
-            {error}
-          </p>
+        {(free || preview) && (
+          <section className={`setup-geography${free ? " setup-geography-free" : ""}`}>
+            <h3>{free ? "地图生成" : "地图预览"}</h3>
+            <div className="setup-geography-body">
+              {free && (
+                <div className="generation-settings">
+                  {(
+                    [
+                      ["landRatio", "陆地比例", 0.05, 1, 0.01],
+                      ["forestRatio", "森林比例", 0, 0.8, 0.01],
+                      ["mountainRatio", "山地比例", 0, 0.4, 0.02],
+                      ["resourceDensity", "资源密度", 0.1, 0.9, 0.05],
+                      ["villageDensity", "村庄密度", 0.015, 0.08, 0.005],
+                      ["noiseScale", "噪声频率", 2, 12, 0.1],
+                    ] as const
+                  ).map(([key, label, min, max, step]) => (
+                    <label key={key}>
+                      <span>
+                        {label}
+                        <b>
+                          {key === "noiseScale"
+                            ? options.mapSettings[key]
+                            : `${Math.round(options.mapSettings[key] * 1000) / 10}%`}
+                        </b>
+                      </span>
+                      <input
+                        aria-label={label}
+                        type="range"
+                        min={min}
+                        max={max}
+                        step={step}
+                        value={options.mapSettings[key]}
+                        onChange={(e) =>
+                          mapChange({ [key]: Number(e.target.value) })
+                        }
+                      />
+                    </label>
+                  ))}
+                  <label className="spawn-mode">
+                    <span>出生点</span>
+                    <select
+                      aria-label="出生点"
+                      value={options.mapSettings.spawnMode}
+                      onChange={(e) =>
+                        mapChange({
+                          spawnMode: e.target.value as MapSettings["spawnMode"],
+                        })
+                      }
+                    >
+                      <option value="balanced">均匀分布</option>
+                      <option value="random">随机</option>
+                      <option value="custom">手动设置</option>
+                    </select>
+                  </label>
+                </div>
+              )}
+              {preview && (
+                <div className="setup-map-column">
+                  {manualSpawns && (
+                    <div className="spawn-editor">
+                      <label>
+                        设置出生点
+                        <select
+                          aria-label="选择出生玩家"
+                          value={spawnIndex}
+                          onChange={(e) => setSpawnIndex(Number(e.target.value))}
+                        >
+                          {Array.from({ length: options.aiCount + 1 }, (_, i) => (
+                            <option value={i} key={i}>
+                              {i === 0 ? "玩家" : `AI ${i}`}{" "}
+                              {options.mapSettings.customSpawns[i]
+                                ? `(${options.mapSettings.customSpawns[i].x + 1}, ${options.mapSettings.customSpawns[i].y + 1})`
+                                : "未设置"}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <p>点击地图上的平原或森林。</p>
+                    </div>
+                  )}
+                  <MapPreview
+                    tiles={preview.tiles}
+                    size={options.size}
+                    starts={manualSpawns
+                      ? options.mapSettings.customSpawns
+                      : preview.starts.map((id) => preview.tiles[id])
+                    }
+                    editable={manualSpawns}
+                    onSelect={setSpawn}
+                  />
+                  <span className="setup-map-label">
+                    {story
+                      ? `固定地图 · ${options.size} × ${options.size}`
+                      : `${mapLabels[options.mapType]} · ${options.size} × ${options.size}`}
+                  </span>
+                </div>
+              )}
+            </div>
+          </section>
         )}
-        <footer className="setup-footer">
-          <span>
-            {options.mode === "conquest" ? "消灭所有对手" : "30 回合后结算分数"}
-          </span>
-          <button
-            className="primary"
-            onClick={() => {
-              try {
-                start({
-                  ...options,
-                  seed: options.seed.trim() || randomSeed(),
-                  maxRounds: 30,
-                });
-                onClose();
-              } catch (e) {
-                setError(e instanceof Error ? e.message : "无法生成地图");
-              }
-            }}
-          >
-            开始游戏
-            <ArrowRight size={18} />
-          </button>
-        </footer>
       </div>
     </Modal>
   );
@@ -582,9 +599,6 @@ export function About({ onClose }: { onClose: () => void }) {
         >
           规则参考：Polytopia Wiki
         </a>
-        <button className="secondary full" onClick={onClose}>
-          关闭
-        </button>
       </div>
     </Modal>
   );

@@ -60,7 +60,7 @@ interface Store {
   sessionId: number;
   settings: Settings;
   start: (options: GameOptions) => void;
-  select: (tileId: number, unitId?: string | null) => void;
+  select: (tileId: number | null, unitId?: string | null) => void;
   command: (action: Action) => boolean;
   advanceAI: () => void;
   save: () => boolean;

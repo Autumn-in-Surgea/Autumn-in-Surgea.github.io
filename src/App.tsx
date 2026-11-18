@@ -13,9 +13,8 @@ import type { Action } from "./game/types";
 import GameScene from "./scene/GameScene";
 import { useGameStore } from "./store/gameStore";
 import { MainMenu, About } from "./ui/Menu";
-import { GameHUD, ScoreChip } from "./ui/GameHUD";
+import { GameHUD } from "./ui/GameHUD";
 import {
-  HelpPanel,
   ResultsPanel,
   SettingsPanel,
   TechPanel,
@@ -23,7 +22,7 @@ import {
 } from "./ui/Panels";
 import { playSound } from "./ui/sound";
 
-type Panel = "tech" | "diplomacy" | "settings" | "about" | "help" | null;
+type Panel = "tech" | "diplomacy" | "settings" | "about" | null;
 export default function App() {
   const {
     game,
@@ -170,13 +169,13 @@ export default function App() {
     const key = (e: KeyboardEvent) => {
       if (
         (e.target as HTMLElement)?.matches("input,select,textarea") ||
-        panel ||
+        panel || document.querySelector('[role="dialog"][aria-modal="true"]') ||
         screen !== "game"
       )
         return;
       if (e.key === "Escape") {
         setTarget(null);
-        useGameStore.setState({ selectedTile: null, selectedUnit: null });
+        select(null);
       }
       if (e.key.toLowerCase() === "t") setPanel("tech");
       if (e.key.toLowerCase() === "n") nextUnit();
@@ -225,6 +224,7 @@ export default function App() {
         game && (
           <>
             <GameHUD
+              key={sessionId}
               selectionRequest={selectionRequest}
               upgradePending={!!pendingUpgrade}
               game={game}
@@ -232,18 +232,15 @@ export default function App() {
               onTech={() => setPanel("tech")}
               onDiplomacy={() => setPanel("diplomacy")}
               onSettings={() => setPanel("settings")}
-              onHelp={() => setPanel("help")}
               nextUnit={nextUnit}
               target={target}
               setTarget={setTarget}
             />
-            <ScoreChip game={game} />
           </>
         )
       )}
       {panel === "settings" && <SettingsPanel onClose={() => setPanel(null)} />}{" "}
       {panel === "about" && <About onClose={() => setPanel(null)} />}{" "}
-      {panel === "help" && <HelpPanel onClose={() => setPanel(null)} />}{" "}
       {panel === "tech" && game && (
         <TechPanel
           game={game}
@@ -268,7 +265,7 @@ export default function App() {
             onClose={() => setDismissedResult(resultKey)}
           />
         )}{" "}
-      {notice && (
+      {screen === "menu" && notice && (
         <div className="toast" role="status">
           <span>{notice}</span>
           <button onClick={() => setNotice("")} aria-label="关闭通知">

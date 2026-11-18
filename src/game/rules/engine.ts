@@ -63,6 +63,24 @@ export const getTrainingRounds = (
   _city: City,
   _type: UnitType,
 ): number => s.options.quickMode === false ? SLOW_TRAINING_ROUNDS : 0;
+const techTiers = new Map(TECHNOLOGIES.map(({ id, tier }) => [id, tier]));
+
+export function getUnitUpkeep(
+  s: { options: Pick<GameOptions, "quickMode"> },
+  unit: Pick<Unit, "type">,
+): number {
+  if (s.options.quickMode !== false) return 0;
+  if (unit.type === "giant" || unit.type === "juggernaut") return 3;
+  const tech = unit.type === "dagger" || unit.type === "pirate" ? "diplomacy" : UNITS[unit.type].tech;
+  return tech ? techTiers.get(tech) ?? 0 : 0;
+}
+
+export function getActiveUpkeep(s: GameState, playerId: number): number {
+  if (s.options.quickMode !== false) return 0;
+  return s.units.reduce((total, unit) =>
+    unit.owner === playerId && !unit.upkeep ? total + getUnitUpkeep(s, unit) : total, 0);
+}
+
 export const getEmbassyCost = (_s: GameState, _id: number): number => 5;
 export const getUnitMaxHp = (u: Unit): number => u.maxHp;
 export const isAtPeace = (s: GameState, a: number, b: number): boolean =>
@@ -622,8 +640,10 @@ function movementIndex(s: GameState, player: Player) {
 }
 
 export function hasMovementAllowance(unit: Unit): boolean {
-  return (!unit.moved && !unit.attacked) ||
-    (unit.attacked && skill(unit, "escape") && !unit.escapeUsed);
+  return !unit.upkeep && (
+    (!unit.moved && !unit.attacked) ||
+    (unit.attacked && skill(unit, "escape") && !unit.escapeUsed)
+  );
 }
 
 /** Shared weighted search for movement highlighting and animation routes. */
@@ -752,6 +772,7 @@ export function getAttackTargets(s: GameState, id: string): Unit[] {
   if (
     !u ||
     u.owner !== s.currentPlayer ||
+    u.upkeep ||
     u.attacked ||
     (u.moved && !skill(u, "dash")) ||
     UNITS[u.type].attack === 0 ||
@@ -782,6 +803,7 @@ function combat(
   const damage = total ? Math.round((attack * ad.attack * 4.5) / total) : 0;
   const retaliation =
     d.hp > damage &&
+    !d.upkeep &&
     distance(a, d) <= dd.range &&
     !skill(d, "stiff") &&
     !skill(a, "surprise") &&
@@ -936,6 +958,7 @@ function harvestRestriction(s: GameState, tile: Tile | undefined, player: Player
     const unit = unitAt(s, tile);
     return hasTech(player, "navigation") &&
       unit?.owner === player.id &&
+      !unit.upkeep &&
       skill(unit, "water") &&
       !unit.moved &&
       !unit.attacked
@@ -977,6 +1000,12 @@ export function validateAction(s: GameState, a: Action): string | null {
   if ("unitId" in a) {
     const u = s.units.find((u) => u.id === a.unitId);
     if (!u || u.owner !== p.id) return "请选择己方部队。";
+    if (a.type === "REACTIVATE") {
+      const fee = getUnitUpkeep(s, u);
+      if (u.upkeep !== "reactivation" || fee === 0) return "该单位当前无法重新激活。";
+      return p.resources >= fee ? null : "星星不足。";
+    }
+    if (u.upkeep) return "单位因欠费已停用。";
     if (a.type === "MOVE")
       return Number.isInteger(a.to) &&
         s.tiles[a.to] &&
@@ -1335,11 +1364,33 @@ function exhaust(u: Unit): void {
   u.escapeUsed = true;
 }
 function canRecover(u: Unit): boolean {
-  return !u.moved && !u.attacked && u.hp < u.maxHp;
+  return !u.upkeep && !u.moved && !u.attacked && u.hp < u.maxHp;
 }
 function recover(s: GameState, u: Unit): void {
   u.hp = Math.min(u.maxHp, u.hp + (tileAt(s, u).owner === u.owner ? 4 : 2));
   exhaust(u);
+}
+function finishTurn(s: GameState, player: Player): void {
+  const disbanded = new Set<string>();
+  for (const unit of s.units) {
+    if (unit.owner !== player.id) continue;
+    if (canRecover(unit)) recover(s, unit);
+    if (s.options.quickMode !== false) continue;
+    if (unit.upkeep === "reactivation") {
+      disbanded.add(unit.id);
+    } else if (unit.upkeep === "suspended") {
+      if (unit.upkeepTransferRound === s.round) continue;
+      unit.upkeep = "reactivation";
+      delete unit.upkeepTransferRound;
+    } else {
+      const fee = getUnitUpkeep(s, unit);
+      if (fee === 0) continue;
+      if (player.resources >= fee) player.resources -= fee;
+      else unit.upkeep = "suspended";
+    }
+  }
+  if (disbanded.size) s.units = s.units.filter((unit) => !disbanded.has(unit.id));
+  nextTurn(s);
 }
 function removeDead(s: GameState, killer: Unit | undefined): void {
   for (const u of s.units.filter((u) => u.hp <= 0)) {
@@ -1478,7 +1529,7 @@ function recordStrike(
   });
 }
 function stompAfterMove(s: GameState, u: Unit, previousType: UnitType): void {
-  if (previousType !== "juggernaut" && u.type !== "juggernaut") return;
+  if (u.upkeep || (previousType !== "juggernaut" && u.type !== "juggernaut")) return;
   // A landing giant still uses its ship's attack for this impact.
   const ship = { ...u, type: "juggernaut" as const };
   for (const target of s.units) {
@@ -1628,6 +1679,10 @@ export function applyAction(source: GameState, a: Action): ActionResult {
     case "HEAL":
       recover(s, u!);
       break;
+    case "REACTIVATE":
+      p.resources -= getUnitUpkeep(s, u!);
+      delete u!.upkeep;
+      break;
     case "HEAL_OTHERS":
       for (const target of s.units)
         if (
@@ -1661,6 +1716,7 @@ export function applyAction(source: GameState, a: Action): ActionResult {
         (id) => id !== p.id,
       );
       t.owner = p.id;
+      if (t.upkeep === "suspended") t.upkeepTransferRound = s.round;
       t.homeCityId = u!.homeCityId;
       t.independent = false;
       t.capturedTurn =
@@ -1978,9 +2034,7 @@ export function applyAction(source: GameState, a: Action): ActionResult {
       p.embassies.push(a.targetPlayer);
       break;
     case "END_TURN":
-      for (const unit of s.units)
-        if (unit.owner === p.id && canRecover(unit)) recover(s, unit);
-      nextTurn(s);
+      finishTurn(s, p);
       break;
     case "RESIGN":
       for (const c of s.cities.filter((c) => c.owner === p.id)) {
@@ -2010,6 +2064,10 @@ function* unitSpecialActions(
   visible?: ReadonlySet<number>,
 ): Iterable<Action> {
   const unitId = unit.id;
+  if (unit.upkeep) {
+    if (unit.upkeep === "reactivation") yield { type: "REACTIVATE", unitId };
+    return;
+  }
   for (const type of [
     "CAPTURE",
     "HEAL",

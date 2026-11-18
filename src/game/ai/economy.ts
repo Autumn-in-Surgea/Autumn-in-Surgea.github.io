@@ -1,18 +1,51 @@
 import { BUILDINGS, TECHNOLOGIES, UNITS } from "../data/config";
 import { distance, isWater, neighbors } from "../map/generate";
 import {
-  canApplyAction, getBuildingLevel, getPendingUpgradeCity, getTechCost, getUpgradeRewards, getVisibleResource,
+  canApplyAction, getActiveUpkeep, getBuildingLevel, getEmbassyCost, getIncome, getPendingUpgradeCity,
+  getTechCost, getTrainingCost, getUnitUpkeep, getUpgradeRewards, getVisibleResource,
 } from "../rules/engine";
 import type { Action, BuildingId, City, GameState, Resource, UnitType } from "../types";
 import { getArmyTarget, type AiProfile } from "./profiles";
 import type { Knowledge, ThreatMap } from "./knowledge";
+
+export function getMaintenanceBudget(s: GameState, k: Knowledge) {
+  const treasury = s.players[k.player].resources;
+  if (s.options.quickMode !== false) return { available: treasury, recurringRoom: Infinity };
+  const active = getActiveUpkeep(k.view, k.player);
+  const queued = k.ownCities.reduce((total, city) => total +
+    (city.training ? getUnitUpkeep(s, { type: city.training.unitType }) : 0), 0);
+  return { available: treasury - active, recurringRoom: getIncome(k.view, k.player) - active - queued };
+}
+
+export function chooseReactivation(s: GameState, k: Knowledge, profile: AiProfile): Action | undefined {
+  if (s.options.quickMode !== false || !k.own.some((unit) => unit.upkeep === "reactivation")) return;
+  const available = s.players[k.player].resources - getActiveUpkeep(k.view, k.player);
+  let best: Action | undefined, bestScore = -Infinity;
+  for (const unit of k.own) {
+    if (unit.upkeep !== "reactivation") continue;
+    const fee = getUnitUpkeep(s, unit);
+    // Pay both the activation charge and this turn's recurring bill.
+    if (available < fee * 2) continue;
+    const action = { type: "REACTIVATE", unitId: unit.id } as const;
+    if (!canApplyAction(k.view, action)) continue;
+    if (!profile.coordinated) return action;
+    const city = k.cities.find((city) => distance(unit, city) === 0);
+    const nearestEnemy = k.enemies.reduce((nearest, enemy) => Math.min(nearest, distance(unit, enemy)), Infinity);
+    const score = (city && city.owner !== k.player ? 30 : 0) +
+      (nearestEnemy <= UNITS[unit.type].range + UNITS[unit.type].movement ? 15 : 0) +
+      UNITS[unit.type].cost + unit.hp / unit.maxHp * 5 - fee * 4;
+    if (score > bestScore) { best = action; bestScore = score; }
+  }
+  return best;
+}
 
 export function chooseCityReward(s: GameState, city: City, k: Knowledge, threats: ThreatMap, profile: AiProfile): Action {
   const choices = getUpgradeRewards(city);
   const danger = threats.cityPressure.get(city.id) ?? 0;
   let reward = choices[0];
   if (choices.includes("explore") && profile.coordinated && !danger &&
-    k.known.size < Math.min(s.tiles.length * 0.35, 120)) reward = "explore";
+    k.known.size < Math.min(s.tiles.length * 0.35, 120) &&
+    (s.options.quickMode !== false || getMaintenanceBudget(s, k).recurringRoom > 0)) reward = "explore";
   if (choices.includes("defense") && profile.coordinated && danger >= 6) reward = "defense";
   if (choices.includes("territory") && profile.coordinated) {
     const edgeResources = [...k.known].filter((id) => {
@@ -21,16 +54,22 @@ export function chooseCityReward(s: GameState, city: City, k: Knowledge, threats
     });
     if (edgeResources.length >= 3) reward = "territory";
   }
-  if (choices.includes("giant") && (s.options.mode === "conquest" || s.options.maxRounds - s.round > 12))
-    reward = "giant";
+  if (choices.includes("giant") && (s.options.mode === "conquest" || s.options.maxRounds - s.round > 12)) {
+    const fee = getUnitUpkeep(s, { type: "giant" });
+    const { available, recurringRoom } = getMaintenanceBudget(s, k);
+    if (fee === 0 || (fee <= available && fee <= recurringRoom)) reward = "giant";
+  }
   return { type: "CITY_REWARD", cityId: city.id, reward };
 }
 
 export function chooseEconomic(s: GameState, k: Knowledge, threats: ThreatMap, profile: AiProfile): Action | undefined {
   const pending = getPendingUpgradeCity(s);
   if (pending) return chooseCityReward(s, pending, k, threats, profile);
+  const reactivation = chooseReactivation(s, k, profile);
+  if (reactivation) return reactivation;
   const p = s.players[k.player], normal = profile.coordinated;
-  const cities = k.ownCities, units = k.own, armyTarget = getArmyTarget(s);
+  const { available, recurringRoom } = getMaintenanceBudget(s, k);
+  const cities = k.ownCities, units = k.own.filter((unit) => !unit.upkeep), armyTarget = getArmyTarget(s);
   const armySize = units.length + cities.filter((c) => c.training).length;
   const tiles = cities.flatMap((c) => c.territory.map((id) => s.tiles[id]))
     .filter((t) => t.owner === p.id && k.visible.has(t.id));
@@ -45,8 +84,8 @@ export function chooseEconomic(s: GameState, k: Knowledge, threats: ThreatMap, p
   const enemyNaval = k.enemies.filter((u) => UNITS[u.type].skills.includes("water"));
   const pressure = [...threats.cityPressure.values()].reduce((n, v) => n + v, 0);
   let best: Action | undefined, bestScore = 0;
-  const offer = (a: Action, score: number) => {
-    if (score <= bestScore || !canApplyAction(k.view, a)) return;
+  const offer = (a: Action, score: number, cost = 0) => {
+    if (score <= bestScore || (cost > 0 && cost > available) || !canApplyAction(k.view, a)) return;
     best = a; bestScore = score;
   };
   const growthValue = (c: City, pop: number, cost: number) => {
@@ -65,10 +104,12 @@ export function chooseEconomic(s: GameState, k: Knowledge, threats: ThreatMap, p
         ? ["warrior", "rider", "defender", "archer", "swordsman", "catapult", "knight", "mindBender", "cloak"]
         : ["warrior", "rider", "archer", "swordsman", "defender"];
       for (const type of trainable) {
-        const d = UNITS[type];
+        const cost = getTrainingCost(s, p.id, type);
+        const upkeep = getUnitUpkeep(s, { type });
+        if (upkeep > 0 && upkeep > recurringRoom) continue;
         let score = armySize < 2 ? 72 : 29;
         score += danger ? Math.min(38, danger * 3) : 0;
-        if (type === "warrior") score += p.resources < 5 ? 6 : 0;
+        if (type === "warrior") score += available < 5 ? 6 : 0;
         if (type === "rider") score += !enemies.length && counts("rider") < 2 ? 12 : 0;
         if (type === "swordsman") score += 13;
         if (type === "defender") score += normal && danger && !counts("defender") ? 30 : -15;
@@ -81,8 +122,8 @@ export function chooseEconomic(s: GameState, k: Knowledge, threats: ThreatMap, p
           k.cities.some((city) => city.owner !== null && city.owner !== p.id && distance(city, c) <= 8) ? 7 : -40;
         // Prefer a second military city over wasting every star on far-away
         // reinforcements when immediate civilian development is affordable.
-        if (!danger && armySize > cities.length && d.cost > p.resources * 0.7) score -= 8;
-        offer({ type: "TRAIN", cityId: c.id, unitType: type }, score);
+        if (!danger && armySize > cities.length && cost > available * 0.7) score -= 8;
+        offer({ type: "TRAIN", cityId: c.id, unitType: type }, score - upkeep * 2, cost);
       }
     }
   }
@@ -91,12 +132,12 @@ export function chooseEconomic(s: GameState, k: Knowledge, threats: ThreatMap, p
     if (getVisibleResource(s, t, p.id) === "starfish") offer({ type: "HARVEST", tileId: id }, 110);
   }
   const availableBuildings = Object.values(BUILDINGS).filter((b) =>
-    (!b.tech || p.technologies.includes(b.tech)) && b.cost <= p.resources);
+    (!b.tech || p.technologies.includes(b.tech)) && (b.cost === 0 || b.cost <= available));
   for (const t of empty) {
     const c = cityByTile.get(t.id);
     if (!c) continue;
     const resource = getVisibleResource(s, t, p.id);
-    if (resource) offer({ type: "HARVEST", tileId: t.id }, growthValue(c, 1, 2));
+    if (resource) offer({ type: "HARVEST", tileId: t.id }, growthValue(c, 1, 2), 2);
     const adjacent = neighbors(s.tiles, s.options.size, t).filter((v) => v.owner === p.id);
     for (const b of availableBuildings) {
       if (!b.terrain.includes(t.terrain) || (b.resource && b.resource !== resource)) continue;
@@ -119,11 +160,11 @@ export function chooseEconomic(s: GameState, k: Knowledge, threats: ThreatMap, p
       if (b.id.toLowerCase().includes("temple")) score = s.options.mode === "score" &&
         remaining >= 2 && units.length >= Math.min(3, armyTarget) ? 25 + Math.min(8, remaining) : 0;
       if (normal && pressure > 10 && !b.monument && population + c.population < c.level + 1) score -= 12;
-      offer({ type: "BUILD", tileId: t.id, building: b.id }, score);
+      offer({ type: "BUILD", tileId: t.id, building: b.id }, score, b.cost);
     }
     // Liquidate a small amount of timber only when it unlocks an urgent
     // defensive purchase; do not alternate planting/clearing for busywork.
-    if (normal && pressure > 4 && p.resources < 3 && t.terrain === "forest" && !resource)
+    if (normal && pressure > 4 && available < 3 && t.terrain === "forest" && !resource)
       offer({ type: "CLEAR_FOREST", tileId: t.id }, 65);
   }
   const resources = (r: Resource) => empty.filter((t) => getVisibleResource(s, t, p.id) === r).length;
@@ -165,14 +206,14 @@ export function chooseEconomic(s: GameState, k: Knowledge, threats: ThreatMap, p
     const cost = getTechCost(s, p.id, tech.id);
     if (normal) score -= cost * 0.55;
     if (units.length < 2) score -= 18;
-    if (pressure > 8 && p.resources - cost < 3) score -= 25;
+    if (pressure > 8 && available - cost < 3) score -= 25;
     if (remaining < 3) score = s.options.mode === "score" ? tech.tier * 8 : score;
-    offer({ type: "RESEARCH", techId: tech.id }, score);
+    offer({ type: "RESEARCH", techId: tech.id }, score, cost);
   }
   if (normal && p.technologies.includes("diplomacy") && !pressure && remaining > 5)
     for (const other of p.metPlayers)
-      offer({ type: "EMBASSY", targetPlayer: other }, Math.min(horizon * 4, 36));
-  if (p.resources >= 6 && p.technologies.includes("roads") && cities.length > 1) {
+      offer({ type: "EMBASSY", targetPlayer: other }, Math.min(horizon * 4, 36), getEmbassyCost(s, p.id));
+  if (available >= 6 && p.technologies.includes("roads") && cities.length > 1) {
     const capital = cities.find((c) => c.capitalOf === p.id) ?? cities[0];
     for (const c of cities.filter((c) => !c.connected && c.id !== capital.id)) {
       let pos = s.tiles[c.y * s.options.size + c.x];
@@ -184,7 +225,7 @@ export function chooseEconomic(s: GameState, k: Knowledge, threats: ThreatMap, p
             !isWater(t) && t.terrain !== "mountain")
           .sort((a, b) => distance(a, capital) - distance(b, capital) || Number(b.road) - Number(a.road))[0];
         if (!next || distance(next, capital) > distance(pos, capital)) break;
-        offer({ type: "ROAD", tileId: next.id }, normal ? 25 : 16);
+        offer({ type: "ROAD", tileId: next.id }, normal ? 25 : 16, 3);
         pos = next;
       }
     }

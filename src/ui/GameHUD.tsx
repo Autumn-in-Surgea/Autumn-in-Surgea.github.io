@@ -1,7 +1,7 @@
 import { useLayoutEffect, useMemo, useRef } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { ArrowUp, BookOpen, Building2, Check, Handshake, Settings2, Trophy, UsersRound, X } from "lucide-react";
-import { getIncome, getScore } from "../game";
+import { getActiveUpkeep, getIncome, getScore } from "../game";
 import type { Action, GameState } from "../game/types";
 import { useGameStore } from "../store/gameStore";
 import { ResourceIcon } from "./Common";
@@ -59,8 +59,9 @@ export function GameHUD({
   }, [currentSelection]);
   const selection = currentSelection ?? lastSelection.current;
   const active = currentSelection !== null;
-  const { income, cities, units, score } = useMemo(() => ({
+  const { income, upkeep, cities, units, score } = useMemo(() => ({
     income: getIncome(game, 0),
+    upkeep: getActiveUpkeep(game, 0),
     cities: game.cities.filter(city => city.owner === 0).length,
     units: game.units.filter(unit => unit.owner === 0).length,
     score: getScore(game, 0),
@@ -82,10 +83,13 @@ export function GameHUD({
               {game.options.mode === "score" && <span>/{game.options.maxRounds}</span>}
             </div>
           </div>
-          <div className="hud-stat hud-stars" aria-label={`${game.players[0].resources} 星星，每回合收入 ${income}`}>
+          <div className="hud-stat hud-stars" aria-label={`${game.players[0].resources} 星星，每回合收入 ${income}${upkeep ? `，回合结束维护费 ${upkeep}` : ""}`}>
             <ResourceIcon size={18} />
             <strong data-wide-count={game.players[0].resources >= 10000}>{game.players[0].resources}</strong>
-            <span className="hud-yield">+{income}</span>
+            <span className="hud-yield">
+              <span>+{income}</span>
+              {upkeep > 0 && <span className="hud-upkeep" title={`回合结束维护费 ${upkeep} 星`}>−{upkeep}</span>}
+            </span>
           </div>
           <div className="hud-stat" aria-label={`${cities} 座城市`}>
             <Building2 size={17} aria-hidden="true" /><strong data-wide-count={cities >= 100}>{cities}</strong>

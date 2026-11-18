@@ -1,11 +1,11 @@
 import type { CSSProperties, ReactNode } from "react";
 import {
   Award, BrainCircuit, Compass, Crosshair, Eye, Flag, Hammer, Heart,
-  Route, Shield, Sprout, Swords, Trash2, Trees, Users, Waves, Zap,
+  RotateCcw, Route, Shield, Sprout, Swords, Trash2, Trees, Users, Waves, Zap,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
-  BUILDINGS, UNITS, getCityIncome, getCityUnitCount, getMovement, getTrainingCost, getTrainingRounds,
+  BUILDINGS, UNITS, getCityIncome, getCityUnitCount, getMovement, getTrainingCost, getTrainingRounds, getUnitUpkeep,
   getUpgradeRewards, getVisibleResource, hasTech, isTerritoryResourceHarvestable, isUnitVisible,
   populationNeeded, previewCombat, validateAction,
 } from "../game";
@@ -167,9 +167,16 @@ function tileManagement(game: GameState, tile: Tile) {
   return candidates;
 }
 
-function unitCommands(game: GameState, unit: Unit, tile: Tile, city?: City | null) {
-  const commands: Command[] = [];
+function unitCommands(game: GameState, unit: Unit, tile: Tile, city?: City | null): Command[] {
   const unitId = unit.id;
+  if (unit.upkeep === "suspended") return [];
+  if (unit.upkeep === "reactivation") {
+    return [{
+      action: { type: "REACTIVATE", unitId }, label: "重新激活", icon: RotateCcw,
+      cost: getUnitUpkeep(game, unit), note: "立即恢复行动，回合结束时照常扣除维护费。", variant: "accent",
+    }];
+  }
+  const commands: Command[] = [];
   const skills = UNITS[unit.type].skills;
   if (city && city.owner !== 0 && !skills.includes("water") && (city.owner === null || !skills.includes("infiltrate"))) {
     commands.push({ action: { type: "CAPTURE", unitId }, label: "占领", icon: Flag, variant: "accent" });
@@ -361,13 +368,18 @@ export function SelectionControls({
   const trainingStatus = training
     ? `${UNITS[training.unitType].name} · ${remaining > 0 ? `训练中 ${remaining} 回合` : "等待交付"}`
     : undefined;
+  const upkeepStatus = unitVisible?.owner === 0 && unitVisible.upkeep === "suspended"
+    ? "欠费停用 · 下回合可激活"
+    : unitVisible?.owner === 0 && unitVisible.upkeep === "reactivation"
+      ? "本回合未激活将解散" : undefined;
+  const actionStatus = trainingStatus ?? upkeepStatus;
 
   return (
     <>
       <div className="hud-selection-actions" role="group" aria-label="所选对象操作">
         {commands.map(commandButton)}
-        {(!commands.length || trainingStatus) && (
-          <span className="hud-selection-empty">{trainingStatus ?? (preview ? "再点目标执行行动" : "暂无可用操作")}</span>
+        {(!commands.length || actionStatus) && (
+          <span className="hud-selection-empty">{actionStatus ?? (preview ? "再点目标执行行动" : "暂无可用操作")}</span>
         )}
       </div>
       <div className="hud-selection-details" role="region" tabIndex={0} aria-label="所选对象详情">
@@ -409,10 +421,12 @@ function selectionDetails(
   if (!explored) return <span className="hud-selection-description">派单位探索后可查看地形。</span>;
   if (unit) {
     const def = UNITS[unit.type];
+    const upkeep = unit.owner === 0 ? getUnitUpkeep(game, unit) : 0;
     return (
       <>
         <Details rows={[
           ["生命", `${unit.hp} / ${unit.maxHp}`],
+          ...(upkeep ? [["维护费", unit.upkeep ? "0 星" : `${upkeep} 星 / 回合`] as const] : []),
           ["攻击", def.attack],
           ["防御", def.defense],
           ["移动", getMovement(game, unit)],

@@ -1,8 +1,8 @@
 import { UNITS } from "../data/config";
 import { distance } from "../map/generate";
-import { applyAction, canApplyAction, getPendingUpgradeCity, getVisibleResource } from "../rules/engine";
+import { applyAction, canApplyAction, getPendingUpgradeCity, getUnitUpkeep, getVisibleResource } from "../rules/engine";
 import type { Action, GameState, Unit } from "../types";
-import { chooseCityReward, chooseEconomic } from "./economy";
+import { chooseCityReward, chooseEconomic, chooseReactivation, getMaintenanceBudget } from "./economy";
 import { buildThreatMap, incomingDamage, observe } from "./knowledge";
 import { defensiveOrders, navigationField } from "./navigation";
 import { AI_PROFILES, getAiBudget, getArmyTarget } from "./profiles";
@@ -92,6 +92,10 @@ export function runAiTurnDetailed(input: GameState, maxActions?: number,
   // Resolve free city rewards before ordering armies; a giant can join this
   // turn's unit pass and emergency walls protect the city immediately.
   settleRewards();
+  while (active()) {
+    const reactivation = chooseReactivation(s, k, profile);
+    if (!reactivation || !perform(reactivation, "economy")) break;
+  }
   const guards = defensiveOrders(s, k, threats);
   let focus = profile.coordinated ? chooseFocus(k) : undefined;
   const priority = (u: Unit) => {
@@ -101,8 +105,9 @@ export function runAiTurnDetailed(input: GameState, maxActions?: number,
       (attack ? attack.score + UNITS[u.type].range * 8 : 0) +
       (u.type === "mindBender" ? 15 : 0);
   };
-  const priorities = new Map(k.own.map((u) => [u.id, priority(u)]));
-  const unitIds = [...k.own].sort((a, b) => profile.coordinated
+  const readyUnits = k.own.filter((unit) => !unit.upkeep);
+  const priorities = new Map(readyUnits.map((u) => [u.id, priority(u)]));
+  const unitIds = readyUnits.sort((a, b) => profile.coordinated
     ? priorities.get(b.id)! - priorities.get(a.id)! || a.id.localeCompare(b.id)
     : 0).map((u) => u.id);
 
@@ -141,9 +146,14 @@ export function runAiTurnDetailed(input: GameState, maxActions?: number,
         ? ["rammer", "bomber", "scout"]
         : profile.coordinated && navy.length >= 3 && !navy.some((n) => n.type === "bomber")
           ? ["bomber", "scout", "rammer"] : ["scout", "rammer", "bomber"];
-      for (const unitType of upgrades)
-        if (canApplyAction(k.view, { type: "UPGRADE_NAVAL", unitId, unitType }) &&
-          perform({ type: "UPGRADE_NAVAL", unitId, unitType })) break;
+      const { available, recurringRoom } = getMaintenanceBudget(s, k);
+      const previousUpkeep = getUnitUpkeep(s, u);
+      for (const unitType of upgrades) {
+        const extraUpkeep = getUnitUpkeep(s, { type: unitType }) - previousUpkeep;
+        if (UNITS[unitType].cost + extraUpkeep > available || extraUpkeep > recurringRoom) continue;
+        const action = { type: "UPGRADE_NAVAL", unitId, unitType } as const;
+        if (canApplyAction(k.view, action) && perform(action)) break;
+      }
     }
     if (special(unitId)) continue;
     u = k.units.get(unitId);

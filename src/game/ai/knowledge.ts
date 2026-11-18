@@ -57,6 +57,9 @@ export function buildThreatMap(s: GameState, k: Knowledge, detailed: boolean): T
   const byTile = new Map<number, string[]>();
   const n = s.options.size;
   for (const enemy of k.enemies) {
+    // A suspended enemy cannot respond on its upcoming turn. A unit due for
+    // reactivation might be paid before it acts, so keep it in the estimate.
+    if (enemy.upkeep === "suspended") continue;
     const def = UNITS[enemy.type];
     if (!def.attack && !def.skills.includes("convert")) continue;
     const positions = [enemy.y * n + enemy.x];
@@ -74,7 +77,7 @@ export function buildThreatMap(s: GameState, k: Knowledge, detailed: boolean): T
           technologies: ["climbing", "fishing", "sailing"],
         } : p),
         units: k.view.units.map((u) => u.id === enemy.id
-          ? { ...u, moved: false, attacked: false, escapeUsed: false } : u),
+          ? { ...u, moved: false, attacked: false, escapeUsed: false, upkeep: undefined } : u),
       };
       positions.push(...getReachableTiles(nextTurn, enemy.id));
     }
@@ -96,6 +99,7 @@ export function buildThreatMap(s: GameState, k: Knowledge, detailed: boolean): T
   for (const c of k.ownCities) {
     let pressure = 0;
     for (const e of k.enemies) {
+      if (e.upkeep === "suspended") continue;
       const def = UNITS[e.type];
       const d = distance(e, c);
       if (d <= def.movement + def.range + 1)

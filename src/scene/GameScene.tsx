@@ -1273,7 +1273,8 @@ function World({
             offset={offset}
             selected={selectedUnit === record.unit.id}
             targeted={focusedTarget === record.unit.id}
-            actionsSpent={!preview && record.unit.owner === 0 && !availableUnits?.has(record.unit.id)}
+            actionsSpent={!preview && record.unit.owner === 0 &&
+              (!!record.unit.upkeep || !availableUnits?.has(record.unit.id))}
             onFinish={finish}
             onClick={onTileClick}
             reducedMotion={reducedMotion}

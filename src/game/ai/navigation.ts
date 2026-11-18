@@ -33,7 +33,7 @@ export function defensiveOrders(s: GameState, k: Knowledge, threats: ThreatMap):
     .sort((a, b) => (threats.cityPressure.get(b.id)! + (b.capitalOf === k.player ? 5 : 0)) -
       (threats.cityPressure.get(a.id)! + (a.capitalOf === k.player ? 5 : 0)));
   for (const city of endangered) {
-    const candidates = k.own.filter((u) => !orders.has(u.id) && !UNITS[u.type].skills.includes("water") &&
+    const candidates = k.own.filter((u) => !u.upkeep && !orders.has(u.id) && !UNITS[u.type].skills.includes("water") &&
       UNITS[u.type].defense >= 1 && !UNITS[u.type].skills.includes("infiltrate") &&
       // A unit already besieging an enemy settlement must keep its capture.
       !k.cities.some((c) => c.owner !== k.player && distance(c, u) === 0) && distance(u, city) <= 7)

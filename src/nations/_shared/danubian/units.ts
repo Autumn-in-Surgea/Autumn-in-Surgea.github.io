@@ -26,13 +26,13 @@ function plinth({ enamel }: Sculpture, width: number, depth = width) {
 }
 
 function pavise({ body, enamel }: Sculpture) {
-  const width = .28;
-  const height = .38;
-  const x = -.147;
-  const z = -.112;
-  body.part("bevel", brass, x, .354, z, width, height, .059);
-  enamel.part("bevel", enamelShade, x, .354, z - .029, width * .85, height * .9, .028);
-  body.part("gem", ivory, x, .354, z - .052, width * .41, height * .6, .039);
+  const x = -.146;
+  const y = .404;
+  const z = -.139;
+  body.part("bevel", brass, x, y, z, .237, .342, .046);
+  enamel.part("bevel", enamelShade, x, y, z - .022, .21, .312, .019);
+  body.part("bevel", steel, x, y, z - .036, .033, .253, .014);
+  body.part("octagon", brass, x, y + .018, z - .041, .06, .025, .06, Math.PI / 2);
 }
 
 function sabre(body: Miniature, x: number, y: number, blade: number, side: number) {
@@ -45,134 +45,204 @@ function sabre(body: Miniature, x: number, y: number, blade: number, side: numbe
 }
 
 function bow({ body }: Sculpture) {
-  const grip: [number, number, number] = [.251, .395, -.133];
-  const upper: [number, number, number] = [.14, .698, -.089];
-  const lower: [number, number, number] = [.14, .155, -.089];
-  const shoulder: [number, number, number] = [.257, .545, -.133];
-  const foot: [number, number, number] = [.236, .275, -.13];
-  body.beam(ivory, [.142, .351, -.062], grip, .055);
+  const grip: [number, number, number] = [.208, .421, -.158];
+  const upper: [number, number, number] = [.118, .733, -.125];
+  const lower: [number, number, number] = [.108, .153, -.125];
+  const shoulder: [number, number, number] = [.229, .555, -.154];
+  const foot: [number, number, number] = [.216, .287, -.154];
   body.beam(wood, grip, shoulder, .037);
   body.beam(brass, shoulder, upper, .028);
   body.beam(wood, grip, foot, .037);
   body.beam(brass, foot, lower, .028);
   body.beam(ivory, upper, lower, .012);
-  body.beam(walnut, [-.088, .267, .114], [.065, .526, .159], .08, .075);
-  for (const dx of [-.023, .018])
-    body.beam(ivory, [.048 + dx, .508, .156], [.097 + dx, .608, .17], .017);
+  body.beam(walnut, [-.076, .351, .121], [.061, .569, .146], .066, .060);
+  body.beam(brass, [.041, .541, .149], [.064, .576, .149], .076, .063);
+  for (const dx of [-.012, .021])
+    body.beam(ivory, [.046 + dx, .561, .151], [.074 + dx, .649, .163], .014);
 }
 
-const pikeGrey = "#718693";
-const capBlue = "#627988";
-const officerBlue = "#384c5b";
-const madder = "#954f48";
-const leather = "#443c35";
-const skin = "#dfc39e";
+const pikeGrey = "#587c90";
+const capBlue = "#4d7087";
+const officerBlue = "#2b465f";
+const trouserBlue = "#344c64";
+const collarRed = "#94483f";
+const bootLeather = "#322c31";
+const harness = "#d0a978";
+const warmCanvas = "#dfc299";
+const skin = "#edc4a3";
+const beardBrown = "#655149";
 
-// The folded M1908 field cap, dark visor and round cockade are large enough
-// to read in profile. One blank honey-coloured facet stands for the face.
 type CapStyle = "field" | "officer" | "alpine" | "hussar" | "lancer";
+type Point = [number, number, number];
 
-function cappedHead(body: Miniature, style: CapStyle, y: number, z = 0, scale = 1) {
+function cappedHead(body: Miniature, style: CapStyle, y: number, z = 0,
+  scale = 1, beard?: string) {
   const part = (shape: Parameters<Miniature["part"]>[0], color: string,
     x: number, dy: number, dz: number, w: number, h: number, d: number, rx = 0, ry = 0, rz = 0) =>
     body.part(shape, color, x * scale, y + dy * scale, z + dz * scale,
       w * scale, h * scale, d * scale, rx, ry, rz);
 
-  part("octagon", skin, 0, .004, -.007, .17, .153, .169);
-  if (style === "alpine") {
-    part("octagon", "#546258", -.006, .065, -.009, .269, .023, .233, 0, .02, .085);
-    part("crown", "#69786b", 0, .099, .002, .177, .101, .164);
-    part("gem", officerBlue, -.075, .149, .028, .071, .143, .063, -.19, 0, -.22);
-    return;
-  }
+  part("bevel", skin, 0, .005, -.009, .124, .125, .123);
+  if (beard) part("bevel", beard, 0, -.042, -.054, .096, .053, .058, .16);
 
-  part("octagon", leather, 0, .069, -.027, .195, .022, .176, .06);
   if (style === "hussar" || style === "lancer") {
     const shako = style === "hussar";
-    part("octagon", shako ? madder : officerBlue, 0, .125, .003,
-      .193, shako ? .148 : .121, .176);
+    part("bevel", bootLeather, 0, .060, -.051, .148, .016, .143, .09);
+    part("octagon", shako ? collarRed : officerBlue, 0, .108, .004,
+      .145, shako ? .100 : .089, .145);
     if (shako) {
-      part("octagon", officerBlue, 0, .196, .003, .204, .021, .186);
-      part("gem", ivory, -.013, .225, -.042, .051, .096, .057, -.17);
+      part("octagon", officerBlue, 0, .166, .005, .166, .020, .157);
+      part("gem", ivory, -.049, .171, -.027, .039, .093, .041, -.22, 0, -.18);
     } else {
-      part("hip", madder, 0, .190, .008, .162, .065, .160, Math.PI, .55);
-      part("bevel", madder, 0, .223, .008, .166, .019, .166, 0, .55);
+      part("hip", "#556d82", 0, .157, .003, .143, .037, .141, Math.PI, .72);
+      part("bevel", officerBlue, 0, .182, .003, .179, .015, .177, 0, .72);
     }
-    part("octagon", brass, 0, .128, -.086, .055, .018, .055, Math.PI / 2);
     return;
   }
 
-  const crown = style === "officer" ? officerBlue : capBlue;
-  const fold = style === "officer" ? "#465a67" : "#8295a0";
-  const point = (x: number, dy: number, dz: number): [number, number, number] =>
+  if (style === "officer") {
+    part("octagon", bootLeather, 0, .062, -.043, .154, .018, .153, .10);
+    part("octagon", collarRed, 0, .084, 0, .150, .024, .144);
+    part("octagon", officerBlue, 0, .116, .006, .184, .048, .162, -.13);
+    return;
+  }
+
+  // Short peak and folded side flaps, with seams picked out in a lighter wool.
+  const alpine = style === "alpine";
+  const crown = alpine ? "#61766f" : capBlue;
+  const fold = alpine ? "#91a393" : "#86a8ba";
+  part("bevel", bootLeather, 0, .062, -.059, .145, .019, .133, .15);
+  const point = (x: number, dy: number, dz: number): Point =>
     [x * scale, y + dy * scale, z + dz * scale];
-  const outline = [[-.045,-.099],[.045,-.099],[.092,-.056],[.098,.032],
-    [.063,.087],[-.063,.087],[-.098,.032],[-.092,-.056]];
-  const lower = outline.map(([x, dz]) => point(x, .067, dz));
-  const flap = outline.map(([x, dz]) => point(x, .104 + dz * .14, dz));
-  const ridge = outline.map(([x, dz]) => point(x * .77, .156 - dz * .18, dz * .93));
-  const crease = point(0, .137, .006);
+  const outline = [[-.045,-.075],[.045,-.075],[.074,-.049],[.076,.033],
+    [.050,.070],[-.050,.070],[-.076,.033],[-.074,-.049]];
+  const lower = outline.map(([x, dz]) => point(x, .068, dz));
+  const flap = outline.map(([x, dz]) => point(x, .096 + dz * .13, dz));
+  const ridge = outline.map(([x, dz]) => point(x * .75, .138 - dz * .18, dz * .93));
+  const crease = point(0, .129, .006);
   for (let i = 0; i < outline.length; i++) {
     const j = (i + 1) % outline.length;
     body.face(fold, [lower[i], flap[i], flap[j], lower[j]]);
     body.face(crown, [flap[i], ridge[i], ridge[j], flap[j]]);
     body.face(crown, [ridge[j], ridge[i], crease]);
   }
-  part("octagon", brass, 0, .126, -.100, .05, .014, .05, Math.PI / 2);
+  if (alpine) part("bevel", "#a58b62", -.067, .125, .023, .021, .085, .027, .42, 0, -.3);
+}
+
+function fieldJacket(body: Miniature, wool: string, waist: number, z: number, scale = 1) {
+  const outline = [[-.36, -.5], [.36, -.5], [.5, -.33], [.5, .33],
+    [.36, .5], [-.36, .5], [-.5, .33], [-.5, -.33]];
+  const profile = [
+    [-.064, .188, .143], [0, .150, .127], [.105, .204, .151], [.143, .175, .132],
+  ];
+  const rings = profile.map(([y, w, d]) => outline.map(([x, dz]): Point =>
+    [x * w * scale, waist + y * scale, z + dz * d * scale]));
+  body.face(wool, rings[0]);
+  for (let ring = 1; ring < rings.length; ring++) {
+    for (let i = 0; i < outline.length; i++) {
+      const j = (i + 1) % outline.length;
+      body.face(wool, [rings[ring - 1][i], rings[ring][i], rings[ring][j], rings[ring - 1][j]]);
+    }
+  }
+  body.face(wool, rings[rings.length - 1].slice().reverse());
+  body.part("octagon", collarRed, 0, waist + .151 * scale, z, .108 * scale, .026 * scale, .107 * scale);
+  body.part("bevel", bootLeather, 0, waist + .003 * scale, z, .160 * scale, .028 * scale, .145 * scale);
+  body.box(harness, 0, waist + .003 * scale, z - .076 * scale, .037 * scale, .025 * scale, .014 * scale);
+  body.box(harness, 0, waist + .071 * scale, z - .077 * scale, .011 * scale, .075 * scale, .011 * scale);
+}
+
+function fieldLegs(body: Miniature, waist: number, scale = 1) {
+  const floor = .119;
+  const shin = floor + .089 * scale;
+  // Match the centre spacing to the sole width so the boots meet at the seam.
+  for (const side of [-1, 1]) {
+    const x = side * .035 * scale;
+    body.part("bevel", trouserBlue, x, (waist + shin) / 2, 0,
+      .069 * scale, waist - shin, .082 * scale, .065);
+    body.part("bevel", bootLeather, x, floor + .064 * scale, -.013 * scale,
+      .068 * scale, .105 * scale, .074 * scale);
+    body.part("bevel", bootLeather, x, floor + .022 * scale, -.028 * scale,
+      .070 * scale, .041 * scale, .111 * scale);
+    body.part("bevel", harness, x, shin + .005 * scale, -.016 * scale,
+      .067 * scale, .017 * scale, .077 * scale);
+  }
+}
+
+function arm(body: Miniature, wool: string, from: Point, elbow: Point, hand: Point, scale = 1, glove = skin) {
+  body.beam(wool, from, elbow, .061 * scale, .072 * scale);
+  body.beam(wool, elbow, hand, .055 * scale, .059 * scale);
+  body.part("bevel", wool, ...from, .074 * scale, .061 * scale, .075 * scale);
+  body.part("octagon", glove, ...hand, .045 * scale, .053 * scale, .048 * scale);
 }
 
 function infantry(sculpt: Sculpture, type: Infantry) {
   const { body, enamel } = sculpt;
-  const longCoat = type === "cloak" || type === "mindBender";
-  const cloth = type === "dagger" || type === "swordsman" ? officerBlue : pikeGrey;
+  const wool = type === "dagger" || type === "swordsman" ? officerBlue
+    : type === "archer" ? "#53726d" : type === "mindBender" ? "#577494" : pikeGrey;
   plinth(sculpt, .49);
+  fieldLegs(body, .437);
+  fieldJacket(body, wool, .438, .008);
+
+  const hands: Record<Infantry, [Point, Point]> = {
+    warrior: [[-.102, .387, -.072], [.148, .418, -.087]],
+    swordsman: [[-.116, .389, -.045], [.151, .419, -.094]],
+    defender: [[-.134, .413, -.112], [.155, .428, -.068]],
+    archer: [[-.080, .482, -.139], [.208, .421, -.158]],
+    mindBender: [[-.104, .388, -.059], [.162, .437, -.095]],
+    cloak: [[-.105, .384, -.026], [.112, .395, -.039]],
+    dagger: [[-.147, .367, -.094], [.143, .362, -.094]],
+  };
   for (const side of [-1, 1]) {
-    const x = side * .061;
-    body.part("octagon", officerBlue, x, .235, .004, .087, .154, .099);
-    body.part("bevel", leather, x, .166, -.02, .098, .09, .137);
-    body.part("octagon", cloth, side * .123, .396, -.004, .082, .15, .093, -.18, 0, side * .13);
-    body.part("octagon", skin, side * .138, .326, -.023, .063, .064, .066);
+    const hand = hands[type][side === -1 ? 0 : 1];
+    arm(body, wool, [side * .091, .548, .009], [side * .127, .466, .008], hand);
+    body.part("bevel", warmCanvas, side * .076, .568, .009, .044, .015, .065, 0, 0, side * -.15);
   }
 
-  body.part("hip", cloth, 0, longCoat ? .337 : .343, .012,
-    longCoat ? .299 : .258, longCoat ? .241 : .159, .202);
-  body.part("bevel", cloth, 0, .413, .006, .220, .165, .164);
-  enamel.part("octagon", enamelLight, 0, .353, .003, .239, .035, .184);
-  body.part("octagon", madder, 0, .493, .001, .153, .037, .129);
+  const hasLongCoat = type === "cloak" || type === "mindBender";
+  if (hasLongCoat) {
+    for (const side of [-1, 1])
+      body.part("bevel", wool, side * .068, .371, .021, .085, .157, .153, .035, 0, side * .10);
+  }
   const cap = type === "archer" ? "alpine"
     : type === "mindBender" || type === "swordsman" ? "officer" : "field";
-  cappedHead(body, cap, .557, -.004);
+  const beard = type === "swordsman" ? beardBrown : type === "mindBender" ? "#aaa094" : undefined;
+  cappedHead(body, cap, .644, 0, 1, beard);
 
   switch (type) {
     case "warrior":
-      body.beam(walnut, [.141, .277, -.078], [.19, .638, -.099], .05);
-      body.part("bevel", brass, .188, .603, -.096, .086, .102, .076, 0, 0, -.13);
-      body.beam(ivory, [-.093, .467, -.082], [.074, .356, -.088], .034, .016);
+      body.beam(walnut, [.144, .324, -.083], [.182, .659, -.121], .031);
+      body.part("bevel", steel, .200, .641, -.122, .098, .075, .049, 0, 0, -.13);
+      body.part("bevel", ivory, .242, .636, -.122, .021, .061, .043, 0, 0, -.13);
+      body.beam(warmCanvas, [-.071, .553, -.072], [.059, .449, -.076], .024, .015);
+      body.part("bevel", harness, -.085, .422, .074, .061, .062, .067);
       break;
     case "swordsman":
-      sabre(body, .147, .348, .373, 1);
-      body.part("bevel", madder, 0, .361, -.088, .177, .038, .018, 0, 0, -.08);
+      sabre(body, .151, .394, .360, 1);
+      body.beam(bootLeather, [-.104, .430, .017], [-.153, .272, .093], .033, .028);
       break;
     case "defender":
       pavise(sculpt);
-      body.beam(wood, [.162, .126, .014], [.173, .663, -.032], .029);
-      body.part("gem", steel, .174, .708, -.038, .069, .139, .043);
+      body.beam(wood, [.146, .136, -.025], [.168, .712, -.101], .028);
+      body.part("gem", steel, .169, .748, -.106, .059, .116, .039);
       break;
     case "archer":
       bow(sculpt);
+      body.beam(warmCanvas, [.074, .547, -.072], [-.062, .448, -.079], .022, .015);
       break;
     case "mindBender":
-      body.beam(walnut, [.168, .128, -.083], [.172, .666, -.083], .034);
-      body.part("octagon", brass, .172, .641, -.083, .084, .059, .084);
-      body.part("gem", ivory, .172, .713, -.083, .102, .135, .102);
+      body.beam(walnut, [.161, .138, -.089], [.162, .738, -.096], .032);
+      body.part("octagon", brass, .162, .711, -.096, .068, .043, .065);
+      body.part("gem", ivory, .162, .759, -.096, .090, .104, .090);
+      body.beam(warmCanvas, [.045, .548, -.074], [.080, .453, -.079], .024, .016);
       break;
     case "cloak":
-      enamel.part("hip", enamelShade, 0, .379, .059, .327, .260, .206, .11);
-      body.part("octagon", officerBlue, 0, .510, .012, .189, .074, .163);
+      enamel.part("hip", enamelShade, 0, .445, .061, .275, .255, .174, .10);
+      body.part("bevel", officerBlue, 0, .560, .065, .136, .090, .131);
       break;
     case "dagger":
-      sabre(body, .142, .303, .164, 1);
-      sabre(body, -.142, .316, .155, -1);
+      sabre(body, .143, .337, .169, 1);
+      sabre(body, -.147, .342, .157, -1);
+      body.part("bevel", collarRed, 0, .509, -.077, .109, .029, .021, 0, 0, -.08);
       break;
   }
 }
@@ -185,37 +255,41 @@ function cavalry(sculpt: Sculpture, knight: boolean) {
     for (const z of [-.134, .141]) {
       const hoof = z + (x > 0 ? .025 : -.025);
       body.beam(horse, [x, .327, z], [x, .157, hoof], .065);
-      body.box(leather, x, .142, hoof, .07, .043, .083);
+      body.box(bootLeather, x, .142, hoof, .07, .043, .083);
     }
   }
   body.part("bevel", horse, 0, .335, 0, .234, .169, .422);
   body.part("bevel", horse, 0, .454, -.155, .139, .272, .151, -.41);
   body.part("bevel", horse, 0, .548, -.232, .131, .121, .223, .16);
-  body.part("bevel", leather, 0, .471, -.105, .062, .220, .106, -.42);
+  body.beam(bootLeather, [0, .396, -.080], [0, .583, -.160], .049, .070);
   for (const x of [-.04, .04])
-    body.part("spire4", leather, x, .63, -.175, .045, .085, .052);
-  body.part("bevel", leather, 0, .306, .221, .066, .167, .094, -.38);
-  body.part("bevel", walnut, 0, .534, -.29, .137, .084, .074, .16);
+    body.part("spire4", horse, x, .618, -.177, .032, .073, .041);
+  body.part("bevel", bootLeather, 0, .306, .221, .054, .169, .082, -.38);
+  body.part("bevel", bootLeather, 0, .535, -.285, .137, .055, .033, .24);
+  body.part("bevel", brass, 0, .518, -.311, .143, .012, .014);
+  body.part("bevel", bootLeather, 0, .430, .079, .144, .042, .149);
 
   // A single broad saddlecloth carries the faction colour on the flank.
   enamel.part("bevel", enamelLight, 0, .37, .048, .249, .116, .226);
-  body.part("bevel", officerBlue, 0, .519, .052, .185, .168, .142);
-  body.part("octagon", madder, 0, .603, .045, .117, .03, .116);
+  const wool = knight ? "#355b74" : officerBlue;
+  fieldJacket(body, wool, .466, .052, .97);
   for (const side of [-1, 1]) {
-    body.part("bevel", madder, side * .104, .421, .02, .066, .106, .101);
-    body.part("bevel", leather, side * .124, .323, .006, .064, .143, .085, -.18);
-    body.beam(officerBlue, [side * .091, .558, .039], [side * .103, .49, -.042], .063);
-    body.part("octagon", skin, side * .105, .484, -.052, .05, .052, .052);
+    body.part("bevel", knight ? trouserBlue : collarRed, side * .087, .425, .021, .062, .109, .100, -.25);
+    body.part("bevel", bootLeather, side * .120, .340, .004, .054, .123, .068, -.18);
+    body.part("bevel", brass, side * .136, .294, -.020, .026, .029, .052);
+    arm(body, wool, [side * .094, .566, .052], [side * .136, .504, .038],
+      [side * .109, .485, -.053], .93, warmCanvas);
+    body.beam(bootLeather, [side * .109, .485, -.053], [side * .063, .518, -.276], .013);
+    body.part("bevel", harness, side * .081, .583, .052, .036, .015, .065);
   }
-  cappedHead(body, knight ? "lancer" : "hussar", .649, .044, .86);
+  cappedHead(body, knight ? "lancer" : "hussar", .657, .040, .94);
   if (knight) {
     body.beam(wood, [.109, .334, .128], [.156, .729, -.236], .031);
     body.part("gem", steel, .160, .764, -.271, .056, .128, .052, -.76);
     enamel.part("bevel", enamelLight, .148, .671, -.142, .023, .073, .151, -.19);
   } else {
-    for (const y of [.515, .556])
-      body.box(brass, 0, y, -.024, .119, .017, .015);
-    body.beam(walnut, [.102, .480, -.056], [.056, .540, -.260], .018);
+    for (const y of [.509, .531, .553])
+      body.box(harness, 0, y, -.024, .111, .010, .018);
   }
 }
 
@@ -239,21 +313,19 @@ function siegeEngine(sculpt: Sculpture) {
 }
 
 function giant(sculpt: Sculpture) {
-  const { body, enamel } = sculpt;
+  const { body } = sculpt;
   plinth(sculpt, .60);
+  fieldLegs(body, .563, 1.57);
+  fieldJacket(body, "#4e7283", .560, .003, 1.55);
   for (const side of [-1, 1]) {
-    const leg = side * .099;
-    body.part("bevel", officerBlue, leg, .283, .009, .139, .219, .154);
-    body.part("bevel", leather, leg, .188, -.025, .151, .134, .178);
-    body.part("bevel", pikeGrey, side * .209, .537, .006, .153, .237, .174, -.1, 0, side * .11);
-    body.part("bevel", leather, side * .224, .391, -.024, .142, .107, .151);
+    arm(body, pikeGrey, [side * .151, .735, .007], [side * .180, .598, .019],
+      [side * .175, .467, -.055], 1.53, bootLeather);
+    body.part("bevel", brass, side * .134, .758, .004, .077, .032, .073);
+    body.part("bevel", steel, side * .179, .477, -.084, .083, .069, .034);
   }
-  body.part("hip", pikeGrey, 0, .445, .008, .346, .218, .235);
-  body.part("bevel", pikeGrey, 0, .577, .004, .346, .222, .224);
-  enamel.part("octagon", enamelLight, 0, .482, .003, .352, .051, .238);
-  body.beam(ivory, [-.131, .65, -.100], [.12, .491, -.115], .049, .022);
-  body.part("octagon", madder, 0, .697, 0, .194, .046, .177);
-  cappedHead(body, "field", .766, -.008, 1.2);
+  body.beam(warmCanvas, [-.112, .741, -.116], [.091, .568, -.121], .037, .024);
+  body.part("bevel", walnut, .111, .542, .126, .117, .101, .087);
+  cappedHead(body, "field", .857, -.004, 1.24, beardBrown);
 }
 
 type Vessel = "raft" | "dinghy" | "scout" | "bomber" | "rammer" | "juggernaut" | "pirate";

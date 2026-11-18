@@ -2,7 +2,7 @@ import { Miniature } from "../../../scene/miniature";
 import { architecturalEnamel, brass, cobalt, masonry } from "../../../scene/architecturalPalette";
 import { cityStreetDatum } from "./cityMasonry";
 import { liaoVillage, liaoTown } from "./liaoSettlements";
-import { treatyShops, merchantQuarter, axialCapital } from "./civicDistricts";
+import { treatyShops, merchantQuarter, judicialQuarter } from "./civicDistricts";
 import { bundNeighbourhood, bundSkyline } from "./bundDistricts";
 
 const footing = "#928980";
@@ -28,7 +28,7 @@ function fortifications(m: Miniature, edge: number) {
   m.box(footing, 0, 0.109, -edge, span, 0.14, 0.032);
 }
 
-const stages = [liaoVillage, liaoTown, treatyShops, merchantQuarter, axialCapital, bundNeighbourhood, bundSkyline];
+const stages = [liaoVillage, liaoTown, treatyShops, merchantQuarter, judicialQuarter, bundNeighbourhood, bundSkyline];
 const widths = [0.47, 0.60, 0.68, 0.77, 0.85, 0.975, 0.975];
 // Small settlements grow across the square. The big districts already reach
 // their tile boundaries, so their additional volume goes into the skyline.

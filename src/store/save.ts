@@ -5,6 +5,7 @@ import {
   TECHNOLOGIES,
   UNITS,
 } from "../game/data/config";
+import { getUnitUpkeep } from "../game/rules/engine";
 import type { EventNotice, GameState, UnitType } from "../game/types";
 import { DEFAULT_TERRAIN_VARIANT, getNation } from "../nations/registry";
 
@@ -480,6 +481,17 @@ export function deserializeGame(raw: string): GameState {
           "hiddenAtTurnStart",
         ]),
       "部队生命或行动",
+    );
+    check(
+      unit.upkeep === undefined ||
+        (oneOf(unit.upkeep, ["suspended", "reactivation"]) && options.quickMode === false &&
+          getUnitUpkeep({ options: { quickMode: false } }, { type: unit.type as UnitType }) > 0),
+      "部队维护状态",
+    );
+    check(
+      unit.upkeepTransferRound === undefined ||
+        (unit.upkeep === "suspended" && count(unit.upkeepTransferRound, 1) && unit.upkeepTransferRound <= round),
+      "部队维护状态",
     );
     check(
       unit.independent === undefined || typeof unit.independent === "boolean",

@@ -393,7 +393,7 @@ function NewGame({ onClose }: { onClose: () => void }) {
           >
             <Zap size={20} aria-hidden="true" />
             <span><strong id="quick-mode-label">快速模式</strong></span>
-            <small id="quick-mode-duration">{quickMode ? "即时训练" : `训练用时 ${SLOW_TRAINING_ROUNDS} 回合`}</small>
+            <small id="quick-mode-duration">{quickMode ? "即时训练" : `训练 ${SLOW_TRAINING_ROUNDS} 回合 · 扣维护费`}</small>
             <i className={`toggle ${quickMode ? "on" : ""}`} aria-hidden="true" />
           </button>
         </fieldset>

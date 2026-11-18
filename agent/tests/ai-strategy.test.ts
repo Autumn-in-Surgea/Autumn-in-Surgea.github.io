@@ -142,8 +142,8 @@ describe('bounded complete turns, legal replay and scaling', () => {
     }
     expect(state.round).toBe(21);
   }, 60000);
-  it('finishes an actual conquest from its original seeded position', () => {
-    let state = newGame({ seed: 'autumn-2026', mapType: 'dryland', aiCount: 1 }); let turns = 0;
+  it.each([true, false])('finishes a seeded conquest with quick mode %s', (quickMode) => {
+    let state = newGame({ seed: 'autumn-2026', mapType: 'dryland', aiCount: 1, quickMode }); let turns = 0;
     while (state.status === 'playing' && turns < 300) { const result = runAiTurnDetailed(state); replay(state, result); state = result.state; turns++; }
     expect(state.status).toBe('finished'); expect(state.winner).not.toBeNull(); expect(state.players.some(player => player.eliminated)).toBe(true);
   }, 30000);
@@ -213,4 +213,80 @@ describe('unpublished opponent research does not inform movement risk', () => {
     expect(first.state.units.find(unit => unit.id === guard.id)).toMatchObject({ x: capital.x, y: capital.y });
     replay(unresearched, first); replay(researched, second);
   });
+});
+
+describe('slow-mode maintenance decisions', () => {
+  it.each(['easy', 'normal'] as const)('%s reactivates an affordable unit before making purchases', (difficulty) => {
+    const state = tactical(difficulty);
+    state.options.quickMode = false;
+    state.players[0].resources = 4;
+    const active = addUnit(state, 0, 'rider', 4, 4);
+    const ready = addUnit(state, 0, 'rider', 4, 5);
+    ready.upkeep = 'reactivation';
+    const suspended = addUnit(state, 0, 'archer', 3, 4);
+    suspended.upkeep = 'suspended';
+
+    const result = runAiTurnDetailed(state);
+    expect(result.actions[0]).toEqual({ type: 'REACTIVATE', unitId: ready.id });
+    expect(result.actions.some((action) => 'unitId' in action && action.unitId === suspended.id)).toBe(false);
+    expect(result.state.units.find((unit) => unit.id === active.id)?.upkeep).toBeUndefined();
+    expect(result.state.units.find((unit) => unit.id === ready.id)?.upkeep).toBeUndefined();
+    expect(result.state.units.find((unit) => unit.id === suspended.id)?.upkeep).toBe('reactivation');
+    replay(state, result);
+  });
+
+  it('prioritizes supporting active units when the treasury covers the reactivation fee alone', () => {
+    const state = tactical();
+    state.options.quickMode = false;
+    state.players[0].resources = 2;
+    const active = addUnit(state, 0, 'rider', 4, 4);
+    const ready = addUnit(state, 0, 'rider', 4, 5);
+    ready.upkeep = 'reactivation';
+
+    const result = runAiTurnDetailed(state);
+    expect(result.actions.some((action) => action.type === 'REACTIVATE')).toBe(false);
+    expect(result.state.units.find((unit) => unit.id === active.id)?.upkeep).toBeUndefined();
+    expect(result.state.units.some((unit) => unit.id === ready.id)).toBe(false);
+    expect(result.state.players[0].resources).toBe(1);
+    replay(state, result);
+  });
+
+  it('spends excess stars on growth without sacrificing the current upkeep bill', () => {
+    const state = tactical();
+    state.options.quickMode = false;
+    state.players[0].resources = 4;
+    state.players[0].technologies.push('organization');
+    const active = addUnit(state, 0, 'archer', 4, 4);
+    addUnit(state, 0, 'warrior', 6, 4);
+    for (const [x, y] of [[1, 2], [2, 2]]) state.tiles[y * 12 + x].resource = 'fruit';
+
+    const result = runAiTurnDetailed(state);
+    expect(result.actions.filter((action) => action.type === 'HARVEST')).toHaveLength(1);
+    expect(result.state.units.find((unit) => unit.id === active.id)?.upkeep).toBeUndefined();
+    expect(result.state.players[0].resources).toBe(0);
+    replay(state, result);
+  });
+
+  it('queues a free-upkeep warrior if recurring income is already committed', () => {
+    const state = tactical();
+    state.options.quickMode = false;
+    state.players[0].resources = 10;
+    addUnit(state, 0, 'archer', 4, 4);
+    const result = runAiTurnDetailed(state);
+    expect(result.actions).toContainEqual({ type: 'TRAIN', cityId: state.cities[0].id, unitType: 'warrior' });
+    expect(result.state.cities[0].training?.unitType).toBe('warrior');
+    replay(state, result);
+  });
+
+  it('advances two rounds on a 64-square board with eleven factions and slow rules', () => {
+    let state = newGame({ size: 64, aiCount: 10, quickMode: false });
+    for (let turn = 0; turn < 22; turn++) {
+      const result = runAiTurnDetailed(state);
+      replay(state, result);
+      expect(result.state.players.every((player) => player.resources >= 0)).toBe(true);
+      state = result.state;
+    }
+    expect(state.round).toBe(3);
+    expect(state.currentPlayer).toBe(0);
+  }, 30_000);
 });

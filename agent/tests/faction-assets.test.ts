@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Mesh, MeshBasicMaterial, Raycaster, Vector3 } from "three";
+import { Mesh, MeshBasicMaterial, OrthographicCamera, Raycaster, Vector3 } from "three";
 import { CIVILIZATIONS, factionForOwner, getFactionPack } from "../../src/nations/registry";
 import { applyAction } from "../../src/game";
 import { cityAppearance, MODEL_SETS } from "../../src/scene/factionModels";
@@ -63,6 +63,26 @@ describe("Danubian cities", () => {
       previousWidth = max.x - min.x;
       geometry.dispose();
     }
+  });
+
+  it("raises the level-four skyline visibly above level three from the board camera", () => {
+    const camera = new OrthographicCamera();
+    camera.position.set(13, 17, 13);
+    camera.lookAt(0, 0, 0);
+    camera.updateMatrixWorld();
+    const projected = new Vector3();
+    const [third, fourth] = [3, 4].map(level => {
+      const geometry = MODEL_SETS.danubian.city("#576e63", level, false, false);
+      const positions = geometry.getAttribute("position");
+      let top = -Infinity;
+      for (let i = 0; i < positions.count; i++) {
+        projected.fromBufferAttribute(positions, i).applyMatrix4(camera.matrixWorldInverse);
+        top = Math.max(top, projected.y);
+      }
+      geometry.dispose();
+      return top;
+    });
+    expect(fourth - third).toBeGreaterThan(0.09);
   });
 
   it.each([[2, 3], [3, 4], [4, 5]])("separates the level %i houses with streets", (level, expectedBlocks) => {

@@ -182,6 +182,10 @@ export interface Unit extends Position {
   capturedTurn: number | null;
   escapeUsed: boolean;
   independent?: boolean;
+  /** Unpaid upkeep disables this unit through its next turn, then gives one turn to reactivate. */
+  upkeep?: "suspended" | "reactivation";
+  /** A converted unit's partial turn does not count toward its suspension. */
+  upkeepTransferRound?: number;
   hidden: boolean;
   hiddenAtTurnStart: boolean;
   carried?: { type: UnitType; maxHp: number; veteran: boolean; kills: number };
@@ -238,6 +242,7 @@ export interface GameState {
 export type Action =
   | { type: "MOVE"; unitId: string; to: number }
   | { type: "ATTACK"; unitId: string; targetId: string }
+  | { type: "REACTIVATE"; unitId: string }
   | {
       type:
         | "HEAL"

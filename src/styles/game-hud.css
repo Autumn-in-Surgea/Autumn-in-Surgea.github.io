@@ -74,7 +74,13 @@
 }
 .hud-round-value { display: flex; align-items: baseline; gap: 3px; }
 .hud-round span, .hud-yield { font-size: clamp(13px, 2.35cqi, 17px); }
-.hud-yield { color: #c8d6ab; }
+.hud-yield {
+  display: inline-flex;
+  flex: none;
+  gap: clamp(2px, .6cqi, 5px);
+  color: #c8d6ab;
+}
+.hud-upkeep { color: #f2b8a1; }
 
 .hud-command-bar {
   grid-row: 3;
@@ -158,19 +164,17 @@
   border-top: 1px solid var(--hud-metal);
   background: var(--hud-ribbon);
   box-shadow: inset 0 2px var(--hud-rim), 0 -4px 12px #080f1b7d;
-  visibility: hidden;
   opacity: 0;
   transform: translate3d(0, 14px, 0);
   transition: transform 145ms cubic-bezier(.3, 0, .65, 1),
-    opacity 120ms ease-out, visibility 0s 145ms;
+    opacity 120ms ease-out;
 }
 .hud-selection[data-open="true"] {
-  visibility: visible;
   opacity: 1;
   transform: translate3d(0, 0, 0);
   pointer-events: auto;
   transition: transform 175ms cubic-bezier(.18, .74, .24, 1),
-    opacity 145ms ease-out 10ms, visibility 0s;
+    opacity 145ms ease-out 10ms;
 }
 .hud-selection-inner {
   display: grid;

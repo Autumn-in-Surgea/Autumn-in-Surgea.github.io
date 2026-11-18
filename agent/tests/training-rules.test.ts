@@ -58,7 +58,7 @@ describe("training speed rules", () => {
     expect(saved).toEqual(opponentTurn);
     const ownTurn = apply(saved, END);
     expect(ownTurn.cities[0].training).toBeUndefined();
-    expect(ownTurn.players[0].resources).toBe(100 - UNITS.warrior.cost + 2);
+    expect(ownTurn.players[0].resources).toBe(100 - UNITS.warrior.cost - 3 + 2);
     expect(ownTurn.units.find((u) => u.type === "warrior")).toMatchObject({
       owner: 0, homeCityId: city.id, x: city.x, y: city.y, moved: false, attacked: false,
     });

@@ -1,5 +1,5 @@
 import { Miniature } from "../../../scene/miniature";
-import { facade, cityStreetDatum as ground } from "./cityMasonry";
+import { facade, masonryCourse, cityStreetDatum as ground } from "./cityMasonry";
 import { brass, brick, cobalt, copper, ink as shadow, ivory as limestone, terracotta as roofTile } from "../../../scene/architecturalPalette";
 
 const sandstone = "#bd8c66";
@@ -147,68 +147,99 @@ export function merchantQuarter(m: Miniature, color: string) {
   }
 }
 
-function crownRoof(m: Miniature, x: number, y: number, z: number, w: number, d: number, h: number) {
-  // A broad skirt turns up slightly at the corners beneath the upper gable.
-  const corners: [number, number][] = [[-1,-1],[-1,1],[1,1],[1,-1]];
-  for (let i = 0; i < corners.length; i++) {
-    const [a,b] = corners[i], [c,e] = corners[(i+1)%4];
-    const left: Point = [x+a*w/2, y+0.012, z+b*d/2];
-    const right: Point = [x+c*w/2, y+0.012, z+e*d/2];
-    const mid: Point = [(left[0]+right[0])/2,y,(left[2]+right[2])/2];
-    const innerL: Point = [x+a*w*0.30,y+h*0.46,z+b*d*0.30];
-    const innerR: Point = [x+c*w*0.30,y+h*0.46,z+e*d*0.30];
-    m.face("#a8732e", [[left[0],left[1]-0.009,left[2]], [right[0],right[1]-0.009,right[2]], right, left]);
-    m.face(brass, [left,mid,innerL]);
-    m.face(brass, [mid,innerR,innerL]);
-    m.face(brass, [mid,right,innerR]);
+type Plan = [number, number][];
+const violetTile = "#514773";
+const blueGlaze = "#72699a";
+const buffBrick = "#c58866";
+const smokeBrick = "#a66f59";
+
+// Four raking hips curve in two pitches. An overhanging corner sits a little
+// above the centre of each eave. The small flat top takes the lantern above it.
+function glazedEaves(m: Miniature, x: number, z: number, base: number,
+  width: number, depth: number, rise: number, crown: number) {
+  const perimeter = [[-1,-1], [0,-1], [1,-1], [1,0], [1,1], [0,1], [-1,1], [-1,0]];
+  const point = (index: number, scale: number, elevation: number, kick: number): Point => {
+    const [u,v] = perimeter[index % 8];
+    return [x + u * width * scale / 2, base + elevation + Math.abs(u*v) * kick, z + v * depth * scale / 2];
+  };
+  for (let i = 0; i < 8; i++) {
+    const edge = point(i, 1, 0, 0.009), next = point(i+1, 1, 0, 0.009);
+    const shoulder = point(i, 0.70, rise*0.24, 0.002), shoulderNext = point(i+1, 0.70, rise*0.24, 0.002);
+    const high = point(i, crown, rise, 0), highNext = point(i+1, crown, rise, 0);
+    m.face("#473c50", [point(i, 1, -0.009, 0.009), edge, next, point(i+1, 1, -0.009, 0.009)]);
+    m.face(violetTile, [edge, shoulder, shoulderNext, next]);
+    m.face(blueGlaze, [shoulder, high, highNext, shoulderNext]);
+    if (i % 2 === 0) {
+      m.beam("#9185a1", edge, shoulder, 0.009);
+      m.beam("#9185a1", shoulder, high, 0.009);
+    }
   }
-  // Long ridge runs across the central facade; gable ends remain visible above
-  // the hipped skirt from both three-quarter views.
-  const e = y+h*0.46, peak = y+h, l = x-w*0.30, r = x+w*0.30;
-  const back = z-d*0.30, front = z+d*0.30;
-  m.face("#db9c42", [[l,e,front],[r,e,front],[r,peak,z],[l,peak,z]]);
-  m.face("#bf8137", [[r,e,back],[l,e,back],[l,peak,z],[r,peak,z]]);
-  m.face(limestone, [[l,e,back],[l,e,front],[l,peak,z]]);
-  m.face(limestone, [[r,e,front],[r,e,back],[r,peak,z]]);
-  m.box("#f2c475", x, peak+0.002, z, w*0.67, 0.013, 0.014);
-  for (const sign of [-1,1]) {
-    // The ridge caps turn upward above the pale triangular gable ends.
-    m.beam("#f2c475", [x+w*0.303*sign,peak+0.004,z],
-      [x+w*0.354*sign,peak+0.017,z], 0.013);
-  }
+  m.box(violetTile, x, base+rise, z, width*crown, 0.005, depth*crown);
 }
 
-export function axialCapital(m: Miniature, color: string) {
-  // Two detached offices flank the central building across narrow side streets.
-  // Their different rooflines keep each building distinct at board scale.
-  const archives = facade(m, -0.297, -0.024, 0.129, 0.181, 0.175, "#d4b382", 2, 3);
-  pitchedRoof(m, -0.297, archives, -0.024, 0.152, 0.205, 0.063, "#936954", limestone);
-  const registry = facade(m, 0.283, -0.151, 0.153, 0.173, 0.219, "#be9b72", 3, 3);
-  parapet(m, 0.283, registry, -0.151, 0.158, 0.178, limestone);
-  m.box("#b79a71", 0.247, registry+0.047, -0.187, 0.068, 0.083, 0.077);
-  m.box(cobalt, 0.247, registry+0.093, -0.187, 0.080, 0.014, 0.088);
-  m.box(limestone, 0.283, ground+0.104, -0.151, 0.161, 0.012, 0.182);
-  facade(m, 0, -0.108, 0.304, 0.246, 0.291, limestone, 5, 4);
-  const tower = facade(m, 0, -0.029, 0.210, 0.210, 0.372, "#cfb482", 3, 4);
-  m.box("#87795b", 0, tower+0.008, -0.029, 0.229, 0.019, 0.227);
-  crownRoof(m, 0, tower+0.023, -0.029, 0.306, 0.265, 0.105);
-  // A deep entrance canopy, three tall recessed bays and a stepped axis down
-  // into the otherwise open forecourt carry through the institutional scale.
-  const faceZ = 0.081;
-  for (const x of [-0.069,0,0.069]) {
-    m.box(shadow, x, 0.148, faceZ, 0.040, 0.111, 0.014);
-    m.box(limestone, x-0.027, 0.189, faceZ+0.009, 0.013, 0.196, 0.020);
+// Chamfered brick shoulders and narrow stone cornices turn with the frontage.
+// The tower and its unequal wings adjoin along party walls, across an open court
+// from the separate street buildings. All heights start on the bare tile.
+export function judicialQuarter(m: Miniature, color: string) {
+  const x = -0.062, z = -0.141;
+  const court: Plan = [[-0.202,-0.261], [0.084,-0.261], [0.084,-0.080], [0.071,-0.049],
+    [0.039,-0.022], [-0.001,-0.010], [-0.127,-0.010], [-0.169,-0.024], [-0.202,-0.069]];
+  const offices = (plan: Plan, cx: number, cz: number, height: number, wall: string, floors: number) => {
+    const top = ground + height;
+    masonryCourse(m, plan, cx, cz, ground, top, 1, wall, floors);
+    masonryCourse(m, plan, cx, cz, ground+height*0.30, ground+height*0.30+0.009, 1.014, limestone);
+    masonryCourse(m, plan, cx, cz, top, top+0.010, 1.022, limestone);
+    masonryCourse(m, plan, cx, cz, top+0.010, top+0.018, 0.97, "#636777");
+  };
+  offices(court, x, z, 0.265, buffBrick, 4);
+  const west: Plan = [[-0.364,-0.214], [-0.202,-0.250], [-0.202,-0.106],
+    [-0.279,-0.086], [-0.339,-0.072], [-0.364,-0.087]];
+  const east: Plan = [[0.084,-0.250], [0.215,-0.275], [0.304,-0.276], [0.331,-0.252],
+    [0.331,-0.167], [0.306,-0.135], [0.237,-0.127], [0.084,-0.096]];
+  offices(west, -0.281, -0.156, 0.173, smokeBrick, 2);
+  offices(east, 0.206, -0.187, 0.214, buffBrick, 3);
+
+  // Projecting portal, recessed glazing and the staircase face the forecourt.
+  m.box(shadow, x, ground+0.082, -0.004, 0.112, 0.152, 0.009);
+  for (const dx of [-0.066, -0.022, 0.022, 0.066])
+    m.box(limestone, x+dx, ground+0.0825, 0.006, 0.014, 0.165, 0.028);
+  m.box(color, x, ground+0.173, 0.025, 0.163, 0.015, 0.077);
+  for (let step=0; step<3; step++) {
+    const h = (step+1)*0.009;
+    m.box(limestone, x, ground+h/2, 0.085-step*0.024, 0.158, h, 0.025);
   }
-  m.box(limestone, 0.097, 0.189, faceZ+0.009, 0.013, 0.196, 0.020);
-  m.box(color, 0, 0.155, 0.127, 0.186, 0.014, 0.084);
-  for (const s of [-1,1]) m.box(sandstone, s*0.073, 0.105, 0.155, 0.018, 0.097, 0.019);
-  for (let i=0; i<3; i++) {
-    m.box(limestone, 0, ground+0.006+i*0.008, 0.218-i*0.035, 0.18, 0.012+i*0.016, 0.042);
+
+  // A four-square lantern with paired windows separates the two glazed tiers.
+  // The upper storey narrows on all four sides to expose the first roof skirt.
+  const tower: Plan = [[x-0.104,z-0.078], [x-0.082,z-0.100], [x+0.081,z-0.100], [x+0.103,z-0.078],
+    [x+0.103,z+0.078], [x+0.081,z+0.100], [x-0.082,z+0.100], [x-0.104,z+0.078]];
+  masonryCourse(m, tower, x, z, ground+0.283, 0.430, 1, "#d9b38d", 2);
+  masonryCourse(m, tower, x, z, 0.430, 0.446, 1.06, limestone);
+  glazedEaves(m, x, z, 0.450, 0.300, 0.264, 0.041, 0.52);
+  m.box(shadow, x, 0.506, z, 0.145, 0.031, 0.123);
+  for (const s of [-1,1]) {
+    m.box(buffBrick, x+s*0.062, 0.507, z, 0.014, 0.035, 0.129);
+    m.box(buffBrick, x, 0.507, z+s*0.059, 0.012, 0.035, 0.012);
   }
-  const visitors = facade(m, -0.246, 0.208, 0.194, 0.134, 0.131, limestone, 3, 2);
-  m.part("hip", copper, -0.246, visitors+0.029, 0.208, 0.221, 0.059, 0.158);
-  m.box(color, -0.246, ground+0.084, 0.287, 0.105, 0.012, 0.040);
-  const officers = facade(m, 0.257, 0.219, 0.156, 0.195, 0.145, "#d0b283", 2, 2);
-  pitchedRoof(m, 0.257, officers, 0.219, 0.218, 0.179, 0.062, cobalt, limestone, true);
-  m.box(brick, 0.301, officers+0.031, 0.166, 0.027, 0.061, 0.026);
+  glazedEaves(m, x, z, 0.525, 0.217, 0.196, 0.065, 0.10);
+  m.part("octagon", "#bd945d", x, 0.599, z, 0.023, 0.016, 0.023);
+
+  const archives = facade(m, -0.289, 0.099, 0.164, 0.155, 0.192, "#b48472", 3, 3);
+  parapet(m, -0.289, archives, 0.099, 0.165, 0.156, "#bfa084");
+  m.box("#809caa", -0.289, archives+0.032, 0.099, 0.092, 0.048, 0.095);
+  m.part("hip", cobalt, -0.289, archives+0.067, 0.099, 0.107, 0.026, 0.113);
+
+  // The detached east registry rounds off into the lane by the court.
+  const registry: Plan = [[0.192,-0.059], [0.347,-0.059], [0.357,-0.048], [0.357,0.090],
+    [0.347,0.112], [0.326,0.129], [0.290,0.136], [0.192,0.136]];
+  offices(registry, 0.272, 0.038, 0.192, "#cea77c", 3);
+  m.box(copper, 0.260, ground+0.226, 0.012, 0.088, 0.033, 0.066);
+
+  const school = facade(m, -0.205, 0.276, 0.275, 0.129, 0.151, "#c68d76", 4, 2);
+  pitchedRoof(m, -0.205, school, 0.276, 0.151, 0.297, 0.054, roofTile, limestone, true);
+  m.box(brick, -0.286, school+0.050, 0.246, 0.023, 0.058, 0.024);
+  const lodge = facade(m, 0.191, 0.273, 0.217, 0.123, 0.108, limestone, 3, 2);
+  m.part("hip", violetTile, 0.191, lodge+0.027, 0.273, 0.239, 0.055, 0.147);
+  for (const dx of [-0.082,0.082]) m.box(smokeBrick, 0.191+dx, ground+0.045, 0.365, 0.013, 0.09, 0.016);
+  m.box(color, 0.191, ground+0.096, 0.352, 0.192, 0.014, 0.053, 0.09);
 }

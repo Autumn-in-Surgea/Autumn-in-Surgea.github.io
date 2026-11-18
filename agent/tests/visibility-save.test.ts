@@ -99,6 +99,42 @@ describe("version-two snapshot validation", () => {
     expect(restored).not.toBe(game);
     expect(applyAction(restored, { type: "END_TURN" }).ok).toBe(true);
   });
+  it("round-trips upkeep states and keeps older units without upkeep active", () => {
+    let game = newGame({ quickMode: false });
+    const unit = game.units.find((unit) => unit.owner === 0)!;
+    unit.type = "rider";
+    game.players[0].resources = 0;
+    const roundTrip = (state: GameState) => deserializeGame(serializeGame(state));
+    const end = (state: GameState) => {
+      const result = applyAction(state, { type: "END_TURN" });
+      expect(result.ok, result.error).toBe(true);
+      return roundTrip(result.state);
+    };
+    game = roundTrip(game);
+    expect(game.units[0].upkeep).toBeUndefined();
+
+    game = end(end(game));
+    expect(game.units[0].upkeep).toBe("suspended");
+    expect(applyAction(game, { type: "REACTIVATE", unitId: unit.id }).ok).toBe(false);
+
+    game = end(end(game));
+    expect(game.units[0].upkeep).toBe("reactivation");
+    const result = applyAction(game, { type: "REACTIVATE", unitId: unit.id });
+    expect(result.ok, result.error).toBe(true);
+    expect(roundTrip(result.state).units[0].upkeep).toBeUndefined();
+  });
+  it.each([
+    [false, "archer", "unknown"],
+    [false, "archer", null],
+    [false, "warrior", "suspended"],
+    [true, "archer", "suspended"],
+    [undefined, "archer", "reactivation"],
+  ] as const)("rejects invalid upkeep in a v2 snapshot (%s, %s, %s)", (quickMode, type, upkeep) => {
+    const snapshot = JSON.parse(serializeGame(newGame()));
+    snapshot.game.options.quickMode = quickMode;
+    Object.assign(snapshot.game.units[0], { type, upkeep });
+    expect(() => deserializeGame(JSON.stringify(snapshot))).toThrow(/部队维护状态/);
+  });
   it("migrates missing terrain variants to the imperial pack regardless of tile owner", () => {
     const game = newGame({ civilization: "rina" });
     const snapshot = JSON.parse(serializeGame(game));

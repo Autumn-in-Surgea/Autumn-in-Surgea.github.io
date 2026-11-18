@@ -46,15 +46,14 @@ npm run preview
 
 [Autumn-in-Surgea/Autumn-in-Surgea.github.io](https://github.com/Autumn-in-Surgea/Autumn-in-Surgea.github.io) 是组织站点仓库，默认发布到根地址 [autumn-in-surgea.github.io](https://autumn-in-surgea.github.io/)。Actions 运行详情里的 `github-pages` 环境会提供部署结果和站点链接。[GitHub Pages 站点类型](https://docs.github.com/en/pages/getting-started-with-github-pages/what-is-github-pages)
 
-已准备的 `.github/workflows/deploy-pages.yml` 只响应 `workflow_dispatch`。推送代码或提交 PR 都不会自动发布。工作流依次执行 `npm ci`、`npm test`、`npm run build`、`npm run verify:pwa`，全部通过后仅上传 `dist/` 并部署；不上传源码目录、文档或本地存档。
+推送到 `main` 会触发 `.github/workflows/deploy-pages.yml`。把 PR 合并到 `main` 也会触发同一流程。工作流依次执行 `npm ci`、`npm test`、`npm run build`、`npm run verify:pwa`，全部通过后仅上传 `dist/` 并部署；不上传源码目录、文档或本地存档。
 
-正式发布时：
+1. 首次设置时，在 **Settings → Pages → Build and deployment → Source** 选择 **GitHub Actions**。
+2. 提交改动并推送 `main`（`git push origin main`）。
+3. 在 **Actions → Deploy GitHub Pages** 查看本次推送对应的提交号。构建和部署均成功后，打开运行记录里的站点链接。
+4. 已安装的 Pages 应用在线打开后会检查更新。看到“更新并重启”时，点击即可保存并切到新版本。
 
-1. 在 `Autumn-in-Surgea.github.io` 目录推送默认分支 `git push -u origin main`。工作流从默认分支提供手动发布入口。
-2. 仓库 **Settings → Pages → Build and deployment → Source** 选择 **GitHub Actions**。
-3. 在 **Actions → Deploy GitHub Pages → Run workflow** 选择要发布的分支并执行。
-4. 等构建与部署都成功，打开工作流输出的实际站点链接。
-5. 在线等待“可离线使用”，安装应用；另在手机上检查布局、触控与离线启动。
+手动发布当前代码时，点工作流页的 **Run workflow** 并选 `main`。**Re-run jobs** 会重试该记录关联的原提交。
 
 站点首次启用需要该组织仓库的设置权限。[GitHub Pages 自定义工作流](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages)、[手动运行工作流](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow)
 

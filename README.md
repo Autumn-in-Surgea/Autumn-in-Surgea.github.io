@@ -28,7 +28,7 @@ npm run verify:pwa # 检查生产包的离线缓存、Worker、安装清单和�
 npm run bench:ai   # 实际对局与 64×64／11 方压力基准
 ```
 
-GitHub Pages 站点使用组织根地址 `https://autumn-in-surgea.github.io/`。发布时在仓库 Pages 设置选择 GitHub Actions，再手动运行 Deploy GitHub Pages。开发网页、本地安装版和 Pages 版的存档迁移步骤见 [部署指南](agent/docs/DEPLOYMENT.md)。安装、离线与更新说明见 [PWA 文档](agent/docs/PWA.md)。
+GitHub Pages 站点使用组织根地址 `https://autumn-in-surgea.github.io/`。在仓库 Pages 设置中选择 GitHub Actions 后，每次推送到 `main` 都会自动测试、构建并发布。开发网页、本地安装版和 Pages 版的存档迁移步骤见 [部署指南](agent/docs/DEPLOYMENT.md)。安装、离线与更新说明见 [PWA 文档](agent/docs/PWA.md)。
 
 换设备开发时，克隆已提交并推送的仓库，再执行 `npm ci`。继续原有对局需要从旧设备的游戏设置导出 JSON，在新设备导入。测试、详细文档和工具随仓库迁移，本地构建和测试产物可重新生成。更多开发上下文见 [接手指南](agent/docs/HANDOFF.md)。
 

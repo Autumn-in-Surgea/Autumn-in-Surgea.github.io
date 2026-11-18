@@ -1,8 +1,9 @@
 name: Deploy GitHub Pages
 run-name: Deploy ${{ github.ref_name }} to GitHub Pages
 
-# Publishing is always a deliberate manual action. Pushes and pull requests do not deploy.
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:

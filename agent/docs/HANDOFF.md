@@ -48,6 +48,6 @@
 
 开发、生产预览和 Pages 共用同一套游戏代码。开发模式使用热更新。安装版获取同一地址的静态构建，首次缓存完成后可离线运行。存档通过 `localStorage` 保存，键为 `four-shades-of-autumn.save.v2`，按协议、主机和端口隔离。不同设备、浏览器资料、`localhost`、`127.0.0.1` 及 Pages 之间通过已导出的 JSON 搬运对局。Pages 安装从 Pages 地址进行。
 
-GitHub Pages 的手动工作流在 `.github/workflows/deploy-pages.yml`，先安装依赖、跑测试、构建、校验缓存，再发布 `dist/`。目标站点为组织的根地址 `https://autumn-in-surgea.github.io/`。首次发布在仓库 Pages 设置中选择 GitHub Actions 后手动触发。明细见 [部署指南](DEPLOYMENT.md) 与 [PWA 运维](PWA.md)。
+推送到 `main` 会触发 `.github/workflows/deploy-pages.yml`，先安装依赖、跑测试、构建和校验缓存，再发布 `dist/`。目标站点为组织的根地址 `https://autumn-in-surgea.github.io/`。仓库 Pages 的发布源使用 GitHub Actions，保留手动发布入口。明细见 [部署指南](DEPLOYMENT.md) 与 [PWA 运维](PWA.md)。
 
 本轮 18 个测试文件、252 项测试通过，生产构建与离线缓存校验通过。生产版已在 Chrome 实际操作连续领奖、占领和断网读档推进回合。在内置浏览器中实测过 v0.3 更新、旧存档导入、移动、攻击、训练、建设及 64×64／10 AI 回合。停止本地生产服务器后，浏览器重新开页能读档并推进 AI，早一轮另有完整离线对局。系统安装及独立窗口启动由用户确认，其他实机步骤的记录以 [验证记录](VERIFICATION.md) 为准。大地图后期和难度调优可从可复现种子开始，对比 [AI 基准](AI_BENCHMARK.md)。

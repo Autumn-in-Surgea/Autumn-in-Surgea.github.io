@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="zh-CN">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>鱼群 · 图集试片</title>
+  <style>
+    body { max-width: 900px; margin: 3rem auto; padding: 0 1rem; background: #ece7da; color: #243c42; font: 16px/1.55 system-ui,sans-serif }
+    h1 { font-size: 1.5rem } canvas { width: 100%; max-width: 768px; height: auto; background: #799f99 }
+    a { color: #254d5a } #preview { width: 128px; display:block } output { display: block; margin: 1em 0 }
+  </style>
+  <h1>鱼群 · 固定视角图集</h1>
+  <canvas id="atlas"></canvas>
+  <p><a id="download" download="fish-swim-atlas.png">下载透明 PNG</a></p>
+  <canvas id="preview"></canvas>
+  <output id="stats"></output>
+  <script type="module" src="./fish-atlas.ts"></script>
+</html>

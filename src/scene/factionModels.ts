@@ -1,7 +1,8 @@
-import type { ModelSetId } from "../factions/registry";
-import type { UnitType } from "../game/types";
-import { cityModel, buildingModel } from "./architecture";
+import { factionForOwner, type ModelSetId } from "../factions/registry";
+import type { City, Player, UnitType } from "../game/types";
+import { buildingModel } from "./architecture";
 import { resourceModel } from "./landscape";
+import { danubianCity } from "../factions/danubian/cities";
 import { danubianUnit } from "../factions/danubian/units";
 
 // Anchors are part of the sculpture set so other hats and masts can use their own clearance.
@@ -11,9 +12,23 @@ const tallPieceLabels: Partial<Record<UnitType, number>> = {
 };
 const danubian = {
   unit: danubianUnit,
-  city: cityModel,
+  city: danubianCity,
   building: buildingModel,
   resource: resourceModel,
   labelHeight: (type: UnitType) => tallPieceLabels[type] ?? 0.84,
 };
 export const MODEL_SETS: Record<ModelSetId, typeof danubian> = { danubian };
+
+export function colorForOwner(players: readonly Player[], owner: number | null) {
+  return owner === null ? "#a79a7d" : (players[owner]?.color ?? "#7a9275");
+}
+
+export function cityAppearance(players: readonly Player[], city: City) {
+  return {
+    modelSet: factionForOwner(players, city.owner).modelSet,
+    color: colorForOwner(players, city.owner),
+    level: city.owner === null ? 0 : Math.min(city.level, 6),
+    capital: city.owner !== null && city.capitalOf !== null,
+    walls: city.owner !== null && city.defenseBonus > 0,
+  };
+}

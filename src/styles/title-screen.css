@@ -1,6 +1,6 @@
-.is-menu {
+.app.is-menu {
   min-height: 0;
-  background: radial-gradient(ellipse at 50% 42%, #59776d, #314f4d 64%, #273e3f);
+  background: #415350 url("../../设定/bg.png") 60% 30% / cover no-repeat;
 }
 .menu-scene { position: absolute; inset: -12%; }
 .menu-shell {
@@ -16,7 +16,7 @@
   position: absolute;
   z-index: -1;
   inset: 0;
-  background: radial-gradient(ellipse at center, #17343546 0%, #19333366 60%, #193032a8);
+  background: radial-gradient(ellipse at center, #17343533 0%, #19333352 60%, #1930328c);
 }
 .menu-copy {
   position: relative;

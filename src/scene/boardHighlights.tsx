@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
+import { easeInOut } from "./motion";
 
 type Highlight = "selection" | "target";
 type Outline = Highlight | "hover" | "reachable";
@@ -111,10 +112,10 @@ export function SelectionHalo({
   const age = useRef(0);
 
   useFrame((_, delta) => {
-    if (!ring.current || kind !== "selection" || age.current >= 0.32) return;
-    age.current = reducedMotion ? 0.32 : Math.min(0.32, age.current + delta);
-    const pulse = reducedMotion ? 0 : Math.sin((age.current / 0.32) * Math.PI);
-    ring.current.scale.setScalar(1 + pulse * 0.09);
+    if (!ring.current || kind !== "selection" || age.current >= 0.34) return;
+    age.current = reducedMotion ? 0.34 : Math.min(0.34, age.current + Math.min(delta, 0.05));
+    const pulse = easeInOut(age.current / 0.12) * (1 - easeInOut((age.current - 0.12) / 0.22));
+    ring.current.scale.setScalar(1 + pulse * 0.075);
   });
   return (
     <mesh

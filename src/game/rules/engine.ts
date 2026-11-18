@@ -614,22 +614,33 @@ interface MovementSearch {
   reachable: number[];
   previous: Map<number, number>;
 }
+
+function movementIndex(s: GameState, player: Player) {
+  return {
+    known: new Set(player.explored),
+    occupancy: new Map(s.units.map((unit) => [tileAt(s, unit).id, unit])),
+  };
+}
+
+export function hasMovementAllowance(unit: Unit): boolean {
+  return (!unit.moved && !unit.attacked) ||
+    (unit.attacked && skill(unit, "escape") && !unit.escapeUsed);
+}
+
 /** Shared weighted search for movement highlighting and animation routes. */
 function searchMovement(
   s: GameState,
-  unitId: string,
+  u: Unit | undefined,
   enforceHidden: boolean,
+  firstOnly = false,
+  index?: ReturnType<typeof movementIndex>,
 ): MovementSearch {
   const previous = new Map<number, number>();
   const empty: MovementSearch = { start: null, reachable: [], previous };
-  const u = s.units.find((u) => u.id === unitId);
   if (!u || u.owner !== s.currentPlayer || s.status !== "playing") return empty;
-  const escaping = u.attacked && skill(u, "escape") && !u.escapeUsed;
-  if ((u.moved || u.attacked) && !escaping) return empty;
-  const p = s.players[u.owner],
-    known = new Set(p.explored),
-    occupancy = new Map(s.units.map((t) => [tileAt(s, t).id, t])),
-    budget = UNITS[u.type].movement,
+  if (!hasMovementAllowance(u)) return empty;
+  const { known, occupancy } = index ?? movementIndex(s, s.players[u.owner]);
+  const budget = UNITS[u.type].movement,
     start = tileAt(s, u).id,
     costs = new Map([[start, 0]]),
     queue = [start],
@@ -678,8 +689,10 @@ function searchMovement(
       costs.set(to.id, cost);
       previous.set(to.id, id);
       queue.push(to.id);
-      if (!occupant || (!enforceHidden && !isUnitVisible(s, occupant, u.owner)))
+      if (!occupant || (!enforceHidden && !isUnitVisible(s, occupant, u.owner))) {
+        if (firstOnly) return { start, reachable: [to.id], previous };
         result.add(to.id);
+      }
     }
   }
   result.delete(start);
@@ -690,7 +703,7 @@ export function getReachableTiles(
   unitId: string,
   enforceHidden = false,
 ): number[] {
-  return searchMovement(s, unitId, enforceHidden).reachable;
+  return searchMovement(s, s.units.find((u) => u.id === unitId), enforceHidden).reachable;
 }
 /** Lowest-cost legal route, including both endpoints. A same-tile move,
  * unreachable destination or unavailable unit has no route. Hidden obstacles
@@ -704,7 +717,7 @@ export function getMovementPath(
   if (!Number.isInteger(to) || !s.tiles[to]) return [];
   const { start, reachable, previous } = searchMovement(
     s,
-    unitId,
+    s.units.find((u) => u.id === unitId),
     enforceHidden,
   );
   if (start === null || !reachable.includes(to)) return [];
@@ -907,6 +920,39 @@ export function canBuild(
     return false;
   return true;
 }
+const harvestRequirements = "采集需要对应科技、2 星与己方领土。";
+
+function harvestRestriction(s: GameState, tile: Tile | undefined, player: Player): string | null {
+  if (!tile || !player.visible.includes(tile.id) || !tile.resource || tile.building)
+    return "这里没有可采集资源。";
+  if (tile.resource === "starfish") {
+    const unit = unitAt(s, tile);
+    return hasTech(player, "navigation") &&
+      unit?.owner === player.id &&
+      skill(unit, "water") &&
+      !unit.moved &&
+      !unit.attacked
+      ? null
+      : "海星需要导航科技，海军驻守至下一回合。";
+  }
+  const tech =
+    tile.resource === "fruit"
+      ? "organization"
+      : tile.resource === "animal"
+        ? "hunting"
+        : tile.resource === "fish"
+          ? "fishing"
+          : null;
+  if (tile.owner !== player.id || !tech || !hasTech(player, tech)) return harvestRequirements;
+  const unit = unitAt(s, tile);
+  return !unit || unit.owner === player.id ? null : harvestRequirements;
+}
+
+export function isTerritoryResourceHarvestable(s: GameState, tile: Tile, playerId: number): boolean {
+  return tile.owner === playerId && !tile.cityId &&
+    harvestRestriction(s, tile, s.players[playerId]) === null;
+}
+
 export function validateAction(s: GameState, a: Action): string | null {
   if (s.status !== "playing") return "对局已结束。";
   const p = s.players[s.currentPlayer];
@@ -1064,33 +1110,10 @@ export function validateAction(s: GameState, a: Action): string | null {
         : "道路需要 3 星、道路科技及平原或森林。";
     }
     case "HARVEST": {
-      const t = s.tiles[a.tileId];
-      if (!t || !p.visible.includes(t.id) || !t.resource || t.building)
-        return "这里没有可采集资源。";
-      const u = unitAt(s, t);
-      if (t.resource === "starfish")
-        return hasTech(p, "navigation") &&
-          u?.owner === p.id &&
-          skill(u, "water") &&
-          !u.moved &&
-          !u.attacked
-          ? null
-          : "海星需要导航科技，海军驻守至下一回合。";
-      const tech =
-        t.resource === "fruit"
-          ? "organization"
-          : t.resource === "animal"
-            ? "hunting"
-            : t.resource === "fish"
-              ? "fishing"
-              : null;
-      return t.owner === p.id &&
-        tech &&
-        hasTech(p, tech) &&
-        p.resources >= 2 &&
-        (!u || u.owner === p.id)
-        ? null
-        : "采集需要对应科技、2 星与己方领土。";
+      const tile = s.tiles[a.tileId];
+      const restriction = harvestRestriction(s, tile, p);
+      if (restriction || tile.resource === "starfish" || p.resources >= 2) return restriction;
+      return harvestRequirements;
     }
     case "CLEAR_FOREST":
     case "BURN_FOREST":
@@ -1953,6 +1976,66 @@ export function applyAction(source: GameState, a: Action): ActionResult {
   checkVictory(s);
   return { state: s, ok: true };
 }
+
+function* unitSpecialActions(
+  s: GameState,
+  unit: Unit,
+  visible?: ReadonlySet<number>,
+): Iterable<Action> {
+  const unitId = unit.id;
+  for (const type of [
+    "CAPTURE",
+    "HEAL",
+    "PROMOTE",
+    "DISBAND",
+    "HEAL_OTHERS",
+    "EXAMINE",
+  ] as const)
+    yield { type, unitId };
+  if (unit.type === "raft")
+    for (const unitType of ["scout", "rammer", "bomber"] as const)
+      yield { type: "UPGRADE_NAVAL", unitId, unitType };
+  if (skill(unit, "convert"))
+    for (const target of s.units)
+      if (target.owner !== unit.owner && distance(target, unit) <= 1)
+        yield { type: "CONVERT", unitId, targetId: target.id };
+  if (skill(unit, "infiltrate"))
+    for (const city of s.cities)
+      if (distance(city, unit) <= 1 && (!visible || visible.has(tileAt(s, city).id)))
+        yield { type: "INFILTRATE", unitId, cityId: city.id };
+}
+
+/** Player-facing readiness uses only options that the active player can see. */
+export function getUnitsWithAvailableActions(
+  s: GameState,
+  units: readonly Unit[] = s.units,
+): Set<string> {
+  const ready = new Set<string>();
+  const player = s.players[s.currentPlayer];
+  if (s.status !== "playing" || !player || player.eliminated) return ready;
+  const visible = new Set(player.visible);
+  let index: ReturnType<typeof movementIndex> | undefined;
+  for (const unit of units) {
+    if (unit.owner !== player.id) continue;
+    const canMove = hasMovementAllowance(unit) &&
+      searchMovement(s, unit, false, true, index ??= movementIndex(s, player)).reachable.length > 0;
+    const tile = tileAt(s, unit);
+    const canHarvest = tile.resource === "starfish" && skill(unit, "water") &&
+      canApplyAction(s, { type: "HARVEST", tileId: tile.id });
+    if (canMove || canHarvest || getAttackTargets(s, unit.id).length > 0) {
+      ready.add(unit.id);
+      continue;
+    }
+    for (const action of unitSpecialActions(s, unit, visible)) {
+      if (canApplyAction(s, action)) {
+        ready.add(unit.id);
+        break;
+      }
+    }
+  }
+  return ready;
+}
+
 export function getAvailableActions(
   s: GameState,
   id = s.currentPlayer,
@@ -1970,26 +2053,7 @@ export function getAvailableActions(
     getAttackTargets(s, u.id).forEach((t) =>
       actions.push({ type: "ATTACK", unitId: u.id, targetId: t.id }),
     );
-    for (const type of [
-      "CAPTURE",
-      "HEAL",
-      "PROMOTE",
-      "DISBAND",
-      "HEAL_OTHERS",
-      "EXAMINE",
-    ] as const)
-      offer({ type, unitId: u.id });
-    if (u.type === "raft")
-      for (const unitType of ["scout", "rammer", "bomber"] as const)
-        offer({ type: "UPGRADE_NAVAL", unitId: u.id, unitType });
-    if (skill(u, "convert"))
-      for (const t of s.units.filter(
-        (t) => t.owner !== id && distance(t, u) <= 1,
-      ))
-        offer({ type: "CONVERT", unitId: u.id, targetId: t.id });
-    if (skill(u, "infiltrate"))
-      for (const c of s.cities.filter((c) => distance(c, u) <= 1))
-        offer({ type: "INFILTRATE", unitId: u.id, cityId: c.id });
+    for (const action of unitSpecialActions(s, u)) offer(action);
   }
   for (const c of s.cities.filter((c) => c.owner === id)) {
     for (const d of Object.values(UNITS).filter((d) => d.trainable))

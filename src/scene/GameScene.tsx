@@ -10,19 +10,19 @@ import {
   useRef,
   useState,
 } from "react";
-import type { ReactNode } from "react";
+import type { ReactNode, Ref } from "react";
 import { Canvas, events, useFrame, useThree } from "@react-three/fiber";
 import type { ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
 import { factionForOwner } from "../factions/registry";
-import type { FactionPack, ModelSetId } from "../factions/registry";
-import { MODEL_SETS } from "./factionModels";
+import type { ModelSetId } from "../factions/registry";
+import { colorForOwner, MODEL_SETS } from "./factionModels";
 import { SceneQuality } from "./SceneQuality";
 import { RoadInlay } from "./RoadInlay";
 import { BoardFrame, tileCap } from "./BoardFrame";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import type { City, GameEvent, GameState, Tile } from "../game/types";
-import { getVisibleResource, UNITS } from "../game";
+import type { City, GameEvent, GameState, Player, Tile } from "../game/types";
+import { getUnitsWithAvailableActions, getVisibleResource, isTerritoryResourceHarvestable, UNITS } from "../game";
 import { PlaybackContext, useBoardClock, usePlaybackClock } from "./playbackClock";
 import { ShotEffect, projectileName } from "./ShotEffect";
 import { carryStrikes, collapseDuration, planEncounter } from "./combatMotion";
@@ -30,7 +30,7 @@ import type { CombatFrame, Strike } from "./combatMotion";
 import { usePresentedUnits, useUnitMotion } from "./unitMotion";
 import { getMapBadges, MapBadgeButtons, MapBadgePositions } from "./ActionBadges";
 import type { MapBadgesProps, OpenBadge } from "./ActionBadges";
-import { easeInOut, getFreshEvents } from "./motion";
+import { easeInOut, easeOut, getFreshEvents } from "./motion";
 import type { PresentedUnit } from "./motion";
 import { LAND_UNIT_RENDER_ORDER } from "./unitModels";
 import { SelectionHalo, SquareOutline } from "./boardHighlights";
@@ -56,6 +56,7 @@ export interface GameSceneProps {
   selectedUnit: string | null;
   reachable: number[];
   attackTargets: string[];
+  focusedTarget?: string | null;
   onTileClick: (id: number) => void;
   onActionBadge?: OpenBadge;
   onResultReady?: () => void;
@@ -77,9 +78,6 @@ const borders: [number, number, number, number, number][] = [
   [0, -1, 0, -0.49, 1],
   [0, 1, 0, 0.49, 1],
 ];
-const civilizationColor = (game: GameState, owner: number | null) =>
-  owner === null ? "#a79a7d" : (game.players[owner]?.color ?? "#7a9275");
-
 const mapCameraOffset = new THREE.Vector3(13, 17, 13);
 const mapViewAngles = new THREE.Spherical().setFromVector3(mapCameraOffset);
 
@@ -99,7 +97,12 @@ function CameraRig({
   const n = game.options.size;
   const focus =
     game.cities.find((city) => city.capitalOf === 0) ?? game.cities[0];
-  const panTarget = useRef<THREE.Vector3 | null>(null);
+  const automaticPan = useRef<{
+    from: THREE.Vector3;
+    to: THREE.Vector3;
+    elapsed: number;
+    duration: number;
+  } | null>(null);
   const panStep = useRef(new THREE.Vector3());
   useLayoutEffect(() => {
     // Binding in render leaks listeners when React discards a render.
@@ -122,7 +125,7 @@ function CameraRig({
     controls.minZoom = Math.max(5, 180 / n);
     controls.maxZoom = 150;
     const cancelAutomaticPan = () => {
-      panTarget.current = null;
+      automaticPan.current = null;
     };
     const choosePanAction = (event: PointerEvent) => {
       if (event.pointerType === "touch") return;
@@ -149,11 +152,12 @@ function CameraRig({
     const offset = (n - 1) / 2;
     const x = preview ? 0 : (focus?.x ?? offset) - offset;
     const z = preview ? 0 : (focus?.y ?? offset) - offset;
-    panTarget.current = null;
+    automaticPan.current = null;
     // Consume any damped drag before resetting, so momentum cannot shift the new view.
+    const damped = controls.enableDamping;
     controls.enableDamping = false;
     controls.update();
-    controls.enableDamping = true;
+    controls.enableDamping = damped;
     controls.target.set(x, 0, z);
     camera.position.copy(controls.target).add(mapCameraOffset);
     camera.zoom = preview
@@ -169,8 +173,15 @@ function CameraRig({
     camera.updateProjectionMatrix();
   }, [size, camera]);
   useEffect(() => {
-    panTarget.current = null;
-    if (preview || selectedTile === null) return;
+    const controls = cameraControls.current;
+    if (!controls) return;
+    controls.enableDamping = !reducedMotion;
+    controls.update();
+  }, [camera, gl, n, reducedMotion]);
+  useEffect(() => {
+    automaticPan.current = null;
+    const controls = cameraControls.current;
+    if (preview || selectedTile === null || !controls) return;
     const offset = (n - 1) / 2;
     const point = new THREE.Vector3(
       (selectedTile % n) - offset,
@@ -178,28 +189,37 @@ function CameraRig({
       Math.floor(selectedTile / n) - offset,
     );
     camera.updateMatrixWorld();
-    const projected = point.clone().project(camera);
+    const projected = panStep.current.copy(point).project(camera);
     // Reframe tiles near the edge of the board viewport when selected.
     if (
       Math.abs(projected.x) > 0.84 ||
       Math.abs(projected.y) > 0.78
     ) {
-      panTarget.current = point.setY(0);
+      point.y = 0;
+      const from = controls.target.clone();
+      automaticPan.current = {
+        from,
+        to: point,
+        elapsed: 0,
+        duration: Math.min(0.55, 0.29 + from.distanceTo(point) * 0.035),
+      };
     }
   }, [selectedTile, preview, n, camera]);
   useFrame((_, delta) => {
     const controls = cameraControls.current;
     if (!controls) return;
-    if (panTarget.current) {
-      panStep.current.subVectors(panTarget.current, controls.target);
-      const arrived = panStep.current.lengthSq() < 0.0001;
-      panStep.current.multiplyScalar(
-        reducedMotion || arrived ? 1 : 1 - Math.exp(-delta * 10),
-      );
-      controls.target.add(panStep.current);
-      camera.position.add(panStep.current);
-      if (reducedMotion || arrived) panTarget.current = null;
+    const step = Math.min(delta, 0.05);
+    const pan = automaticPan.current;
+    if (pan) {
+      pan.elapsed = reducedMotion ? pan.duration : Math.min(pan.duration, pan.elapsed + step);
+      const progress = pan.elapsed / pan.duration;
+      panStep.current.lerpVectors(pan.from, pan.to, easeInOut(progress));
+      camera.position.add(panStep.current).sub(controls.target);
+      controls.target.copy(panStep.current);
+      if (progress === 1) automaticPan.current = null;
     }
+    // Match the same decay at different refresh rates.
+    controls.dampingFactor = 1 - Math.pow(0.86, step * 60);
     controls.update();
     const bound = n * 0.7;
     const x = THREE.MathUtils.clamp(controls.target.x, -bound, bound);
@@ -220,29 +240,46 @@ const defaultLabelStyle = {
   size: 14,
 };
 const MapLabelStyle = createContext(defaultLabelStyle);
+type LabelKind = "city" | "health" | "feedback";
+const labelOrder: Record<LabelKind, number> = { city: 9, health: 10, feedback: 11 };
+// Board labels are painted at this texture resolution per world-space tile.
+const labelPixelsPerTile = 280;
+const labelFontSize = { city: 44, health: 68 };
 
 function createLabel(
   text: string,
   foreground: string,
-  background: string,
+  kind: LabelKind,
   style: typeof defaultLabelStyle,
 ) {
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d")!;
-  // Rasterize at twice the display resolution so high-DPI labels remain sharp.
-  const font = `600 ${style.size * 2}px ${style.font}`;
+  const size = kind === "feedback" ? style.size * 2 : labelFontSize[kind];
+  const weight = kind === "health" ? 700 : 600;
+  const font = `${weight} ${size}px ${style.font}`;
   ctx.font = font;
-  canvas.width = Math.ceil(ctx.measureText(text).width) + 20;
-  canvas.height = (style.size + 8) * 2;
-  ctx.fillStyle = background;
-  ctx.beginPath();
-  ctx.roundRect(1, 1, canvas.width - 2, canvas.height - 2, 11);
-  ctx.fill();
+  const metrics = ctx.measureText(text);
+  const padding = kind === "city" ? 26 : 18;
+  canvas.width = Math.ceil(metrics.width) + padding;
+  canvas.height = size + 16;
+  if (kind !== "health") {
+    ctx.fillStyle = kind === "city" ? "rgba(31, 47, 47, 0.48)" : "#f5f0e3f2";
+    ctx.beginPath();
+    ctx.roundRect(1, 1, canvas.width - 2, canvas.height - 2, 11);
+    ctx.fill();
+  }
   ctx.font = font;
   ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
+  const x = canvas.width / 2;
+  const y = (canvas.height + metrics.actualBoundingBoxAscent - metrics.actualBoundingBoxDescent) / 2;
+  if (kind === "health") {
+    ctx.lineJoin = "round";
+    ctx.lineWidth = 12;
+    ctx.strokeStyle = "#182523";
+    ctx.strokeText(text, x, y);
+  }
   ctx.fillStyle = foreground;
-  ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+  ctx.fillText(text, x, y);
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
@@ -250,43 +287,38 @@ function createLabel(
 
 function Label({
   text,
-  color = "#243c42",
-  background = "#f5f0e3f2",
+  color,
+  kind,
   position,
-  alwaysVisible = false,
   opacity = 1,
+  materialRef,
 }: {
   text: string;
-  color?: string;
-  background?: string;
+  color: string;
+  kind: LabelKind;
   position: [number, number, number];
-  alwaysVisible?: boolean;
   opacity?: number;
+  materialRef?: Ref<THREE.SpriteMaterial>;
 }) {
   const style = useContext(MapLabelStyle);
-  const sprite = useRef<THREE.Sprite>(null);
   const texture = useMemo(
-    () => createLabel(text, color, background, style),
-    [text, color, background, style],
+    () => createLabel(text, color, kind, style),
+    [text, color, kind, style],
   );
   useEffect(() => () => texture.dispose(), [texture]);
-  useFrame(({ camera, size }) => {
-    if (!sprite.current || !(camera instanceof THREE.OrthographicCamera)) return;
-    const pixelsPerTile = (camera.zoom * size.height) / (camera.top - camera.bottom);
-    // At overview zoom, hide details rather than covering the tiles with labels.
-    sprite.current.visible = alwaysVisible || pixelsPerTile >= 26;
-    const worldPerPixel = 1 / pixelsPerTile;
-    sprite.current.scale.set(
-      (texture.image.width / 2) * worldPerPixel,
-      (texture.image.height / 2) * worldPerPixel,
-      1,
-    );
-  });
+  const pixelsPerUnit = kind === "feedback" ? 2 : labelPixelsPerTile;
   return (
-    <sprite ref={sprite} position={position} renderOrder={alwaysVisible ? 11 : 10}>
+    <sprite
+      position={position}
+      center={kind === "city" ? [0.5, 1] : [0.5, 0.5]}
+      scale={[texture.image.width / pixelsPerUnit, texture.image.height / pixelsPerUnit, 1]}
+      renderOrder={labelOrder[kind]}
+    >
       <spriteMaterial
+        ref={materialRef}
         map={texture}
         transparent
+        toneMapped={false}
         depthWrite={false}
         depthTest={false}
         opacity={opacity}
@@ -407,6 +439,8 @@ const TileView = memo(function TileView({
   offset,
   simple,
   reducedMotion,
+  showCityNames,
+  showHarvestHints,
   city,
   hovered,
   onHover,
@@ -422,14 +456,19 @@ const TileView = memo(function TileView({
   offset: number;
   simple: boolean;
   reducedMotion: boolean;
+  showCityNames: boolean;
+  showHarvestHints: boolean;
   city?: City;
   hovered: boolean;
   onHover: (id: number | null) => void;
 }) {
   const explored = knownTiles.has(tile.id);
   const surface = explored ? terrainHeight(tile) : 0.015;
-  const ownerColor = civilizationColor(game, tile.owner);
+  const ownerColor = colorForOwner(game.players, tile.owner);
   const { modelSet } = factionForOwner(game.players, tile.owner);
+  const resource = explored ? getVisibleResource(game, tile, 0) : null;
+  const harvestable = showHarvestHints && !!resource && visible &&
+    isTerritoryResourceHarvestable(game, tile, 0);
   const click = (event: ThreeEvent<MouseEvent>) => {
     event.stopPropagation();
     if (event.delta < 6) onClick(tile.id);
@@ -456,10 +495,11 @@ const TileView = memo(function TileView({
             <RoadInlay tile={tile} tiles={game.tiles} size={game.options.size} explored={knownTiles} />
           )}
           <TerrainDetails tile={tile} simple={simple} />
-          {!simple && (
+          {resource && (!simple || harvestable) && (
             <Resources
               modelSet={modelSet}
-              tile={{ ...tile, resource: getVisibleResource(game, tile, 0) }}
+              tile={{ ...tile, resource }}
+              highlight={harvestable}
             />
           )}
           {tile.ruin && !city && <RuinModel />}
@@ -470,8 +510,7 @@ const TileView = memo(function TileView({
           {city && (
             <AnimatedCity
               city={city}
-              color={civilizationColor(game, city.owner)}
-              faction={factionForOwner(game.players, city.owner)}
+              players={game.players}
               reducedMotion={reducedMotion}
             />
           )}
@@ -505,6 +544,16 @@ const TileView = memo(function TileView({
               scale={[0.989, 0.04, 0.989]}
               color="#515c57"
               opacity={0.25}
+            />
+          )}
+          {showCityNames && city?.name && (
+            <Label
+              kind="city"
+              text={city.name}
+              color="#e3decb"
+              opacity={visible ? 1 : 0.8}
+              // Equal x/z offsets put the top of the plate at the screen-facing corner.
+              position={[0.42, 0.015, 0.42]}
             />
           )}
         </group>
@@ -543,46 +592,7 @@ function glCursor(cursor: string) {
   if (canvas) canvas.style.cursor = cursor;
 }
 
-const CityLabel = memo(function CityLabel({
-  city,
-  game,
-  offset,
-  visible,
-  onClick,
-}: {
-  city: City;
-  game: GameState;
-  offset: number;
-  visible: boolean;
-  onClick: (id: number) => void;
-}) {
-  const tile = game.tiles[city.y * game.options.size + city.x];
-  const name =
-    city.owner === null
-      ? "中立聚落"
-      : `${city.capitalOf !== null ? "◇ " : ""}${city.name} · ${city.level}`;
-  return (
-    <group
-      onClick={(e) => {
-        e.stopPropagation();
-        if (e.delta < 6) onClick(tile.id);
-      }}
-    >
-      <Label
-        text={name}
-        position={[
-          city.x - offset,
-          terrainHeight(tile) + 0.03,
-          city.y - offset + 0.58,
-        ]}
-        color={city.owner === null ? "#59645c" : "#243c42"}
-        opacity={visible ? 1 : 0.8}
-      />
-    </group>
-  );
-});
-
-// The panel reads the resolved rules immediately. On the board the HP badge
+// The panel reads the resolved rules immediately. On the board the HP number
 // changes on contact, even when several AI hits arrived in a single snapshot.
 function UnitHealth({ record, reducedMotion, modelSet }: { record: PresentedUnit; reducedMotion: boolean; modelSet: ModelSetId }) {
   const { unit, cue } = record;
@@ -610,8 +620,14 @@ function UnitHealth({ record, reducedMotion, modelSet }: { record: PresentedUnit
       hp = Math.min(unit.maxHp, hp + pending.reduce((sum, hit) => sum + hit.damage, 0));
     }
   } else if (cue.dying) return null;
-  return <Label text={String(hp)} color={hp <= unit.maxHp * 0.4 ? "#914c3e" : "#243c42"}
-    position={[0, MODEL_SETS[modelSet].labelHeight(unit.type), 0]} />;
+  return (
+    <Label
+      kind="health"
+      text={String(hp)}
+      color={hp <= unit.maxHp * 0.4 ? "#ffc6ae" : "#fff9e8"}
+      position={[0, MODEL_SETS[modelSet].labelHeight(unit.type), 0]}
+    />
+  );
 }
 
 function AnimatedUnit({
@@ -620,6 +636,7 @@ function AnimatedUnit({
   offset,
   selected,
   targeted,
+  actionsSpent,
   onClick,
   reducedMotion,
   onFinish,
@@ -629,12 +646,13 @@ function AnimatedUnit({
   offset: number;
   selected: boolean;
   targeted: boolean;
+  actionsSpent: boolean;
   onClick: (id: number) => void;
   reducedMotion: boolean;
   onFinish: (id: string, serial: number) => void;
 }) {
   const { unit, cue } = record;
-  const { root, model, initial } = useUnitMotion(
+  const { root, model, label, initial } = useUnitMotion(
     record,
     game,
     offset,
@@ -642,7 +660,7 @@ function AnimatedUnit({
     onFinish,
   );
   const tile = game.tiles[unit.y * game.options.size + unit.x];
-  const color = civilizationColor(game, unit.owner);
+  const color = colorForOwner(game.players, unit.owner);
   const { modelSet } = factionForOwner(game.players, unit.owner);
   return (
     <group
@@ -661,12 +679,14 @@ function AnimatedUnit({
           getGeometry={MODEL_SETS[modelSet].unit}
           type={unit.type}
           color={color}
-          exhausted={unit.moved && unit.attacked}
+          actionsSpent={actionsSpent}
           foreground={!UNITS[unit.type].skills.includes("water")}
         />
       </group>
-      <UnitHealth record={record} reducedMotion={reducedMotion} modelSet={modelSet} />
-      {!cue.dying && unit.owner === 0 && !unit.moved && !unit.attacked && (
+      <group ref={label}>
+        <UnitHealth record={record} reducedMotion={reducedMotion} modelSet={modelSet} />
+      </group>
+      {!cue.dying && unit.owner === 0 && !actionsSpent && (
         <Piece
           shape="sphere"
           position={[0.24, 0.06, 0.12]}
@@ -680,13 +700,11 @@ function AnimatedUnit({
 
 function AnimatedCity({
   city,
-  color,
-  faction,
+  players,
   reducedMotion,
 }: {
   city: City;
-  color: string;
-  faction: FactionPack;
+  players: readonly Player[];
   reducedMotion: boolean;
 }) {
   const group = useRef<THREE.Group>(null);
@@ -701,19 +719,24 @@ function AnimatedCity({
     previous.current = { level: city.level, owner: city.owner };
   }, [city.level, city.owner]);
   useFrame((_, delta) => {
-    progress.current = Math.min(1, progress.current + delta / 0.42);
-    if (!group.current) return;
-    const pulse = reducedMotion ? 0 : Math.sin(progress.current * Math.PI);
+    if (!group.current || progress.current >= 1) return;
+    progress.current = reducedMotion
+      ? 1
+      : Math.min(1, progress.current + Math.min(delta, 0.05) / 0.46);
+    const time = progress.current;
+    const pulse = time < 0.36
+      ? easeInOut(time / 0.36)
+      : 1 - easeInOut((time - 0.36) / 0.64);
     group.current.scale.set(
-      1 + pulse * 0.045,
-      1 + pulse * 0.14,
-      1 + pulse * 0.045,
+      1 + pulse * 0.035,
+      1 + pulse * 0.105,
+      1 + pulse * 0.035,
     );
-    group.current.position.y = pulse * 0.025;
+    group.current.position.y = pulse * 0.014;
   });
   return (
     <group ref={group}>
-      <CityModel city={city} color={color} faction={faction} />
+      <CityModel city={city} players={players} />
     </group>
   );
 }
@@ -730,16 +753,21 @@ function WaterRipples({
   reducedMotion: boolean;
 }) {
   const group = useRef<THREE.Group>(null);
+  const playback = usePlaybackClock();
   const waters = tiles.filter(
     (tile) =>
       explored.has(tile.id) &&
       (tile.terrain === "shallow" || tile.terrain === "deep") &&
       tile.id % 3 === 0,
   );
-  useFrame(({ clock }) => {
+  useLayoutEffect(() => {
+    if (reducedMotion) group.current?.children.forEach(child => { child.position.y = 0; });
+  }, [reducedMotion]);
+  useFrame(() => {
     if (!group.current || reducedMotion) return;
+    const phase = playback.time * 0.0013;
     group.current.children.forEach((child, i) => {
-      child.position.y = Math.sin(clock.elapsedTime * 0.8 + i * 0.7) * 0.012;
+      child.position.y = Math.sin(phase + waters[i].id * 2.4) * 0.012;
     });
   });
   return (
@@ -793,8 +821,9 @@ function EventEffect({
 }) {
   const playback = usePlaybackClock();
   const label = useRef<THREE.Group>(null);
+  const ink = useRef<THREE.SpriteMaterial>(null);
   const ring = useRef<THREE.Mesh>(null);
-  const start = useRef<number | null>(null);
+  const start = useRef(playback.time);
   const done = useRef(false);
   const at = event.at!;
   const accent =
@@ -808,7 +837,7 @@ function EventEffect({
       new THREE.MeshBasicMaterial({
         color: accent,
         transparent: true,
-        opacity: 0.65,
+        opacity: 0,
         depthWrite: false,
         side: THREE.DoubleSide,
       }),
@@ -816,30 +845,36 @@ function EventEffect({
   );
   useEffect(() => () => ringMaterial.dispose(), [ringMaterial]);
   const duration = reducedMotion ? 0.65 : event.feedback ? 0.85 : 1.05;
-  useFrame(({ clock }) => {
-    if (start.current === null) start.current = clock.elapsedTime;
+  useFrame(({ camera, size }) => {
     const elapsed = event.strike && event.issuedAt !== undefined
       ? (playback.time - event.issuedAt) / 1000 - (reducedMotion ? 0 : event.strike.impact)
-      : clock.elapsedTime - start.current;
+      : (playback.time - start.current) / 1000;
     if (ring.current) ring.current.visible = elapsed >= 0;
     if (label.current) label.current.visible = elapsed >= 0;
     if (elapsed < 0) return;
     const progress = Math.min(1, elapsed / duration);
+    const arrival = easeOut(elapsed / 0.11);
+    if (ink.current) {
+      ink.current.opacity = reducedMotion
+        ? 1
+        : arrival * (1 - easeInOut((progress - 0.58) / 0.42));
+    }
     if (label.current) {
       label.current.position.y = reducedMotion
         ? 0.82
-        : 0.65 + easeInOut(progress) * 0.5;
-      label.current.scale.setScalar(
-        reducedMotion
-          ? 1
-          : Math.min(1, elapsed * 10) * Math.min(1, (duration - elapsed) * 6),
-      );
+        : 0.65 + easeOut(progress) * 0.42;
+      const animationScale = reducedMotion ? 1 : 0.86 + arrival * 0.14;
+      // Transient feedback uses screen pixels inside this animated group.
+      if (camera instanceof THREE.OrthographicCamera) {
+        const worldPerPixel = (camera.top - camera.bottom) / (camera.zoom * size.height);
+        label.current.scale.setScalar(animationScale * worldPerPixel);
+      }
     }
     if (ring.current)
       ring.current.scale.setScalar(
-        reducedMotion ? 1 : 0.8 + easeInOut(progress) * 1.4,
+        reducedMotion ? 1 : 0.72 + easeOut(progress) * 1.28,
       );
-    ringMaterial.opacity = (1 - progress) * (reducedMotion ? 0.4 : 0.7);
+    ringMaterial.opacity = (1 - easeInOut(progress)) * (reducedMotion ? 0.4 : 0.7);
     if (progress === 1 && !done.current) {
       done.current = true;
       onDone();
@@ -865,16 +900,17 @@ function EventEffect({
         ref={ring}
         geometry={geometry.ring}
         material={ringMaterial}
+        visible={false}
         rotation={[-Math.PI / 2, 0, 0]}
         dispose={null}
       />
-      <group ref={label} position={[0, 0.8, 0]}>
+      <group ref={label} position={[0, 0.8, 0]} visible={false}>
         <Label
+          kind="feedback"
           text={text}
           position={[0, 0, 0]}
           color={accent}
-          background="#f5f0e3f2"
-          alwaysVisible
+          materialRef={ink}
         />
       </group>
     </group>
@@ -894,7 +930,8 @@ function FogReveal({
 }) {
   const mesh = useRef<THREE.InstancedMesh>(null);
   const previous = useRef(explored);
-  const opacity = useRef(0);
+  const playback = usePlaybackClock();
+  const revealTime = useRef<number | null>(null);
   const fogMaterial = useMemo(
     () =>
       new THREE.MeshStandardMaterial({
@@ -911,7 +948,13 @@ function FogReveal({
       .filter((id) => !previous.current.has(id))
       .slice(0, 256);
     previous.current = explored;
-    if (!mesh.current || !newly.length || reducedMotion) return;
+    if (!mesh.current) return;
+    if (reducedMotion) {
+      revealTime.current = null;
+      mesh.current.visible = false;
+      return;
+    }
+    if (!newly.length) return;
     const transform = new THREE.Object3D();
     newly.forEach((id, i) => {
       const tile = game.tiles[id];
@@ -923,14 +966,18 @@ function FogReveal({
     mesh.current.count = newly.length;
     mesh.current.instanceMatrix.needsUpdate = true;
     mesh.current.computeBoundingSphere();
-    opacity.current = 1;
+    revealTime.current = playback.time;
+    fogMaterial.opacity = 1;
     mesh.current.visible = true;
-  }, [explored, game.tiles, offset, reducedMotion]);
-  useFrame((_, delta) => {
-    if (opacity.current <= 0 || !mesh.current) return;
-    opacity.current = Math.max(0, opacity.current - delta * 2.5);
-    fogMaterial.opacity = opacity.current;
-    mesh.current.visible = opacity.current > 0;
+  }, [explored, fogMaterial, game.tiles, offset, playback, reducedMotion]);
+  useFrame(() => {
+    if (revealTime.current === null || !mesh.current) return;
+    const progress = easeInOut((playback.time - revealTime.current) / 460);
+    fogMaterial.opacity = 1 - progress;
+    if (progress === 1) {
+      revealTime.current = null;
+      mesh.current.visible = false;
+    }
   });
   return (
     <instancedMesh
@@ -1039,6 +1086,7 @@ function World({
   selectedUnit,
   reachable,
   attackTargets,
+  focusedTarget,
   onTileClick,
   onResultReady,
   resetKey,
@@ -1060,6 +1108,10 @@ function World({
     [game.tiles, game.players, preview],
   );
   const movable = useMemo(() => new Set(reachable), [reachable]);
+  const availableUnits = useMemo(
+    () => !preview && game.currentPlayer === 0 ? getUnitsWithAvailableActions(game) : null,
+    [game, preview],
+  );
   const targets = useMemo(() => new Set(attackTargets), [attackTargets]);
   const targetTiles = new Set(
     game.units
@@ -1145,6 +1197,7 @@ function World({
     pendingCombat.current = {
       issuedAt: combat.issuedAt,
       strikes: [...carryStrikes(pendingCombat.current.strikes, pendingCombat.current.issuedAt, combat.issuedAt), ...combat.strikes],
+      journeys: combat.journeys,
     };
   }, [game, combat]);
   const resultAnnounced = useRef(false);
@@ -1239,6 +1292,8 @@ function World({
             offset={offset}
             simple={view.simple}
             reducedMotion={reducedMotion}
+            showCityNames={!preview}
+            showHarvestHints={!preview && game.status === "playing" && game.currentPlayer === 0}
             city={tile.cityId ? cityById.get(tile.cityId) : undefined}
             hovered={hoveredTile === tile.id}
             onHover={setHoveredTile}
@@ -1257,29 +1312,13 @@ function World({
             game={game}
             offset={offset}
             selected={selectedUnit === record.unit.id}
-            targeted={targets.has(record.unit.id)}
+            targeted={focusedTarget === record.unit.id}
+            actionsSpent={!preview && record.unit.owner === 0 && !availableUnits?.has(record.unit.id)}
             onFinish={finish}
             onClick={onTileClick}
             reducedMotion={reducedMotion}
           />
         ))}
-        {!preview &&
-          game.cities
-            .filter(
-              (city) =>
-                explored.has(city.y * game.options.size + city.x) &&
-                renderedIds.has(city.y * game.options.size + city.x),
-            )
-            .map((city) => (
-              <CityLabel
-                key={city.id}
-                city={city}
-                game={game}
-                offset={offset}
-                visible={visible.has(city.y * game.options.size + city.x)}
-                onClick={onTileClick}
-              />
-            ))}
         {!preview && (
           <FogReveal
             game={game}
@@ -1327,12 +1366,17 @@ function WebGLUnavailable({ onMount }: { onMount: (failed: boolean) => void }) {
   return <div className="scene-error">此浏览器未启用 WebGL，请开启硬件加速后刷新。</div>;
 }
 
+function hitPriority(object: THREE.Object3D) {
+  if (object instanceof THREE.Sprite) return object.renderOrder;
+  return object.renderOrder === LAND_UNIT_RENDER_ORDER ? LAND_UNIT_RENDER_ORDER : 0;
+}
+
 const sceneEvents: typeof events = (store) => ({
   ...events(store),
-  // A click on a painted-over tree or building should select the piece on top.
-  filter: (hits) => hits.sort((a, b) =>
-    Number(b.object.renderOrder === LAND_UNIT_RENDER_ORDER) -
-    Number(a.object.renderOrder === LAND_UNIT_RENDER_ORDER)),
+  // Plates extend below their tile. Resolve overlaps in the same order they are drawn.
+  filter: (hits) => hits
+    .filter(({ object }) => !(object instanceof THREE.Sprite) || object.visible)
+    .sort((a, b) => hitPriority(b.object) - hitPriority(a.object)),
 });
 
 export default function GameScene(props: GameSceneProps) {
@@ -1347,7 +1391,7 @@ export default function GameScene(props: GameSceneProps) {
     const css = getComputedStyle(document.documentElement);
     const size = parseFloat(css.getPropertyValue("--font-size-small")) || defaultLabelStyle.size;
     const font = css.getPropertyValue("--font-body").trim() || defaultLabelStyle.font;
-    document.fonts.load(`600 ${size}px ${font}`, "城市0123").then(
+    document.fonts.load(`700 ${size}px ${font}`, "城市0123").then(
       () => { if (active) setLabelStyle({ font, size }); },
       () => { if (active) setLabelStyle({ ...defaultLabelStyle, size }); },
     );

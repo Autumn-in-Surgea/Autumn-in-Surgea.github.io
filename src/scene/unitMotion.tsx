@@ -5,11 +5,13 @@ import { getMovementPath, isUnitVisible, UNITS } from "../game";
 import type { GameState, Unit } from "../game/types";
 import { usePlaybackClock, type PlaybackClock } from "./playbackClock";
 import type { Strike, TravelLeg } from "./combatMotion";
-import { carryStrikes, collapseDuration } from "./combatMotion";
+import { carryStrikes, collapseDuration, impactRecoil, sampleAttackPose, strikeMotionEndsAt, strikeReadyAt } from "./combatMotion";
 import { terrainHeight } from "./models";
 import {
   clampProgress,
+  easeIn,
   easeInOut,
+  easeOut,
   getFreshEvents,
   isVisibleTransition,
   movementDuration,
@@ -310,6 +312,7 @@ export function useUnitMotion(
   const playback = usePlaybackClock();
   const root = useRef<THREE.Group>(null);
   const model = useRef<THREE.Group>(null);
+  const label = useRef<THREE.Group>(null);
   const target = positionOf(game, record.unit, offset);
   const initial = useRef<MotionVector>(
     record.cue.from && playback.time - record.cue.issuedAt < 800
@@ -394,7 +397,7 @@ export function useUnitMotion(
         ),
       })),
       moveDuration: duration,
-      moveDelay: cue.attackFirst ? (cue.attacks?.[0]?.impact ?? 0.25) + 0.1 : 0,
+      moveDelay: cue.attackFirst && cue.attacks?.[0] ? strikeReadyAt(cue.attacks[0]) : 0,
       moveYaw:
         distance > 0.015
           ? Math.atan2(-(to[0] - from[0]), -(to[2] - from[2]))
@@ -416,6 +419,7 @@ export function useUnitMotion(
     if (reducedMotion) {
       root.current.position.fromArray(state.to);
       model.current.position.set(0, 0, 0);
+      label.current?.position.set(0, 0, 0);
       const attack = record.cue.attacks?.at(-1);
       const yaw = attack?.from && !record.cue.attackFirst
         ? Math.atan2(attack.from.x - attack.at.x, attack.from.y - attack.at.y)
@@ -456,55 +460,45 @@ export function useUnitMotion(
       : 1;
     const moving = elapsed >= moveDelay && moveProgress < 1;
     const cue = record.cue;
-    // Wind up, release (or make contact), then recoil and recover.
     const strike = cue.attacks?.find(
-      (shot) => elapsed >= shot.start && elapsed < shot.launch + 0.29,
+      (shot) => elapsed >= shot.start && elapsed < strikeMotionEndsAt(shot),
     );
-    const shotAge = strike ? elapsed - strike.start : 0;
-    const windup = strike ? strike.launch - strike.start : 0;
-    let lunge = 0,
-      pitch = 0,
-      dx = 0,
-      dz = 0;
+    const impact = cue.impacts?.find(
+      (shot) => elapsed >= (shot.contact ? shot.launch : shot.impact) &&
+        elapsed < shot.impact + 0.32,
+    );
+    const contact = impact?.contact;
+    const hitAge = impact ? elapsed - impact.impact : cue.impacts?.length ? -1 : elapsed;
+    const hit = (state.hit || impact) && hitAge >= 0 ? impactRecoil(hitAge) : 0;
+    let attackX = 0, attackY = 0, attackZ = 0, pitch = 0;
     if (strike?.from) {
-      dx = strike.at.x - strike.from.x;
-      dz = strike.at.y - strike.from.y;
+      let dx = strike.contact?.x ?? strike.at.x - strike.from.x;
+      let dz = strike.contact?.z ?? strike.at.y - strike.from.y;
       const length = Math.hypot(dx, dz) || 1;
       dx /= length;
       dz /= length;
       desiredHeading.current = Math.atan2(-dx, -dz);
-      if (shotAge <= windup) {
-        const draw = easeInOut(shotAge / windup);
-        lunge = -0.084 * draw;
-        pitch = -0.13 * draw;
-      } else {
-        const release = easeInOut((shotAge - windup) / 0.075);
-        const recovery = 1 - easeInOut((shotAge - windup - 0.075) / 0.215);
-        const extension = strike.projectile ? -0.105 : 0.39;
-        lunge = (-0.084 + (extension + 0.084) * release) * recovery;
-        pitch =
-          (-0.13 + (strike.projectile ? -0.08 : 0.42) * release) * recovery;
+      const pose = sampleAttackPose(strike, elapsed);
+      pitch = pose.pitch;
+      attackX = dx * pose.travel;
+      attackY = pose.lift;
+      attackZ = dz * pose.travel;
+      if (strike.contact) {
+        const tiles = game.tiles, size = game.options.size;
+        const fromHeight = terrainHeight(tiles[strike.from.y * size + strike.from.x]);
+        const toHeight = terrainHeight(tiles[strike.at.y * size + strike.at.x]);
+        attackY += (toHeight - fromHeight) * Math.max(0, pose.travel) / strike.contact.gap;
       }
+    } else if (contact && !moving) {
+      desiredHeading.current = Math.atan2(contact.x, contact.z);
     }
-    const impact = cue.impacts?.find(
-      (shot) => elapsed >= shot.impact && elapsed < shot.impact + 0.28,
-    );
-    const hitAge = impact
-      ? elapsed - impact.impact
-      : cue.impacts?.length
-        ? -1
-        : elapsed;
-    const hit =
-      (state.hit || impact) && hitAge >= 0 && hitAge < 0.28
-        ? Math.sin((clampProgress(hitAge / 0.07) * Math.PI) / 2) *
-          (1 - easeInOut((hitAge - 0.07) / 0.21))
-        : 0;
     const travel = moving ? easeInOut(moveProgress) * path.total : 0;
-    const envelope = moving ? Math.sin(moveProgress * Math.PI) : 0;
-    const gait = Math.sin(travel * Math.PI * 2) * 0.047 * envelope;
-    const bob = (0.045 + 0.035 * Math.sin(travel * Math.PI * 3)) * envelope;
+    const envelope = moving ? Math.sin(moveProgress * Math.PI) ** 2 : 0;
+    const afloat = UNITS[record.unit.type].skills.includes("water");
+    const gait = Math.sin(travel * Math.PI * 2) * (afloat ? 0.022 : 0.035) * envelope;
+    const bob = (afloat ? 0.022 : 0.054) * envelope;
     const spawn = state.appear
-      ? easeInOut(elapsed / (state.trained ? 0.32 : 0.2))
+      ? easeOut(elapsed / (state.trained ? 0.32 : 0.2))
       : 1;
     const spawnScale = state.appear
       ? 0.6 + 0.4 * spawn + Math.sin(spawn * Math.PI) * 0.08
@@ -512,8 +506,8 @@ export function useUnitMotion(
     const death = state.dying
       ? clampProgress((elapsed - (cue.deathAt ?? 0)) / collapseDuration)
       : 0;
-    const topple = easeInOut((death - 0.07) / 0.58);
-    const deathScale = 1 - easeInOut((death - 0.56) / 0.44);
+    const topple = easeInOut((death - 0.035) / 0.59);
+    const deathScale = 1 - easeIn((death - 0.48) / 0.52);
     if (moving) {
       const a = path.points[state.segment - 1],
         b = path.points[state.segment];
@@ -528,21 +522,26 @@ export function useUnitMotion(
     );
     const yaw = heading.current + yawDelta * (1 - Math.exp(-24 * delta));
     heading.current = yaw;
+    const fall = cue.impacts?.find((shot) => shot.lethal)?.contact;
+    const knockback = contact && !impact?.lethal ? hit * 0.15 : 0;
+    const fallSlide = fall ? easeOut(death) * 0.15 : 0;
     model.current.rotation.set(
-      pitch + envelope * 0.08 - hit * 0.2 + topple * 0.28,
+      pitch - envelope * 0.06 + hit * 0.18 + topple * (fall ? 1.22 : 0.24),
       yaw,
-      gait + hit * 0.18 + topple * 1.18,
+      gait + hit * 0.07 + topple * (fall ? 0.20 : 1.18),
+      "YXZ",
     );
     model.current.position.set(
-      dx * lunge,
-      bob + hit * 0.07 - topple * 0.08 - (1 - deathScale) * 0.07,
-      dz * lunge,
+      attackX + (contact?.x ?? 0) * knockback + (fall?.x ?? 0) * fallSlide,
+      attackY + bob + hit * 0.035 - topple * 0.06 - (1 - deathScale) * 0.07,
+      attackZ + (contact?.z ?? 0) * knockback + (fall?.z ?? 0) * fallSlide,
     );
+    label.current?.position.copy(model.current.position);
     model.current.scale.setScalar(spawnScale * deathScale);
     if (state.dying && death >= 1 && !state.finished) {
       state.finished = true;
       onFinish(record.unit.id, state.serial);
     }
   });
-  return { root, model, initial: initial.current };
+  return { root, model, label, initial: initial.current };
 }

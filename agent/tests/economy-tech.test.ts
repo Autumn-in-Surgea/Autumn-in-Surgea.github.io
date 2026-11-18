@@ -8,6 +8,7 @@ import {
   getIncome,
   getScore,
   getTechCost,
+  isTerritoryResourceHarvestable,
   populationNeeded,
   TECHNOLOGIES,
   UNITS,
@@ -106,14 +107,21 @@ describe("standard economy and city reward levels", () => {
             ? "forest"
             : "plain";
       game.players[0].technologies = [];
+      expect(isTerritoryResourceHarvestable(game, tile, 0)).toBe(false);
       expect(applyAction(game, { type: "HARVEST", tileId: tile.id }).ok).toBe(
         false,
       );
       game.players[0].technologies.push(technology);
+      game.players[0].resources = 0;
+      expect(isTerritoryResourceHarvestable(game, tile, 0)).toBe(true);
+      expect(isTerritoryResourceHarvestable(game, { ...tile, owner: 1 }, 0)).toBe(false);
+      expect(applyAction(game, { type: "HARVEST", tileId: tile.id }).ok).toBe(false);
+      game.players[0].resources = 100;
       const result = applyAction(game, { type: "HARVEST", tileId: tile.id });
       expect(result.ok).toBe(true);
       expect(result.state.players[0].resources).toBe(98);
       expect(result.state.tiles[tile.id].resource).toBeNull();
+      expect(isTerritoryResourceHarvestable(result.state, result.state.tiles[tile.id], 0)).toBe(false);
       expect(result.state.cities[0].population).toBe(1);
     },
   );

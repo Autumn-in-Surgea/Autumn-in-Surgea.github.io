@@ -5,7 +5,9 @@ import {
   DEFAULT_OPTIONS,
   getAttackTargets,
   getPendingUpgradeCity,
+  getUnitsWithAvailableActions,
   isUnitVisible,
+  UNITS,
   validateAction,
   getReachableTiles,
 } from "./game";
@@ -23,6 +25,11 @@ import {
 import { playSound } from "./ui/sound";
 
 type Panel = "tech" | "diplomacy" | "settings" | "about" | null;
+type TargetOrder = {
+  action: Extract<Action, { type: "ATTACK" | "CONVERT" }>;
+  tileId: number;
+};
+
 export default function App() {
   const {
     game,
@@ -39,7 +46,7 @@ export default function App() {
     settings,
   } = useGameStore();
   const [panel, setPanel] = useState<Panel>(null),
-    [target, setTarget] = useState<string | null>(null),
+    [aimedOrder, setAimedOrder] = useState<TargetOrder | null>(null),
     [dismissedResult, setDismissedResult] = useState<string | null>(null);
   const [presentedResult, setPresentedResult] = useState<string | null>(null);
   const [selectionRequest, setSelectionRequest] = useState(0);
@@ -54,7 +61,7 @@ export default function App() {
   }, []);
   const reducedMotion = settings.reducedMotion || systemReducedMotion;
   useEffect(() => {
-    setTarget(null);
+    setAimedOrder(null);
   }, [sessionId]);
   const preview = useMemo(
     () =>
@@ -75,23 +82,36 @@ export default function App() {
         : [],
     [game, selectedUnit, busy],
   );
+  const targetOrders = useMemo<TargetOrder[]>(() => {
+    if (screen !== "game" || game?.currentPlayer !== 0 || game.status !== "playing" || busy)
+      return [];
+    const attacker = game.units.find((unit) => unit.id === selectedUnit);
+    if (!attacker || attacker.owner !== 0) return [];
+    const type = UNITS[attacker.type].skills.includes("convert") ? "CONVERT" : "ATTACK";
+    const targets = type === "CONVERT"
+      ? game.units.filter((unit) =>
+          !validateAction(game, { type, unitId: attacker.id, targetId: unit.id }),
+        )
+      : getAttackTargets(game, attacker.id);
+    return targets.map((unit) => ({
+      action: { type, unitId: attacker.id, targetId: unit.id },
+      tileId: unit.y * game.options.size + unit.x,
+    }));
+  }, [game, screen, selectedUnit, busy]);
   const attackTargets = useMemo(
-    () =>
-      game && selectedUnit && !busy
-        ? [
-            ...getAttackTargets(game, selectedUnit),
-            ...game.units.filter(
-              (u) =>
-                !validateAction(game, {
-                  type: "CONVERT",
-                  unitId: selectedUnit,
-                  targetId: u.id,
-                }),
-            ),
-          ].map((u) => u.id)
-        : [],
-    [game, selectedUnit, busy],
+    () => targetOrders.map(({ action }) => action.targetId),
+    [targetOrders],
   );
+  const previewedOrder = aimedOrder && targetOrders.find(({ action, tileId }) =>
+    tileId === aimedOrder.tileId &&
+    action.unitId === aimedOrder.action.unitId &&
+    action.targetId === aimedOrder.action.targetId &&
+    action.type === aimedOrder.action.type,
+  );
+  useEffect(() => {
+    if (aimedOrder && !previewedOrder) setAimedOrder(null);
+  }, [aimedOrder, previewedOrder]);
+  const target = previewedOrder?.action.targetId ?? null;
   const pendingUpgrade = game?.status === "playing" && game.currentPlayer === 0 && !busy
     ? getPendingUpgradeCity(game)
     : undefined;
@@ -101,7 +121,7 @@ export default function App() {
     unitId?: string,
   ) {
     select(tileId, kind === "capture" ? unitId : null);
-    setTarget(null);
+    setAimedOrder(null);
     setSelectionRequest((request) => request + 1);
   }
   function perform(action: Action) {
@@ -123,10 +143,9 @@ export default function App() {
       );
   }
   function nextUnit() {
-    if (!game) return;
-    const units = game.units.filter(
-      (u) => u.owner === 0 && (!u.moved || !u.attacked),
-    );
+    if (!game || busy || game.currentPlayer !== 0) return;
+    const available = getUnitsWithAvailableActions(game);
+    const units = game.units.filter((unit) => available.has(unit.id));
     if (!units.length) {
       setNotice("没有待行动的单位。");
       return;
@@ -134,7 +153,7 @@ export default function App() {
     const next =
       units[(units.findIndex((u) => u.id === selectedUnit) + 1) % units.length];
     select(next.y * game.options.size + next.x, next.id);
-    setTarget(null);
+    setAimedOrder(null);
   }
   function clickTile(id: number) {
     if (screen !== "game" || !game || busy) return;
@@ -142,8 +161,15 @@ export default function App() {
     const unit = game.units.find(
       (u) => u.x === tile.x && u.y === tile.y && isUnitVisible(game, u, 0),
     );
-    if (selectedUnit && unit && attackTargets.includes(unit.id)) {
-      setTarget(unit.id);
+    const order = targetOrders.find(({ tileId }) => tileId === id);
+    if (order) {
+      if (order === previewedOrder) {
+        setAimedOrder(null);
+        perform(order.action);
+      } else {
+        setAimedOrder(order);
+        if (settings.sound) playSound("click");
+      }
       return;
     }
     if (
@@ -153,11 +179,12 @@ export default function App() {
       !unit
     ) {
       perform({ type: "MOVE", unitId: selectedUnit, to: id });
-      setTarget(null);
+      setAimedOrder(null);
       return;
     }
-    select(id, unit?.id ?? null);
-    setTarget(null);
+    const selectingGround = id === selectedTile && unit?.id === selectedUnit;
+    select(id, selectingGround ? null : unit?.id ?? null);
+    setAimedOrder(null);
     if (settings.sound) playSound("click");
   }
   useEffect(() => {
@@ -174,15 +201,15 @@ export default function App() {
       )
         return;
       if (e.key === "Escape") {
-        setTarget(null);
-        select(null);
+        setAimedOrder(null);
+        if (!previewedOrder) select(null);
       }
       if (e.key.toLowerCase() === "t") setPanel("tech");
       if (e.key.toLowerCase() === "n") nextUnit();
       if (
         e.key === "Enter" &&
         !e.repeat &&
-        !target &&
+        !previewedOrder &&
         !(e.target as HTMLElement)?.closest("button")
       ) {
         e.preventDefault();
@@ -206,7 +233,8 @@ export default function App() {
           selectedTile={screen === "game" ? selectedTile : null}
           selectedUnit={screen === "game" ? selectedUnit : null}
           reachable={screen === "game" ? reachable : []}
-          attackTargets={screen === "game" ? attackTargets : []}
+          attackTargets={attackTargets}
+          focusedTarget={target}
           onTileClick={clickTile}
           onActionBadge={openActionTile}
           onResultReady={() => setPresentedResult(resultKey)}
@@ -234,7 +262,6 @@ export default function App() {
               onSettings={() => setPanel("settings")}
               nextUnit={nextUnit}
               target={target}
-              setTarget={setTarget}
             />
           </>
         )

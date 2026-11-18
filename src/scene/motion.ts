@@ -5,8 +5,10 @@ export type MotionVector = [number, number, number];
 export const clampProgress = (value: number) => Math.max(0, Math.min(1, value));
 export const easeInOut = (value: number) => {
   const t = clampProgress(value);
-  return t * t * (3 - 2 * t);
+  return t * t * t * (t * (6 * t - 15) + 10);
 };
+export const easeIn = (value: number) => clampProgress(value) ** 3;
+export const easeOut = (value: number) => 1 - (1 - clampProgress(value)) ** 3;
 /** A bounded, deterministic duration keeps a one-tile move legible at any FPS. */
 export const movementDuration = (distance: number) =>
   Math.min(0.52, 0.29 + Math.max(0, distance - 1) * 0.055);
@@ -115,7 +117,7 @@ export function sampleMotionPath(
       ? clampProgress((distance - path.lengths[segment - 1]) / length)
       : 1;
   out[0] = from[0] + (to[0] - from[0]) * fraction;
-  out[1] = from[1] + (to[1] - from[1]) * fraction;
+  out[1] = from[1] + (to[1] - from[1]) * easeInOut(fraction);
   out[2] = from[2] + (to[2] - from[2]) * fraction;
   return segment;
 }

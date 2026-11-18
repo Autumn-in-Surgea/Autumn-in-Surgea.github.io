@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowUp, BrainCircuit, Building2, Check, Flag, Handshake, LocateFixed,
   Map, Settings2, Trophy, UsersRound, X,
@@ -21,12 +21,11 @@ interface Props {
   onSettings: () => void;
   nextUnit: () => void;
   target: string | null;
-  setTarget: (id: string | null) => void;
 }
 
 export function GameHUD({
   selectionRequest, upgradePending, game, onCommand, onTech, onDiplomacy,
-  onSettings, nextUnit, target, setTarget,
+  onSettings, nextUnit, target,
 }: Props) {
   const {
     selectedTile, selectedUnit, busy, aiError, advanceAI, resetCamera, select,
@@ -34,6 +33,10 @@ export function GameHUD({
   } = useGameStore();
   const [mapOpen, setMapOpen] = useState(false);
   const [lastSelection, setLastSelection] = useState<{ tile: number; unit: string | null } | null>(null);
+  const contextActions = useRef<HTMLDivElement>(null);
+  const resetContextScroll = useCallback(() => {
+    contextActions.current?.scrollTo(0, 0);
+  }, []);
 
   // Retain the outgoing controls for the fade. Inactive content is inert.
   useEffect(() => {
@@ -66,7 +69,6 @@ export function GameHUD({
   const showHint = settings.showHints && !active && !notice && !aiError;
 
   function closeSelection() {
-    setTarget(null);
     select(null);
   }
 
@@ -119,7 +121,7 @@ export function GameHUD({
               <HudAction icon={Map} label="地图" onClick={() => setMapOpen(true)} />
               <HudAction icon={Settings2} label="设置" onClick={onSettings} />
             </nav>
-            <div className="hud-command-lane hud-context-actions" role="group" aria-label="所选对象操作"
+            <div ref={contextActions} className="hud-command-lane hud-context-actions" role="group" aria-label="所选对象操作"
               data-active={active} inert={!active} aria-hidden={!active}>
               {contextTile !== null && (
                 <SelectionControls
@@ -131,11 +133,7 @@ export function GameHUD({
                   city={city}
                   target={attackTarget}
                   selectionRequest={selectionRequest}
-                  onCancelAttack={() => setTarget(null)}
-                  onSelectUnit={id => {
-                    setTarget(null);
-                    select(contextTile, id);
-                  }}
+                  resetScroll={resetContextScroll}
                   onClose={closeSelection}
                   onCommand={onCommand}
                 />

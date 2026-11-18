@@ -7,6 +7,8 @@ import {
   incomingOffset,
   planCombat,
   planEncounter,
+  sampleAttackPose,
+  strikeMotionEndsAt,
 } from "../../src/scene/combatMotion";
 import { rememberCombatEvents } from "../../src/workers/combatEvents";
 import { addUnit, battlefield } from "./helpers";
@@ -26,6 +28,22 @@ function shoot(weapon: UnitType, retaliation = false) {
 }
 
 describe("visible combat choreography", () => {
+  it("brings the two bases together at damage time, then clears the way for the counter", () => {
+    const before = battlefield();
+    const attacker = addUnit(before, 0, "warrior", 5, 5);
+    const defender = addUnit(before, 1, "warrior", 6, 6);
+    const after = applyAction(before, { type: "ATTACK", unitId: attacker.id, targetId: defender.id }).state;
+    const [strike, counter] = planCombat(before, after);
+    expect(strike.contact).toBeDefined();
+    const contact = strike.contact!;
+    expect(sampleAttackPose(strike, strike.launch).travel).toBeCloseTo(-0.16);
+    expect(contact.gap - sampleAttackPose(strike, strike.impact).travel).toBeCloseTo(0.505);
+    expect(sampleAttackPose(strike, strike.impact + 0.02).travel).toBeCloseTo(contact.travel);
+    expect(sampleAttackPose(strike, strikeMotionEndsAt(strike)).travel).toBeCloseTo(0);
+    expect(counter.start).toBeGreaterThanOrEqual(strikeMotionEndsAt(strike));
+    expect(counter.contact?.x).toBeCloseTo(-contact.x);
+  });
+
   it.each([
     ["archer", "arrow"],
     ["catapult", "stone"],
@@ -202,4 +220,22 @@ describe("visible AI journeys", () => {
     expect(plan.hiddenJourneys.has(rider.id)).toBe(true);
     expect(plan.journeys.size).toBe(0);
   });
+});
+
+it("preserves the remainder of a movement when an attack arrives in the next snapshot", () => {
+  const before = battlefield();
+  const archer = addUnit(before, 0, "archer", 5, 5);
+  const defender = addUnit(before, 1, "warrior", 8, 5);
+  const move = { type: "MOVE" as const, unitId: archer.id, to: 5 * 12 + 6 };
+  const moved = applyAction(before, move);
+  expect(moved.ok).toBe(true);
+  rememberCombatEvents(moved.state, [], [observeMove(before, moved.state, move)!]);
+  const travel = planEncounter(before, moved.state);
+  const attacked = applyAction(moved.state, { type: "ATTACK", unitId: archer.id, targetId: defender.id });
+  expect(attacked.ok).toBe(true);
+  const next = planEncounter(moved.state, attacked.state, { ...travel, issuedAt: 0 }, 60);
+  const [leg] = next.journeys.get(archer.id)!;
+  expect(leg.start).toBeCloseTo(-0.06);
+  expect(leg.path.at(-1)).toEqual({ x: 6, y: 5 });
+  expect(next.strikes[0].start).toBeGreaterThanOrEqual(leg.start + leg.duration);
 });

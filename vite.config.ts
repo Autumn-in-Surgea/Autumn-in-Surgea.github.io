@@ -26,19 +26,19 @@ export default defineConfig({
         categories: ["games", "strategy"],
         icons: [
           {
-            src: "icons/icon-192.png",
+            src: "icons/surgea-app-192.png",
             sizes: "192x192",
             type: "image/png",
             purpose: "any",
           },
           {
-            src: "icons/icon-512.png",
+            src: "icons/surgea-app-512.png",
             sizes: "512x512",
             type: "image/png",
             purpose: "any",
           },
           {
-            src: "icons/icon-512.png",
+            src: "icons/surgea-app-maskable-512.png",
             sizes: "512x512",
             type: "image/png",
             purpose: "maskable",

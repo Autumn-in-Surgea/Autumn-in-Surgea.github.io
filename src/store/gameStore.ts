@@ -1,8 +1,10 @@
 import { create } from "zustand";
-import { applyAction, createGame } from "../game";
+import { applyAction, createGame, getUnitsWithAvailableActions, tileAt } from "../game";
 import type { Action, GameOptions, GameState } from "../game/types";
 import { deserializeGame, serializeGame } from "./save";
 import { aiWorker } from "../workers/aiClient";
+import { freshCombatEvents, rememberCombatEvents } from "../workers/combatEvents";
+import { observeMove } from "../workers/visibleMove";
 export { deserializeGame, serializeGame } from "./save";
 
 const SAVE_KEY = "four-shades-of-autumn.save.v2";
@@ -103,7 +105,7 @@ export const useGameStore = create<Store>((set, get) => ({
   select: (tileId, unitId) =>
     set({ selectedTile: tileId, selectedUnit: unitId ?? null }),
   command: (action) => {
-    const { game, busy } = get();
+    const { game, busy, selectedTile, selectedUnit } = get();
     if (!game || busy || game.currentPlayer !== 0 || game.status !== "playing")
       return false;
     const result = applyAction(game, action);
@@ -111,16 +113,23 @@ export const useGameStore = create<Store>((set, get) => ({
       set({ notice: result.error || "现在无法执行这个行动。" });
       return false;
     }
-    const unit = result.state.units.find((u) => u.id === get().selectedUnit);
     const next = result.state;
+    const witnessed = observeMove(game, next, action);
+    if (witnessed) rememberCombatEvents(next, freshCombatEvents(game, next), [witnessed]);
+    const unit = next.units.find((unit) => unit.id === selectedUnit);
+    // Revealing a hidden blocker does not displace the unit or consume movement.
+    const usedSelectedUnit = !!selectedUnit && (
+      ("unitId" in action && action.unitId === selectedUnit && (action.type !== "MOVE" || !!witnessed)) ||
+      (action.type === "HARVEST" && action.tileId === selectedTile && game.tiles[action.tileId].resource === "starfish")
+    );
+    const selectionSpent = usedSelectedUnit &&
+      (!unit || !getUnitsWithAvailableActions(next, [unit]).has(unit.id));
     const saved = persist(next);
     set({
       game: next,
       notice: saved ? "" : "浏览器存储空间不足，请从菜单导出存档。",
-      selectedUnit: unit?.id ?? null,
-      selectedTile: unit
-        ? unit.y * game.options.size + unit.x
-        : get().selectedTile,
+      selectedUnit: selectionSpent ? null : unit?.id ?? null,
+      selectedTile: selectionSpent ? null : unit ? tileAt(next, unit).id : selectedTile,
     });
     if (next.status === "playing" && next.currentPlayer !== 0)
       get().advanceAI();

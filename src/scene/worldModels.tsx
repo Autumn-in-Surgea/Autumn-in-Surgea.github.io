@@ -1,11 +1,12 @@
 import { createContext, memo, useContext, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import type { BufferGeometry } from "three";
-import type { BuildingId, City, Tile } from "../game/types";
+import { BackSide, Color, ShaderMaterial } from "three";
+import type { BuildingId, City, Player, Tile } from "../game/types";
 import { lighthouseModel, ruinModel } from "./architecture";
 import { grove, mountain } from "./landscape";
-import type { FactionPack, ModelSetId } from "../factions/registry";
-import { MODEL_SETS } from "./factionModels";
+import type { ModelSetId } from "../factions/registry";
+import { cityAppearance, MODEL_SETS } from "./factionModels";
 import { miniatureMaterial } from "./miniature";
 
 const Library = createContext<Map<string, BufferGeometry> | null>(null);
@@ -18,14 +19,54 @@ export function WorldModelLibrary({ children }: { children: ReactNode }) {
   return <Library.Provider value={models}>{children}</Library.Provider>;
 }
 
-function Sculpture({ modelKey, build }: { modelKey: string; build: () => BufferGeometry }) {
+const harvestOutline = new ShaderMaterial({
+  uniforms: { edgeColor: { value: new Color("#ffed9d") } },
+  side: BackSide,
+  depthWrite: false,
+  toneMapped: false,
+  vertexShader: `
+    void main() {
+      vec4 view = modelViewMatrix * vec4(position, 1.0);
+      view.xyz += normalize(normalMatrix * normal) * 0.027;
+      gl_Position = projectionMatrix * view;
+    }
+  `,
+  fragmentShader: `
+    uniform vec3 edgeColor;
+    void main() {
+      gl_FragColor = vec4(edgeColor, 1.0);
+      #include <colorspace_fragment>
+    }
+  `,
+});
+const ignoreRaycast = () => {};
+
+function Sculpture({ modelKey, build, highlight = false }: {
+  modelKey: string;
+  build: () => BufferGeometry;
+  highlight?: boolean;
+}) {
   const models = useContext(Library)!;
   let geometry = models.get(modelKey);
   if (!geometry) {
     geometry = build();
     models.set(modelKey, geometry);
   }
-  return <mesh geometry={geometry} material={miniatureMaterial} castShadow receiveShadow dispose={null} />;
+  return (
+    <>
+      <mesh geometry={geometry} material={miniatureMaterial} castShadow receiveShadow dispose={null} />
+      {highlight && (
+        <mesh
+          name="harvest-highlight"
+          geometry={geometry}
+          material={harvestOutline}
+          renderOrder={1}
+          raycast={ignoreRaycast}
+          dispose={null}
+        />
+      )}
+    </>
+  );
 }
 
 export const TerrainDetails = memo(function TerrainDetails({ tile, simple = false }: { tile: Tile; simple?: boolean }) {
@@ -40,18 +81,20 @@ export const TerrainDetails = memo(function TerrainDetails({ tile, simple = fals
   return null;
 });
 
-export const Resources = memo(function Resources({ tile, modelSet }: { tile: Tile; modelSet: ModelSetId }) {
+export const Resources = memo(function Resources({ tile, modelSet, highlight }: {
+  tile: Tile;
+  modelSet: ModelSetId;
+  highlight: boolean;
+}) {
   const kind = tile.resource;
   if (!kind || tile.cityId || tile.building) return null;
-  return <Sculpture modelKey={`resource:${modelSet}:${kind}`} build={() => MODEL_SETS[modelSet].resource(kind)} />;
+  return <Sculpture modelKey={`resource:${modelSet}:${kind}`} build={() => MODEL_SETS[modelSet].resource(kind)} highlight={highlight} />;
 });
 
-export const CityModel = memo(function CityModel({ city, color, faction }: { city: City; color: string; faction: FactionPack }) {
-  const level = city.owner === null ? 0 : Math.min(city.level, 5);
-  const walls = city.defenseBonus > 0;
-  const capital = level > 0 && city.capitalOf !== null;
-  return <Sculpture modelKey={`city:${faction.modelSet}:${faction.id}:${color}:${level}:${capital}:${walls}`}
-    build={() => MODEL_SETS[faction.modelSet].city(color, faction.id, level, capital, walls)} />;
+export const CityModel = memo(function CityModel({ city, players }: { city: City; players: readonly Player[] }) {
+  const { modelSet, color, level, capital, walls } = cityAppearance(players, city);
+  return <Sculpture modelKey={`city:${modelSet}:${color}:${level}:${capital}:${walls}`}
+    build={() => MODEL_SETS[modelSet].city(color, level, capital, walls)} />;
 });
 
 export const BuildingModel = memo(function BuildingModel({ type, color, modelSet }: { type: BuildingId; color: string; modelSet: ModelSetId }) {

@@ -1,4 +1,4 @@
-import type { BuildingId, CivilizationId } from "../game/types";
+import type { BuildingId } from "../game/types";
 import { Miniature } from "./miniature";
 
 const stone = "#e0d4b7", pale = "#f0e5cd", shadow = "#8b8976";
@@ -21,65 +21,6 @@ function hall(m: Miniature, x: number, z: number, w: number, d: number, h: numbe
   }
   m.box(bronze, x, 0.075 + h, z, w + 0.032, 0.027, d + 0.032);
   m.part("hip", roof, x, 0.102 + h, z, w + 0.054, 0.042, d + 0.054);
-}
-
-export function cityModel(color: string, style: CivilizationId, level: number, capital: boolean, walls: boolean) {
-  const m = new Miniature();
-  const neutral = level === 0;
-  const h = neutral ? 0.19 : 0.235 + Math.min(level, 5) * 0.043;
-  const roof = neutral ? "#857b65" : color;
-  plinth(m, neutral ? 0.68 : 0.85, neutral ? 0.66 : 0.82);
-  m.box(bronze, 0.045, 0.076, 0.026, 0.039, 0.009, neutral ? 0.56 : 0.7);
-  m.box(bronze, 0.01, 0.076, 0.07, neutral ? 0.54 : 0.7, 0.01, 0.026);
-
-  // Leave the front court open so a garrison remains visible.
-  hall(m, -0.15, -0.16, 0.255, 0.22, h, roof);
-  hall(m, 0.17, -0.15, 0.18, 0.175, h*0.62, roof);
-  if (!neutral) hall(m, -0.21, 0.17, 0.154, 0.245, h*0.48, slate);
-  if (level >= 3) hall(m, 0.205, 0.18, 0.155, 0.128, h*0.37, roof);
-  if (level >= 5) hall(m, 0.16, -0.25, 0.09, 0.085, h*1.06, slate);
-
-  const crownY = 0.135 + h;
-  if (!neutral) {
-    switch (style) {
-      case "determia":
-        m.part("bevel", ink, -0.178, crownY + 0.055, -0.16, 0.14, 0.115, 0.15);
-        m.box(pale, -0.19, crownY + 0.12, -0.18, 0.125, 0.024, 0.115);
-        m.box(brass, -0.115, crownY + 0.093, -0.135, 0.045, 0.185, 0.046);
-        break;
-      case "nosta":
-        m.part("octagon", pale, -0.15, crownY + 0.04, -0.16, 0.16, 0.08, 0.16);
-        m.part("spire", bronze, -0.15, crownY + 0.114, -0.16, 0.19, 0.10, 0.19);
-        break;
-      case "ida":
-        m.box(stone, -0.175, crownY+0.026, -0.16, 0.165, 0.065, 0.15);
-        m.part("hip", roof, -0.15, crownY+0.08, -0.168, 0.16, 0.075, 0.16, 0, 0.55);
-        break;
-      case "rina":
-        m.part("octagon", slate, -0.15, crownY+0.065, -0.16, 0.1, 0.135, 0.1);
-        m.part("disc", brass, -0.15, crownY+0.14, -0.16, 0.19, 0.037, 0.19);
-        m.part("spire", roof, -0.15, crownY+0.184, -0.16, 0.145, 0.065, 0.145);
-        break;
-      default:
-        m.box(pale, -0.15, crownY+0.043, -0.16, 0.14, 0.08, 0.135);
-        m.part("hip", roof, -0.15, crownY+0.107, -0.16, 0.19, 0.056, 0.18);
-    }
-    if (capital) {
-      m.part("octagon", brass, 0.308, 0.29, -0.27, 0.026, 0.44, 0.026);
-      m.box(roof, 0.235, 0.45, -0.27, 0.145, 0.085, 0.018);
-      m.box(brass, 0.241, 0.417, -0.269, 0.133, 0.018, 0.024);
-      m.part("gem", pale, 0.308, 0.521, -0.27, 0.043, 0.062, 0.043);
-    }
-  }
-  if (walls) {
-    for (const sign of [-1, 1]) {
-      m.box(shadow, sign*0.383, 0.13, 0, 0.043, 0.18, 0.76);
-      m.box(bronze, sign*0.383, 0.225, 0, 0.055, 0.02, 0.76);
-      m.box(shadow, sign*0.247, 0.13, 0.363, 0.227, 0.18, 0.04);
-      m.part("bevel", pale, sign*0.36, 0.16, 0.36, 0.095, 0.25, 0.09);
-    }
-  }
-  return m.finish();
 }
 
 function treeSculpture(m: Miniature, x: number, z: number) {

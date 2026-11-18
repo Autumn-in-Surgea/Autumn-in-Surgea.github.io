@@ -41,7 +41,10 @@ button.map-action-badge {
   font-size: var(--font-size-small);
   font-weight: 700;
   white-space: nowrap;
-  animation: map-action-float 2.4s ease-in-out infinite;
+  animation: map-action-float 2.7s var(--motion-ease) infinite;
+  transition:
+    box-shadow 160ms var(--motion-ease),
+    border-color 160ms var(--motion-ease);
 }
 .map-action-tag::after {
   content: "";
@@ -69,6 +72,9 @@ button.map-action-badge {
   display: none;
 }
 @keyframes map-action-float {
+  0%, 100% {
+    transform: translateY(0);
+  }
   50% {
     transform: translateY(-2px);
   }

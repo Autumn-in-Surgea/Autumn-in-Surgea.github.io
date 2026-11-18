@@ -3,7 +3,7 @@ import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import type { GameState, Position } from "../game/types";
 import { Piece, terrainHeight } from "./models";
-import { clampProgress, easeInOut } from "./motion";
+import { clampProgress, easeInOut, easeOut } from "./motion";
 import { incomingOffset } from "./combatMotion";
 import { usePlaybackClock } from "./playbackClock";
 import type { Projectile, Strike } from "./combatMotion";
@@ -103,10 +103,15 @@ export function ShotEffect({
   const playback = usePlaybackClock();
   const missile = useRef<THREE.Group>(null);
   const burst = useRef<THREE.Group>(null);
-  const end = useMemo(
-    () => tilePoint(game, strike.at, offset),
-    [game.tiles, strike, offset],
-  );
+  const end = useMemo(() => {
+    const point = tilePoint(game, strike.at, offset);
+    if (strike.contact) {
+      point.x -= strike.contact.x * strike.contact.targetReach;
+      point.z -= strike.contact.z * strike.contact.targetReach;
+      point.y -= 0.20;
+    }
+    return point;
+  }, [game.tiles, strike, offset]);
   const start = useMemo(() => {
     if (strike.from) return tilePoint(game, strike.from, offset);
     const [x, z] = incomingOffset(strike.id);
@@ -127,9 +132,10 @@ export function ShotEffect({
         : 0.34;
   useFrame(() => {
     const time = (playback.time - issuedAt) / 1000;
-    const t = clampProgress(
+    const progress = clampProgress(
       (time - strike.launch) / (strike.impact - strike.launch),
     );
+    const t = progress * 0.72 + easeInOut(progress) * 0.28;
     if (missile.current) {
       missile.current.visible =
         !reducedMotion && time >= strike.launch && time < strike.impact;
@@ -145,12 +151,12 @@ export function ShotEffect({
     );
     burst.current.visible = !reducedMotion && p > 0 && p < 1;
     burst.current.scale.setScalar(
-      Math.sin(Math.PI * easeInOut(p)) *
+      easeOut(p / 0.18) * (1 - easeInOut((p - 0.18) / 0.82)) *
         (strike.projectile === "shell" || strike.splashWeapon === "shell"
           ? 1.3
           : 0.85),
     );
-    burst.current.rotation.y = p * 0.6;
+    burst.current.rotation.y = easeOut(p) * 0.42;
   });
   return (
     <>

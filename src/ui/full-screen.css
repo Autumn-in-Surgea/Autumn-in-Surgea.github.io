@@ -9,7 +9,7 @@
   background: linear-gradient(150deg, #faf5e9 30%, #eee6d4);
   color: var(--ink);
   outline: none;
-  animation: menu-page-in 180ms ease-out;
+  animation: menu-page-in 215ms var(--motion-enter);
 }
 
 .menu-page-wide {
@@ -331,23 +331,73 @@
   padding: 5px 9px;
 }
 
-.menu-page .tech-balance,
-.menu-page .tech-legend {
-  padding-inline: 0;
+.menu-page-content:has(> .tech-viewport) {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  height: 100%;
+  padding-block: 4px max(4px, env(safe-area-inset-bottom));
 }
 
 .menu-page .tech-balance {
-  padding-top: 0;
+  justify-content: start;
+  gap: 12px;
+  padding: 0;
 }
 
-.menu-page .radial-tech-scroll {
-  overflow: visible;
+.tech-zoom-controls {
+  display: flex;
+  margin-left: auto;
+}
+
+.tech-zoom-controls button {
+  display: grid;
+  place-items: center;
+  min-width: 40px;
+  min-height: 40px;
+  border-radius: 6px;
+  color: var(--green);
+}
+
+.tech-zoom-controls button:hover {
+  background: #ede5d2;
+}
+
+.tech-viewport {
+  overflow: auto;
+  scrollbar-width: none;
+  overscroll-behavior: contain;
+  touch-action: none;
+  user-select: none;
+  cursor: grab;
+}
+
+.tech-viewport:active {
+  cursor: grabbing;
+}
+
+.tech-stage {
+  position: relative;
+  width: var(--tech-extent, 720px);
+  height: var(--tech-extent, 720px);
+  min-width: 100%;
+  min-height: 100%;
+  overflow: clip;
 }
 
 .menu-page .radial-tech-tree {
-  width: min(100%, 690px, max(610px, calc(100dvh - 126px)));
-  min-width: 0;
-  margin: 0 auto;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(var(--tech-scale, 1));
+}
+
+.menu-page .radial-tech {
+  width: 11%;
+  height: 7.8%;
+}
+
+.menu-page .tech-legend {
+  padding: 8px 0;
 }
 
 @media (max-width: 720px) {
@@ -362,42 +412,6 @@
   .menu-page .setup-map-column {
     max-width: 285px;
     margin-inline: auto;
-  }
-
-  .menu-page .radial-tech-tree {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    align-items: stretch;
-    gap: 5px;
-    width: 100%;
-    aspect-ratio: auto;
-    margin-block: 8px;
-  }
-
-  .menu-page :is(.tech-connections, .tech-center) {
-    display: none;
-  }
-
-  .menu-page .radial-tech {
-    position: static;
-    flex-direction: row;
-    justify-content: space-between;
-    width: 100%;
-    height: auto;
-    min-height: 44px;
-    transform: none;
-    text-align: left;
-    padding: 8px 10px;
-  }
-
-  .menu-page .radial-tech:not(:disabled):active {
-    transform: scale(0.98);
-  }
-
-  .menu-page .radial-tech[data-tier="1"] {
-    grid-column: 1 / -1;
-    margin-top: 5px;
-    font-weight: 700;
   }
 }
 

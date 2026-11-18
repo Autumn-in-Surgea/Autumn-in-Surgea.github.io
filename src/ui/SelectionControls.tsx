@@ -1,14 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import type { ReactNode } from "react";
 import {
-  ArrowLeft, ArrowUp, Award, BrainCircuit, Building2, Compass, Crosshair,
-  Eye, Flag, Hammer, Heart, Info, List, Mountain, Route, Shield, Sprout,
+  ArrowLeft, ArrowUp, Award, BrainCircuit, Compass, Crosshair,
+  Eye, Flag, Hammer, Heart, Info, List, Route, Shield, Sprout,
   Swords, Trash2, Trees, Users, Waves, X, Zap,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
   BUILDINGS, UNITS, getCityCapacity, getCityIncome, getMovement, getTrainingCost,
-  getUpgradeRewards, getVisibleResource, isUnitVisible, populationNeeded, previewCombat,
+  getUpgradeRewards, getVisibleResource, hasTech, isUnitVisible, populationNeeded, previewCombat,
   validateAction,
 } from "../game";
 import type { Action, City, GameState, Resource, Reward, Terrain, Tile, Unit, UnitType } from "../game";
@@ -24,7 +24,7 @@ export function HudAction({
   badge?: ReactNode;
   title?: string;
   disabled?: boolean;
-  variant?: "accent" | "danger";
+  variant?: "accent";
   className?: string;
   ariaLabel?: string;
 }) {
@@ -38,9 +38,13 @@ export function HudAction({
       aria-label={ariaLabel ?? label}
       onClick={onClick}
     >
-      <Icon size={21} aria-hidden="true" />
-      <span>{label}</span>
-      {badge !== undefined && <span className="hud-action-badge">{badge}</span>}
+      {badge === undefined ? <Icon size={21} aria-hidden="true" /> : (
+        <span className="hud-action-icon-row">
+          <Icon size={21} aria-hidden="true" />
+          <span className="hud-action-badge">{badge}</span>
+        </span>
+      )}
+      <span className="hud-action-label">{label}</span>
     </button>
   );
 }
@@ -80,13 +84,6 @@ const unitIcons: Record<UnitType, LucideIcon> = {
   dinghy: Waves,
   pirate: Swords,
 };
-const terrainIcons: Record<Terrain, LucideIcon> = {
-  plain: Sprout,
-  forest: Trees,
-  mountain: Mountain,
-  shallow: Waves,
-  deep: Waves,
-};
 const rewards: Record<Reward, { title: string; note: string; icon: LucideIcon }> = {
   income: { title: "工坊", note: "每回合 +1 星星", icon: Hammer },
   explore: { title: "探索者", note: "自动探索 15 步", icon: Compass },
@@ -104,7 +101,7 @@ interface Command {
   icon: LucideIcon;
   cost?: number;
   note?: string;
-  variant?: "accent" | "danger";
+  variant?: "accent";
 }
 
 function tileDevelopment(game: GameState, tile: Tile) {
@@ -182,12 +179,6 @@ function unitCommands(game: GameState, unit: Unit, tile: Tile, city?: City | nul
   return commands;
 }
 
-function describeDirection(city: City, tile: Tile) {
-  const northSouth = tile.y === city.y ? "" : tile.y < city.y ? "北" : "南";
-  const eastWest = tile.x === city.x ? "" : tile.x < city.x ? "西" : "东";
-  return `${northSouth}${eastWest}侧`;
-}
-
 function Details({ rows }: { rows: ReadonlyArray<readonly [string, ReactNode]> }) {
   return (
     <dl className="selection-detail-grid">
@@ -198,11 +189,28 @@ function Details({ rows }: { rows: ReadonlyArray<readonly [string, ReactNode]> }
   );
 }
 
+function CombatSide({ unit, incoming, enemy = false }: {
+  unit: Unit;
+  incoming: number;
+  enemy?: boolean;
+}) {
+  const health = `${unit.hp} → ${Math.max(0, unit.hp - incoming)}`;
+  return (
+    <dl className="hud-combat-side" data-enemy={enemy}>
+      <dt><span>{enemy ? "目标" : "我方"}</span> {UNITS[unit.type].name}</dt>
+      <dd>
+        <strong><span className="hud-combat-health-label">生命 </span>{health}</strong>
+        <span>{enemy ? "预计伤害" : "预计反击"} <b>{incoming}</b></span>
+      </dd>
+    </dl>
+  );
+}
+
 type Submenu = "main" | "train" | "develop" | "naval" | "extra";
 
 export function SelectionControls({
   game, tileId, unit, city, target, busy = false, onClose, onCommand,
-  onCancelAttack, onSelectUnit, selectionRequest,
+  selectionRequest, resetScroll,
 }: {
   game: GameState;
   tileId: number;
@@ -212,9 +220,8 @@ export function SelectionControls({
   busy?: boolean;
   onClose: () => void;
   onCommand: (a: Action) => void;
-  onCancelAttack: () => void;
-  onSelectUnit?: (id: string | null) => void;
   selectionRequest: number;
+  resetScroll: () => void;
 }) {
   const [submenu, setSubmenu] = useState<Submenu>("main");
   const [details, showDetails] = useState(false);
@@ -222,15 +229,13 @@ export function SelectionControls({
     setSubmenu("main");
     showDetails(false);
   }, [tileId, unit?.id, selectionRequest]);
+  useLayoutEffect(resetScroll, [resetScroll, submenu, target?.id]);
 
   const tile = game.tiles[tileId];
   const player = game.players[0];
   const explored = player.explored.includes(tileId);
   const unitVisible = explored && unit && isUnitVisible(game, unit, 0) ? unit : null;
   const knownCity = explored ? city : null;
-  const occupant = explored
-    ? unitVisible ?? game.units.find(u => u.x === tile.x && u.y === tile.y && isUnitVisible(game, u, 0))
-    : null;
   const canAct = !busy && game.currentPlayer === 0 && game.status === "playing";
   function blocked(action: Action) {
     if (game.status !== "playing") return "对局已结束。";
@@ -257,66 +262,28 @@ export function SelectionControls({
 
   const visibleTarget = canAct && unitVisible?.owner === 0 && target &&
     isUnitVisible(game, target, 0) && target.owner !== 0 ? target : null;
-  const switchSurface = occupant && onSelectUnit && (
-    <HudAction
-      icon={unitVisible ? (knownCity ? Building2 : terrainIcons[tile.terrain]) : unitIcons[occupant.type]}
-      label={unitVisible ? (knownCity ? "城市" : "地块") : "单位"}
-      title={unitVisible ? "切换到地块或城市操作" : "切换到驻军操作"}
-      onClick={() => onSelectUnit(unitVisible ? null : occupant.id)}
-    />
-  );
   const detailsButton = <HudAction icon={Info} label="详情" onClick={() => showDetails(true)} />;
   const closeButton = <HudAction icon={X} label="取消" ariaLabel="取消选择" onClick={onClose} />;
   const backButton = <HudAction icon={ArrowLeft} label="返回" className="hud-submenu-back" onClick={() => setSubmenu("main")} />;
 
   if (visibleTarget && unitVisible) {
-    const convert = UNITS[unitVisible.type].skills.includes("convert");
+    if (UNITS[unitVisible.type].skills.includes("convert")) {
+      return (
+        <div className="hud-convert-preview" role="status" aria-label="转化预估">
+          <BrainCircuit size={18} aria-hidden="true" />
+          <span>转化后，<strong>{UNITS[visibleTarget.type].name}</strong>加入我方</span>
+        </div>
+      );
+    }
     const preview = previewCombat(game, unitVisible.id, visibleTarget.id);
-    const action: Action = {
-      type: convert ? "CONVERT" : "ATTACK",
-      unitId: unitVisible.id,
-      targetId: visibleTarget.id,
-    };
-    const reason = blocked(action);
-    const attacker = UNITS[unitVisible.type].name;
-    const defender = UNITS[visibleTarget.type].name;
-    return (
-      <>
-        <HudAction
-          icon={convert ? BrainCircuit : Swords}
-          label={convert ? "确认转化" : "确认攻击"}
-          badge={convert || !preview.canAttack ? undefined : <span>−{preview.damage}</span>}
-          title={reason ?? (convert ? `将${defender}转化为己方单位` : `预计伤害 ${preview.damage}，预计反击 ${preview.retaliation}`)}
-          variant="danger"
-          disabled={reason !== null}
-          onClick={() => {
-            onCommand(action);
-            onCancelAttack();
-          }}
-        />
-        {detailsButton}
-        <HudAction icon={X} label="取消攻击" onClick={() => {
-          showDetails(false);
-          onCancelAttack();
-        }} />
-        {details && (
-          <Modal title={convert ? "转化详情" : "战斗预估"} onClose={() => showDetails(false)}>
-            <div className="selection-details">
-              {convert ? (
-                <p>将 {defender} 转化为己方单位。</p>
-              ) : (
-                <Details rows={[
-                  [`${attacker}生命`, `${unitVisible.hp} → ${Math.max(0, unitVisible.hp - preview.retaliation)}`],
-                  [`${defender}生命（目标）`, `${visibleTarget.hp} → ${Math.max(0, visibleTarget.hp - preview.damage)}`],
-                  ["伤害", preview.damage],
-                  ["反击", preview.retaliation],
-                ]} />
-              )}
-            </div>
-          </Modal>
-        )}
-      </>
-    );
+    if (preview.canAttack) {
+      return (
+        <div className="hud-combat-preview" role="status" aria-label="战斗预估" aria-atomic="true">
+          <CombatSide unit={unitVisible} incoming={preview.retaliation} />
+          <CombatSide unit={visibleTarget} incoming={preview.damage} enemy />
+        </div>
+      );
+    }
   }
 
   const cityRewards = !unitVisible && knownCity?.owner === 0 ? getUpgradeRewards(knownCity) : [];
@@ -360,7 +327,9 @@ export function SelectionControls({
     } else if (submenu === "train") {
       isNested = true;
       const cityId = knownCity.id;
-      actions = <>{backButton}{Object.values(UNITS).filter(def => def.trainable).map(def => commandButton({
+      const trainable = Object.values(UNITS)
+        .filter(def => def.trainable && (!def.tech || hasTech(player, def.tech)));
+      actions = <>{backButton}{trainable.map(def => commandButton({
         action: { type: "TRAIN", cityId, unitType: def.id },
         label: def.name,
         icon: unitIcons[def.id],
@@ -368,20 +337,7 @@ export function SelectionControls({
         note: def.description,
       }))}</>;
     } else {
-      const candidates = knownCity.territory
-        .filter(id => player.visible.includes(id))
-        .flatMap(id => tileDevelopment(game, game.tiles[id])
-          .filter(command => blocked(command.action) === null)
-          .map(command => ({ ...command, label: `${command.label}·${describeDirection(knownCity, game.tiles[id])}` })));
-      isNested = submenu === "develop" && candidates.length > 0;
-      actions = isNested ? (
-        <>{backButton}{candidates.map(commandButton)}</>
-      ) : (
-        <>
-          <HudAction icon={Users} label="训练" onClick={() => setSubmenu("train")} />
-          <HudAction icon={Hammer} label="建设" title="领土内的采集与建设" disabled={!candidates.length} onClick={() => setSubmenu("develop")} />
-        </>
-      );
+      actions = <HudAction icon={Users} label="训练" onClick={() => setSubmenu("train")} />;
     }
   } else if (!unitVisible && !knownCity && explored && player.visible.includes(tileId)) {
     const candidates = [
@@ -409,7 +365,7 @@ export function SelectionControls({
   return (
     <>
       {actions}
-      {!isNested && <>{switchSurface}{detailsButton}{closeButton}</>}
+      {!isNested && <>{detailsButton}{closeButton}</>}
       {details && (
         <Modal title={title} onClose={() => showDetails(false)}>
           <div className="selection-details">

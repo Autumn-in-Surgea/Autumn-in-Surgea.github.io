@@ -39,11 +39,25 @@ for (const entry of await readdir(root, { recursive: true })) {
   if (file === "sw.js" || /^workbox-[^/]+\.js$/.test(file)) continue;
   assert.ok(entries.has(file), `Build asset missing from precache: ${file}`);
 }
-for (const icon of manifest.icons) {
-  assert.ok(entries.has(icon.src), `Icon missing from offline cache: ${icon.src}`);
-  const bytes = await readFile(path.join(root, icon.src));
-  const expected = Number(icon.sizes.split("x")[0]);
-  assert.equal(bytes.readUInt32BE(16), expected, `Wrong icon width: ${icon.src}`);
-  assert.equal(bytes.readUInt32BE(20), expected, `Wrong icon height: ${icon.src}`);
+async function verifyIcon(src, sizes) {
+  const url = src.replace(/^\.\//, "");
+  assert.ok(entries.has(url), `Icon missing from offline cache: ${url}`);
+  const bytes = await readFile(path.join(root, url));
+  assert.equal(bytes.subarray(0, 8).toString("hex"), "89504e470d0a1a0a", `Invalid PNG: ${url}`);
+  assert.equal(`${bytes.readUInt32BE(16)}x${bytes.readUInt32BE(20)}`, sizes, `Wrong icon size: ${url}`);
+}
+for (const [purpose, sizes] of [["any", "192x192"], ["any", "512x512"], ["maskable", "512x512"]]) {
+  assert.ok(
+    manifest.icons.some(icon => icon.purpose === purpose && icon.sizes === sizes),
+    `Missing ${sizes} ${purpose} icon in manifest`,
+  );
+}
+for (const icon of manifest.icons) await verifyIcon(icon.src, icon.sizes);
+for (const [relation, sizes] of [["icon", "32x32"], ["apple-touch-icon", "180x180"]]) {
+  const tag = html.match(new RegExp(`<link\\b[^>]*\\brel="${relation}"[^>]*>`))?.[0];
+  const src = tag?.match(/\bhref="([^"]+)"/)?.[1];
+  assert.ok(src, `Missing link for ${relation}`);
+  assert.ok(tag.includes(`sizes="${sizes}"`), `Missing size for ${relation}`);
+  await verifyIcon(src, sizes);
 }
 console.log(`PWA build verified: ${entries.size} local assets, AI worker, standalone manifest, installation icons, relative URLs.`);

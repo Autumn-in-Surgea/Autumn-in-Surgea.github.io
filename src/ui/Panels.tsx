@@ -23,6 +23,7 @@ import {
 import type { Action, GameState, TechDefinition } from "../game/types";
 import { serializeGame, useGameStore } from "../store/gameStore";
 import { Modal, Cost, ResourceIcon } from "./Common";
+import { TechTreeViewport } from "./TechTreeViewport";
 import { scenarioLabels } from "./Menu";
 import { PwaControls } from "../pwa/PwaControls";
 
@@ -63,7 +64,7 @@ export function TechPanel({
   });
   return (
     <Modal title="科技树" onClose={onClose} wide>
-      <div className="tech-balance">
+      <TechTreeViewport balance={<>
         <span className="resource-pill">
           <ResourceIcon />
           {player.resources}
@@ -71,77 +72,74 @@ export function TechPanel({
         <span>
           {player.technologies.length} / {TECHNOLOGIES.length}
         </span>
-      </div>
-      <div className="radial-tech-scroll">
-        <div className="radial-tech-tree">
-          <svg
-            viewBox="0 0 100 100"
-            className="tech-connections"
-            aria-hidden="true"
-          >
-            {nodes.map((n) => {
-              const p = n.parent
-                ? nodes.find((a) => a.tech.id === n.parent)
-                : { x: 50, y: 50 };
-              return (
-                p && (
-                  <line
-                    key={n.tech.id}
-                    x1={p.x}
-                    y1={p.y}
-                    x2={n.x}
-                    y2={n.y}
-                    className={
-                      player.technologies.includes(n.tech.id) ? "complete" : ""
-                    }
-                  />
-                )
-              );
-            })}
-          </svg>
-          <div className="tech-center" style={{ borderColor: player.color }}>
-            <strong>{player.name}</strong>
-            <span>科技</span>
-          </div>
-          {nodes.map(({ tech, x, y }) => {
-            const done = player.technologies.includes(tech.id),
-              ready =
-                tech.tier === 1 ||
-                tech.prerequisites.some((p) =>
-                  player.technologies.includes(p),
-                ) ||
-                TECHNOLOGIES.some(
-                  (c) =>
-                    c.prerequisites.includes(tech.id) &&
-                    player.technologies.includes(c.id),
-                );
-            const action: Action = { type: "RESEARCH", techId: tech.id },
-              reason = validateAction(game, action);
+      </>}>
+        <svg
+          viewBox="0 0 100 100"
+          className="tech-connections"
+          aria-hidden="true"
+        >
+          {nodes.map((n) => {
+            const p = n.parent
+              ? nodes.find((a) => a.tech.id === n.parent)
+              : { x: 50, y: 50 };
             return (
-              <button
-                key={tech.id}
-                data-tier={tech.tier}
-                className={`radial-tech ${done ? "researched" : ready ? "researchable" : "locked"}`}
-                style={{ left: `${x}%`, top: `${y}%` }}
-                disabled={done || !!reason || game.currentPlayer !== 0}
-                onClick={() => onCommand(action)}
-                title={`${tech.unlocks}${reason ? `\n${reason}` : ""}`}
-              >
-                <strong>{tech.name}</strong>
-                <span>
-                  {done ? (
-                    <Check size={15} />
-                  ) : !ready ? (
-                    <LockKeyhole size={14} />
-                  ) : (
-                    <Cost value={getTechCost(game, 0, tech.id)} />
-                  )}
-                </span>
-              </button>
+              p && (
+                <line
+                  key={n.tech.id}
+                  x1={p.x}
+                  y1={p.y}
+                  x2={n.x}
+                  y2={n.y}
+                  className={
+                    player.technologies.includes(n.tech.id) ? "complete" : ""
+                  }
+                />
+              )
             );
           })}
+        </svg>
+        <div className="tech-center" style={{ borderColor: player.color }}>
+          <strong>{player.name}</strong>
+          <span>科技</span>
         </div>
-      </div>
+        {nodes.map(({ tech, x, y }) => {
+          const done = player.technologies.includes(tech.id),
+            ready =
+              tech.tier === 1 ||
+              tech.prerequisites.some((p) =>
+                player.technologies.includes(p),
+              ) ||
+              TECHNOLOGIES.some(
+                (c) =>
+                  c.prerequisites.includes(tech.id) &&
+                  player.technologies.includes(c.id),
+              );
+          const action: Action = { type: "RESEARCH", techId: tech.id },
+            reason = validateAction(game, action);
+          return (
+            <button
+              key={tech.id}
+              data-tier={tech.tier}
+              className={`radial-tech ${done ? "researched" : ready ? "researchable" : "locked"}`}
+              style={{ left: `${x}%`, top: `${y}%` }}
+              disabled={done || !!reason || game.currentPlayer !== 0}
+              onClick={() => onCommand(action)}
+              title={`${tech.unlocks}${reason ? `\n${reason}` : ""}`}
+            >
+              <strong>{tech.name}</strong>
+              <span>
+                {done ? (
+                  <Check size={15} />
+                ) : !ready ? (
+                  <LockKeyhole size={14} />
+                ) : (
+                  <Cost value={getTechCost(game, 0, tech.id)} />
+                )}
+              </span>
+            </button>
+          );
+        })}
+      </TechTreeViewport>
       <div className="tech-legend">
         <span>
           <i className="researched-dot" />

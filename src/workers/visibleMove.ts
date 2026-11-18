@@ -26,7 +26,7 @@ export function observeMove(
   if (!path.length) return entry;
   const seen = new Set(before.players[0].visible);
   const visible = new Set(after.players[0].visible);
-  if (path.every((tile) => seen.has(tile) && visible.has(tile)))
+  if (old.owner === 0 || path.every((tile) => seen.has(tile) && visible.has(tile)))
     entry.path = path;
   return entry;
 }

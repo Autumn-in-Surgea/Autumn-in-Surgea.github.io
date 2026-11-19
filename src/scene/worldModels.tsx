@@ -1,14 +1,14 @@
 import { createContext, memo, useContext, useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import type { BufferGeometry } from "three";
-import { BackSide, Color, ShaderMaterial } from "three";
-import type { BuildingId, City, Player, Tile } from "../game/types";
+import type { BufferGeometry, MeshStandardMaterial } from "three";
+import type { BuildingId, City, Player, Position, Tile } from "../game/types";
 import { siteLandscape } from "./landscape";
 import type { BuildingVisualTier } from "./buildingVisualTier";
 import type { ModelSetId } from "../nations/registry";
-import { getTerrainAssets } from "../nations/models";
+import { getTerrainAssets, structureVariant, type NationModels } from "../nations/models";
 import { cityAppearance, MODEL_SETS } from "./factionModels";
 import { useTerritoryMaterial } from "./territoryMaterials";
+import { makeGlowGeometry, resourceSilhouetteMask, silhouetteGlowProps, writeSilhouette } from "./silhouetteGlow";
 
 const Library = createContext<Map<string, BufferGeometry> | null>(null);
 
@@ -20,27 +20,19 @@ export function WorldModelLibrary({ children }: { children: ReactNode }) {
   return <Library.Provider value={models}>{children}</Library.Provider>;
 }
 
-const harvestOutline = new ShaderMaterial({
-  uniforms: { edgeColor: { value: new Color("#ffed9d") } },
-  side: BackSide,
-  depthWrite: false,
-  toneMapped: false,
-  vertexShader: `
-    void main() {
-      vec4 view = modelViewMatrix * vec4(position, 1.0);
-      view.xyz += normalize(normalMatrix * normal) * 0.027;
-      gl_Position = projectionMatrix * view;
-    }
-  `,
-  fragmentShader: `
-    uniform vec3 edgeColor;
-    void main() {
-      gl_FragColor = vec4(edgeColor, 1.0);
-      #include <colorspace_fragment>
-    }
-  `,
-});
-const ignoreRaycast = () => {};
+// Resources write during the opaque pass. Their glow draws before the unit
+// layer clears board depth and stencil to bring the pieces to the foreground.
+const harvestOutline = silhouetteGlowProps(resourceSilhouetteMask, 0.5);
+const harvestMaterials = new WeakMap<MeshStandardMaterial, MeshStandardMaterial>();
+
+function harvestMaterial(base: MeshStandardMaterial) {
+  let material = harvestMaterials.get(base);
+  if (!material) {
+    material = writeSilhouette(base.clone(), resourceSilhouetteMask);
+    harvestMaterials.set(base, material);
+  }
+  return material;
+}
 
 function Sculpture({ modelKey, build, highlight = false }: {
   modelKey: string;
@@ -54,19 +46,20 @@ function Sculpture({ modelKey, build, highlight = false }: {
     geometry = build();
     models.set(modelKey, geometry);
   }
+  let glow: BufferGeometry | undefined;
+  if (highlight) {
+    const key = `glow:${modelKey}`;
+    glow = models.get(key);
+    if (!glow) {
+      glow = makeGlowGeometry(geometry);
+      models.set(key, glow);
+    }
+  }
   return (
     <>
-      <mesh geometry={geometry} material={material} castShadow receiveShadow dispose={null} />
-      {highlight && (
-        <mesh
-          name="harvest-highlight"
-          geometry={geometry}
-          material={harvestOutline}
-          renderOrder={1}
-          raycast={ignoreRaycast}
-          dispose={null}
-        />
-      )}
+      <mesh geometry={geometry} material={highlight ? harvestMaterial(material) : material}
+        castShadow receiveShadow dispose={null} />
+      {glow && <mesh {...harvestOutline} name="harvest-highlight" geometry={glow} dispose={null} />}
     </>
   );
 }
@@ -96,17 +89,23 @@ export const Resources = memo(function Resources({ tile, highlight }: {
     build={() => getTerrainAssets(tile.terrainVariant).resource(kind)} highlight={highlight} />;
 });
 
-export const CityModel = memo(function CityModel({ city, players }: { city: City; players: readonly Player[] }) {
-  const { modelSet, color, level, capital, walls } = cityAppearance(players, city);
-  return <Sculpture modelKey={`city:${modelSet}:${color}:${level}:${capital}:${walls}`}
-    build={() => MODEL_SETS[modelSet].city(color, level, capital, walls)} />;
+export const CityModel = memo(function CityModel({ city, players, seed, terrainVariant }: {
+  city: City; players: readonly Player[]; seed: string; terrainVariant: Tile["terrainVariant"];
+}) {
+  const { modelSet, color, level, capital, walls } = cityAppearance(players, city, terrainVariant);
+  const models: NationModels = MODEL_SETS[modelSet];
+  const variant = structureVariant(models, seed, city);
+  return <Sculpture modelKey={`city:${modelSet}:${color}:${level}:${capital}:${walls}:${variant ?? ""}`}
+    build={() => models.city(color, level, capital, walls, variant)} />;
 });
 
-export const BuildingModel = memo(function BuildingModel({ type, color, modelSet, tier }: {
-  type: BuildingId; color: string; modelSet: ModelSetId; tier: BuildingVisualTier;
+export const BuildingModel = memo(function BuildingModel({ type, color, modelSet, tier, seed, tile }: {
+  type: BuildingId; color: string; modelSet: ModelSetId; tier: BuildingVisualTier; seed: string; tile: Position;
 }) {
-  return <Sculpture modelKey={`building:${modelSet}:${type}:${color}:${tier}`}
-    build={() => MODEL_SETS[modelSet].building(type, color, tier)} />;
+  const models: NationModels = MODEL_SETS[modelSet];
+  const variant = structureVariant(models, seed, tile);
+  return <Sculpture modelKey={`building:${modelSet}:${type}:${color}:${tier}:${variant ?? ""}`}
+    build={() => models.building(type, color, tier, variant)} />;
 });
 
 export const RuinModel = ({ terrainVariant }: Pick<Tile, "terrainVariant">) =>

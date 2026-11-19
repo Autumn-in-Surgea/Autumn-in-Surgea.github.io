@@ -506,7 +506,8 @@ function monument(m: Miniature, roof: string, tier: Tier, type: BuildingId) {
   }
 }
 
-export function danubianBuilding(type: BuildingId, color: string, tier: Tier) {
+export function danubianBuilding(type: BuildingId, color: string, tier: Tier,
+  decorate?: (model: Miniature, roof: string, ground: number) => void) {
   const m = new Miniature();
   const roof = architecturalEnamel(color);
   switch (type) {
@@ -545,6 +546,7 @@ export function danubianBuilding(type: BuildingId, color: string, tier: Tier) {
     default:
       monument(m, roof, tier, type);
   }
+  decorate?.(m, roof, ground);
   const geometry = m.finish();
   // Marine piers and the shore-fitted bridge already use the waterline as zero.
   if (type === "port" || type === "bridge") return geometry;

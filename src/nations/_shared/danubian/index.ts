@@ -1,4 +1,5 @@
-import type { UnitType } from "../../../game/types";
+import type { BuildingId, UnitType } from "../../../game/types";
+import type { BuildingVisualTier } from "../../../scene/buildingVisualTier";
 import { danubianBuilding } from "./buildings";
 import { danubianCity } from "./cities";
 import { danubianUnit } from "./units";
@@ -12,7 +13,7 @@ const tallPieceLabels: Partial<Record<UnitType, number>> = {
 };
 export const danubianModels = {
   unit: danubianUnit,
-  city: danubianCity,
-  building: danubianBuilding,
+  city: (color: string, level: number, capital: boolean, walls: boolean) => danubianCity(color, level, capital, walls),
+  building: (type: BuildingId, color: string, tier: BuildingVisualTier) => danubianBuilding(type, color, tier),
   labelHeight: (type: UnitType) => tallPieceLabels[type] ?? 0.84,
 };

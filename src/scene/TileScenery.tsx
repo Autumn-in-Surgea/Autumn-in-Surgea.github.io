@@ -29,10 +29,10 @@ interface ModelProps {
 
 function Scenery({ game, tile, city, tier, simple, checkResourceAvailability, showResourceHints, knownTiles, includeLandscape = true }: ModelProps & { includeLandscape?: boolean }) {
   const { modelSet } = factionForOwner(game.players, tile.owner);
-  if (city) return <CityModel city={city} players={game.players} />;
+  if (city) return <CityModel city={city} players={game.players} seed={game.options.seed} terrainVariant={tile.terrainVariant} />;
   if (tile.building) {
     const stage = tier as BuildingVisualTier;
-    const building = <BuildingModel type={tile.building} modelSet={modelSet}
+    const building = <BuildingModel type={tile.building} modelSet={modelSet} seed={game.options.seed} tile={tile}
       tier={stage} color={colorForOwner(game.players, tile.owner)} />;
     if (tile.building === "bridge") return <BridgeSpan tile={tile} tiles={game.tiles}
       size={game.options.size} explored={knownTiles} tier={stage}>{building}</BridgeSpan>;

@@ -1,11 +1,12 @@
 import type { CSSProperties, ReactNode } from "react";
 import {
-  ArrowLeftRight, Award, BrainCircuit, Compass, Crosshair, Eye, Flag, Hammer, Heart,
+  ArrowLeftRight, Award, Axe, BrainCircuit, Compass, Crosshair, Eye, Flag, Hammer, Heart,
   RotateCcw, Route, Shield, Sprout, Swords, Trash2, Trees, Users, Waves, Zap,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
-  BUILDINGS, NAVAL_UPGRADES, UNITS, canCancelNavalUpgrade, canCancelTraining, canEditNavalUpgrade, canEditTraining,
+  BUILDINGS, NAVAL_UPGRADES, UNITS, VETERAN_KILLS_REQUIRED,
+  canCancelNavalUpgrade, canCancelTraining, canEditNavalUpgrade, canEditTraining,
   getCityIncome, getCityUnitCount, getMovement,
   getNavalUpgradeOrderCost, getNavalUpgradeRefund, getTrainingOrderCost, getTrainingRefund,
   getTrainingRounds, getUnitTrainingRounds, getUnitUpkeep,
@@ -72,7 +73,7 @@ const resourceNames: Record<Resource, string> = {
   starfish: "海星",
 };
 const unitIcons: Record<UnitType, LucideIcon> = {
-  warrior: Swords,
+  warrior: Axe,
   rider: Zap,
   defender: Shield,
   archer: Crosshair,
@@ -191,7 +192,7 @@ function unitCommands(game: GameState, unit: Unit, tile: Tile, city?: City | nul
   if (tile.ruin) commands.push({ action: { type: "EXAMINE", unitId }, label: "探索遗迹", icon: Compass });
   if (unit.hp < unit.maxHp) commands.push({ action: { type: "HEAL", unitId }, label: "恢复", icon: Heart });
   if (skills.includes("heal")) commands.push({ action: { type: "HEAL_OTHERS", unitId }, label: "治疗友军", icon: Heart });
-  if (unit.kills >= 3 && !unit.veteran && !skills.includes("static")) {
+  if (unit.kills >= VETERAN_KILLS_REQUIRED && !unit.veteran && !skills.includes("static")) {
     commands.push({ action: { type: "PROMOTE", unitId }, label: "晋升老兵", icon: Award });
   }
   if (skills.includes("infiltrate")) {
@@ -458,16 +459,19 @@ function selectionDetails(
     const def = UNITS[unit.type];
     const traits = unit.independent && !def.skills.includes("independent")
       ? [...def.skills, "independent" as const] : def.skills;
+    const promotion = unit.veteran ? ["兵阶", "老兵"] as const
+      : def.skills.includes("static") ? undefined
+        : ["晋升", `${Math.min(unit.kills, VETERAN_KILLS_REQUIRED)}/${VETERAN_KILLS_REQUIRED} 击杀`] as const;
     const upkeep = unit.owner === 0 ? getUnitUpkeep(game, unit) : 0;
     return (
       <Details rows={[
         ["特性", <UnitTraits skills={traits} />],
+        ...(promotion ? [promotion] : []),
         ["攻击", def.attack],
         ["防御", def.defense],
         ["移动", getMovement(game, unit)],
         ["射程", def.range],
         ...(upkeep ? [["维护费", unit.upkeep ? "0 星" : `${upkeep} 星 / 回合`] as const] : []),
-        ...(unit.veteran ? [["兵阶", "老兵"] as const] : []),
       ]} />
     );
   }

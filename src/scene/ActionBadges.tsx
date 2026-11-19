@@ -4,7 +4,7 @@ import { useFrame } from "@react-three/fiber";
 import { Award, ChevronsUp, Flag } from "lucide-react";
 import { Matrix4, Vector3 } from "three";
 import { validateAction } from "../game/rules/engine";
-import { UNITS } from "../game/data/config";
+import { UNITS, VETERAN_KILLS_REQUIRED } from "../game/data/config";
 import type { GameState, Unit } from "../game/types";
 import { terrainHeight } from "./models";
 import { factionForOwner } from "../nations/registry";
@@ -99,7 +99,7 @@ export function getMapBadges(game: GameState): MapBadge[] {
     }
   }
   for (const [tileId, unit] of garrisons) {
-    if (unit.kills < 3 || unit.veteran || !visible.has(tileId) ||
+    if (unit.kills < VETERAN_KILLS_REQUIRED || unit.veteran || !visible.has(tileId) ||
       validateAction(game, { type: "PROMOTE", unitId: unit.id })) continue;
     const position = unitPosition(tileId, unit);
     const cityBadge = cityBadges.get(tileId);

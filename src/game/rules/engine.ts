@@ -9,6 +9,7 @@ import {
   PLAYER_COLORS,
   TECHNOLOGIES,
   UNITS,
+  VETERAN_KILLS_REQUIRED,
 } from "../data/config";
 import { distance, generateMap, isWater, neighbors } from "../map/generate";
 import { openingNations } from "../map/openingNations";
@@ -248,16 +249,15 @@ function buildingPopulation(s: GameState, tile: Tile): number {
     ? getBuildingLevel(s, tile) * (id === "forge" ? 2 : 1)
     : BUILDINGS[id].population;
 }
+export function isCityUnderSiege(s: GameState, city: City, occupant = unitAt(s, city)): boolean {
+  return city.owner !== null && !!occupant && occupant.owner !== city.owner &&
+    !isAtPeace(s, city.owner, occupant.owner);
+}
 export function getCityIncome(s: GameState, cityId: string): number {
   const c = s.cities.find((c) => c.id === cityId);
   if (!c || c.owner === null) return 0;
-  const occupying = unitAt(s, c),
-    siege =
-      occupying &&
-      occupying.owner !== c.owner &&
-      !isAtPeace(s, c.owner, occupying.owner);
   let base =
-    siege || c.infiltratedRound !== null
+    isCityUnderSiege(s, c) || c.infiltratedRound !== null
       ? 0
       : Math.max(
           0,
@@ -1105,9 +1105,9 @@ export function validateAction(s: GameState, a: Action): string | null {
     if (a.type === "HEAL")
       return canRecover(u) ? null : "休整需要完整行动与受伤状态。";
     if (a.type === "PROMOTE")
-      return !u.veteran && u.kills >= 3 && !skill(u, "static")
+      return !u.veteran && u.kills >= VETERAN_KILLS_REQUIRED && !skill(u, "static")
         ? null
-        : "晋升需要三个击杀，且不能拥有固定技能。";
+        : `晋升需要 ${VETERAN_KILLS_REQUIRED} 次击杀，且不能拥有固定技能。`;
     if (a.type === "DISBAND")
       return hasTech(p, "freeSpirit") && !u.moved && !u.attacked
         ? null

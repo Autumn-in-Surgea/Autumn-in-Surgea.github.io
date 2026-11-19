@@ -43,6 +43,7 @@ export const DEFAULT_OPTIONS: GameOptions = {
   mapSettings: DEFAULT_MAP_SETTINGS,
 };
 export const NAVAL_UPGRADES: readonly NavalUpgradeType[] = ["scout", "rammer", "bomber"];
+export const VETERAN_KILLS_REQUIRED = 3;
 export const PLAYER_COLORS = [
   "#4f9185",
   "#b55d59",
@@ -88,7 +89,7 @@ const unit = (
 export const UNITS: Record<UnitType, UnitDefinition> = {
   warrior: unit(
     "warrior",
-    "战士",
+    "民兵",
     2,
     10,
     2,

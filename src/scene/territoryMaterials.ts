@@ -7,13 +7,18 @@ export const isForeignTerritory = (owner: number | null) => owner !== null && ow
 export const ForeignTerritory = createContext(false);
 export const foreignTerritoryMaterial = miniatureMaterial.clone();
 foreignTerritoryMaterial.color.multiplyScalar(foreignTerritoryBrightness);
+export const CityUnderSiege = createContext(false);
+const besiegedCityMaterial = miniatureMaterial.clone();
+besiegedCityMaterial.color.multiplyScalar(0.48);
 
 // Only exchanging models use a clipping plane. The board has three fixed
-// elevations, so at most six shared variants (local / foreign) are needed.
+// elevations per base material.
 export const StructureClipHeight = createContext<number | null>(null);
 const clippedMaterials = new Map<MeshStandardMaterial, Map<number, MeshStandardMaterial>>();
 export function useTerritoryMaterial() {
-  const base = useContext(ForeignTerritory) ? foreignTerritoryMaterial : miniatureMaterial;
+  const foreign = useContext(ForeignTerritory);
+  const besieged = useContext(CityUnderSiege);
+  const base = besieged ? besiegedCityMaterial : foreign ? foreignTerritoryMaterial : miniatureMaterial;
   const height = useContext(StructureClipHeight);
   if (height === null) return base;
   let byHeight = clippedMaterials.get(base);

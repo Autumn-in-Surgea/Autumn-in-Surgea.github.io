@@ -44,8 +44,8 @@ function mansard(m: Miniature, x: number, z: number, y: number, w: number, d: nu
   }
 }
 
-type TerraceRoof = "ridge" | "crowSteps" | "mansard" | "turret" | "court";
-function terrace(m: Miniature, x: number, z: number, w: number, d: number, h: number,
+export type TerraceRoof = "ridge" | "crowSteps" | "mansard" | "turret" | "court";
+export function terrace(m: Miniature, x: number, z: number, w: number, d: number, h: number,
   wall: string, roof: string, shape: TerraceRoof) {
   const y = facade(m, x, z, w, d, h, wall, Math.max(2, Math.round(w / 0.078)), 2);
   if (shape === "mansard") {
@@ -122,7 +122,7 @@ function customsHall(m: Miniature, x: number, z: number, towerTop: number, color
   m.part("octagon", bronze, tx, towerTop-0.006, tz, 0.032, 0.012, 0.032);
 }
 
-function tradingBank(m: Miniature, x: number, z: number, w: number, d: number, h: number, color: string) {
+export function tradingBank(m: Miniature, x: number, z: number, w: number, d: number, h: number, color: string) {
   const top = facade(m, x, z, w, d, h, limestone, 4, 3);
   const front = z + d / 2;
   const pillars = 4;
@@ -151,7 +151,7 @@ function tradingBank(m: Miniature, x: number, z: number, w: number, d: number, h
 }
 
 // A pair of stone lane gates interrupts the line of brick shopfronts.
-function laneGate(m: Miniature, x: number, z: number, width: number) {
+export function laneGate(m: Miniature, x: number, z: number, width: number) {
   const spring = pavement + 0.074, radius = width * 0.30;
   m.box(cream, x, spring, z, width, 0.018, 0.013);
   const arch: Point[] = [[x-radius, pavement, z+0.009], [x+radius, pavement, z+0.009]];
@@ -165,6 +165,10 @@ function laneGate(m: Miniature, x: number, z: number, width: number) {
       0.009, spring-pavement, 0.012);
   m.face(cream, [[x-width*0.50,spring+0.005,z+0.010],
     [x+width*0.50,spring+0.005,z+0.010], [x,spring+0.048,z+0.010]]);
+}
+
+export function bundNeighbourhoodLandmark(m: Miniature, color: string) {
+  customsHall(m, -0.131, -0.135, 0.643, color);
 }
 
 export function bundNeighbourhood(m: Miniature, color: string) {
@@ -187,17 +191,17 @@ export function bundNeighbourhood(m: Miniature, color: string) {
   for (const lot of frontages) terrace(m, ...lot);
   laneGate(m, -0.141, 0.4655, 0.072);
   laneGate(m, 0.280, 0.4615, 0.069);
-  customsHall(m, -0.131, -0.135, 0.643, color);
+  bundNeighbourhoodLandmark(m, color);
   tradingBank(m, 0.118, 0.142, 0.315, 0.188, 0.248, copper);
   const exchange = facade(m, 0.171, -0.119, 0.176, 0.242, 0.232, brick, 2, 3);
   m.part("hip", slate, 0.171, exchange + 0.031, -0.119, 0.186, 0.066, 0.25);
   terrace(m, -0.188, 0.160, 0.165, 0.155, 0.147, limestone, terracotta, "ridge");
 }
 
-type Roofline = "parapet" | "lantern" | "mansard" | "galleria" | "pyramid" | "setback";
+export type Roofline = "parapet" | "lantern" | "mansard" | "galleria" | "pyramid" | "setback";
 
 
-function commercialBlock(m: Miniature, x: number, z: number, w: number, d: number,
+export function commercialBlock(m: Miniature, x: number, z: number, w: number, d: number,
   h: number, wall: string, roofline: Roofline, color: string) {
   const bays = Math.max(2, Math.round(w / 0.085));
   const floors = Math.max(4, Math.round(h / 0.094));
@@ -272,7 +276,7 @@ function commercialBlock(m: Miniature, x: number, z: number, w: number, d: numbe
 
 // This corner bank turns into the side street on a curved frontage. The
 // window quads and stone bands follow the same faceted arc as the masonry.
-function cornerBank(m: Miniature, x: number, z: number) {
+export function cornerBank(m: Miniature, x: number, z: number) {
   const w = 0.302, d = 0.216, radius = 0.082, height = 0.422;
   const left = x - w / 2, right = x + w / 2, back = z - d / 2, front = z + d / 2;
   const cx = right - radius, cz = front - radius;
@@ -300,7 +304,7 @@ function cornerBank(m: Miniature, x: number, z: number) {
 
 // A full bow front, stepped back for the penthouse, makes a broad curve
 // across three floors of terraces. The stack of unequal wings follows its street corner.
-function shippingExchange(m: Miniature, x: number, z: number) {
+export function shippingExchange(m: Miniature, x: number, z: number) {
   const w = 0.342, d = 0.207;
   const outline: [number,number][] = [[x-w/2,z-d/2], [x+w*0.18,z-d/2]];
   for (let i = 1; i <= 8; i++) {
@@ -319,7 +323,7 @@ function shippingExchange(m: Miniature, x: number, z: number) {
   m.part("drum", bronze, x-w*0.21, shoulder+0.231, z, 0.039, 0.07, 0.039);
 }
 
-function steppedPress(m: Miniature, x: number, z: number, color: string) {
+export function steppedPress(m: Miniature, x: number, z: number, color: string) {
   // A taller, narrower elevator tower emerges from one side of a wide printing house.
   const h = 0.419, podium = facade(m, x, z, 0.242, 0.217, h, brick, 3, 5);
   const tx = x-0.047, tz = z+0.017;
@@ -333,6 +337,10 @@ function steppedPress(m: Miniature, x: number, z: number, color: string) {
   m.box(cream, tx, podium+0.231, tz, 0.038, 0.027, 0.061);
 }
 
+export function bundSkylineLandmark(m: Miniature, _color: string) {
+  commercialBlock(m, -0.009, -0.119, 0.278, 0.232, 0.580, limestone, "pyramid", copper);
+}
+
 export function bundSkyline(m: Miniature, color: string) {
   // Four continuous street lines, with a narrow crossing between the second
   // and third row. Rear heights rise above the nearer banks and apartment roofs.
@@ -341,7 +349,7 @@ export function bundSkyline(m: Miniature, color: string) {
   commercialBlock(m, 0.317, -0.361, 0.298, 0.204, 0.552, paleBrick, "parapet", copper);
 
   customsHall(m, -0.323, -0.119, 0.769, color);
-  commercialBlock(m, -0.009, -0.119, 0.278, 0.232, 0.580, limestone, "pyramid", copper);
+  bundSkylineLandmark(m, color);
   commercialBlock(m, 0.312, -0.112, 0.310, 0.224, 0.446, sandstone, "galleria", copper);
 
   commercialBlock(m, -0.324, 0.132, 0.285, 0.217, 0.544, brick, "lantern", copper);

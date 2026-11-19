@@ -32,7 +32,7 @@ npm run verify:pwa
 
 浏览器页签、iOS 主屏幕、PWA 安装图标和游戏内的「关于」共用 `设定/logo.png` 生成的图标。Android 的可裁切版在深色底上保留安全边距。图案更新时用新版文件名，避免旧图标缓存。已安装的 Chrome 应用会通过应用更新流程确认新图标。[Chrome 应用更新说明](https://developer.chrome.com/blog/improvements-to-web-app-updates)
 
-iOS 主屏幕安装版使用不透明状态栏和深色启动底色。上下操作栏分别与系统安全区留出间距，最少为 8px。布局优先读 `navigator.standalone`，也支持通过独立显示模式识别 iPhone、iPad 和使用桌面 UA 的触控 iPad。[Apple 状态栏配置](https://developer.apple.com/library/archive/documentation/AppleApplications/Reference/SafariHTMLRef/Articles/MetaTags.html) · [WebKit 安全区说明](https://webkit.org/blog/7929/designing-websites-for-iphone-x/)
+iOS 主屏幕安装版使用不透明状态栏和深色启动底色。iPhone 和 iPad 的浏览器与安装版均把整个上下操作栏放在系统安全区以内，并在安全区边缘与栏之间额外留出 12–16 CSS 像素。布局识别 iPhone、iPad 和使用桌面 UA 的触控 iPad，安装模式通过 `navigator.standalone` 或独立显示模式识别。[Apple 状态栏配置](https://developer.apple.com/library/archive/documentation/AppleApplications/Reference/SafariHTMLRef/Articles/MetaTags.html) · [WebKit 安全区说明](https://webkit.org/blog/7929/designing-websites-for-iphone-x/)
 
 ## 实机验收流程
 

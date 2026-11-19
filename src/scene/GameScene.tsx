@@ -25,6 +25,8 @@ import { TerritoryBorders } from "./TerritoryBorders";
 import { CityTerritoryOutline } from "./CityTerritoryOutline";
 import { ShippingLanes } from "./ShippingLanes";
 import { TileScenery } from "./TileScenery";
+import { CitySiegeScenery } from "./CitySiegeScenery";
+import { siegeStartsAt, visibleCitySieges } from "./citySiege";
 import { buildTileTiers, type StructureChange } from "../store/structurePlayback";
 import { BoardFrame, tileCap, tilePlinth } from "./BoardFrame";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
@@ -62,6 +64,7 @@ export interface GameSceneProps {
   reachable: number[];
   attackTargets: string[];
   focusedTarget?: string | null;
+  swapTargetTile?: number | null;
   onTileClick: (id: number) => void;
   onActionBadge?: OpenBadge;
   onResultReady?: () => void;
@@ -511,6 +514,7 @@ const TileView = memo(function TileView({
   checkResourceAvailability,
   showResourceHints,
   city,
+  siegeStart,
   tier,
   change,
   issuedAt,
@@ -533,6 +537,7 @@ const TileView = memo(function TileView({
   checkResourceAvailability: boolean;
   showResourceHints: boolean;
   city?: City;
+  siegeStart?: number;
   tier: number;
   change?: StructureChange;
   issuedAt: number;
@@ -564,6 +569,21 @@ const TileView = memo(function TileView({
     onHover(null);
     glCursor("grab");
   };
+  const scenery = <TileScenery
+    game={game}
+    tile={tile}
+    city={city}
+    tier={tier}
+    knownTiles={knownTiles}
+    visible={visible}
+    simple={simple}
+    checkResourceAvailability={checkResourceAvailability}
+    showResourceHints={showResourceHints}
+    change={change}
+    issuedAt={issuedAt}
+    surfaceY={surface + terrainCapOffset}
+    reducedMotion={reducedMotion}
+  />;
   return (
     <group
       position={[tile.x - offset, 0, tile.y - offset]}
@@ -574,21 +594,9 @@ const TileView = memo(function TileView({
       {explored && (
         <group position={[0, surface + terrainCapOffset, 0]}>
           <ForeignTerritory.Provider value={visible && isForeignTerritory(tile.owner)}>
-            <TileScenery
-              game={game}
-              tile={tile}
-              city={city}
-              tier={tier}
-              knownTiles={knownTiles}
-              visible={visible}
-              simple={simple}
-              checkResourceAvailability={checkResourceAvailability}
-              showResourceHints={showResourceHints}
-              change={change}
-              issuedAt={issuedAt}
-              surfaceY={surface + terrainCapOffset}
-              reducedMotion={reducedMotion}
-            />
+            {city ? <CitySiegeScenery startsAt={siegeStart} tileId={tile.id} reducedMotion={reducedMotion}>
+              {scenery}
+            </CitySiegeScenery> : scenery}
           </ForeignTerritory.Provider>
           {!visible && (
             <Piece
@@ -1035,6 +1043,7 @@ function World({
   reachable,
   attackTargets,
   focusedTarget,
+  swapTargetTile = null,
   onTileClick,
   onResultReady,
   playbackStep,
@@ -1066,12 +1075,13 @@ function World({
       new Set(preview ? game.tiles.map((t) => t.id) : game.players[0].visible),
     [game.tiles, game.players, preview],
   );
-  const movable = useMemo(() => new Set(reachable), [reachable]);
+  const previewingSwap = swapTargetTile !== null;
+  const movable = useMemo(() => new Set(previewingSwap ? [] : reachable), [previewingSwap, reachable]);
   const availableUnits = useMemo(
     () => !preview && game.currentPlayer === 0 ? getUnitsWithAvailableActions(game) : null,
     [game, preview],
   );
-  const targets = useMemo(() => new Set(attackTargets), [attackTargets]);
+  const targets = useMemo(() => new Set(previewingSwap ? [] : attackTargets), [previewingSwap, attackTargets]);
   const targetTiles = useMemo(() => new Set(
     game.units.filter((unit) => targets.has(unit.id)).map((unit) => unit.y * game.options.size + unit.x),
   ), [game.units, game.options.size, targets]);
@@ -1139,14 +1149,15 @@ function World({
     () =>
       new Set([
         ...view.ids,
-        ...reachable,
+        ...movable,
         ...targetTiles,
         ...(playingStep?.structures.keys() ?? []),
         ...(selectedTile === null ? [] : [selectedTile]),
-        ...(hoveredTile === null ? [] : [hoveredTile]),
+        ...(swapTargetTile === null ? [] : [swapTargetTile]),
+        ...(previewingSwap || hoveredTile === null ? [] : [hoveredTile]),
         ...(playbackStep?.focusTile == null ? [] : [playbackStep.focusTile]),
       ]),
-    [view.ids, reachable, targetTiles, selectedTile, hoveredTile, playbackStep, playingStep],
+    [view.ids, movable, targetTiles, selectedTile, swapTargetTile, previewingSwap, hoveredTile, playbackStep, playingStep],
   );
   const displayTiles = useMemo(
     () =>
@@ -1176,6 +1187,12 @@ function World({
     }
     return { ...encounter, issuedAt, appearanceDuration };
   }, [game, playback]);
+  const siegeStarts = useMemo(() => {
+    const starts = new Map<string, number>();
+    if (!preview) for (const [cityId, unit] of visibleCitySieges(game, visible))
+      starts.set(cityId, siegeStartsAt(unit, combat));
+    return starts;
+  }, [game, visible, combat, preview]);
   const feedbackEnd = useRef({ game, time: 0 });
   const onFeedbackEnds = useCallback((time: number) => {
     if (feedbackEnd.current.game !== game || time > feedbackEnd.current.time)
@@ -1198,10 +1215,12 @@ function World({
         const last = journey.at(-1);
         if (last) seconds = Math.max(seconds, last.start + last.duration);
       }
+      for (const arrival of siegeStarts.values())
+        seconds = Math.max(seconds, (arrival - combat.issuedAt) / 1000);
     }
     // A separate pause gives each replayed action a beat, even for an instant change.
     playbackDeadline.current = { id, end: combat.issuedAt + seconds * 1000, pause: replay ? 140 : 0 };
-  }, [combat, playingStep, reducedMotion, replay]);
+  }, [combat, playingStep, reducedMotion, replay, siegeStarts]);
   useFrame(() => {
     const deadline = playbackDeadline.current;
     if (!deadline) return;
@@ -1301,7 +1320,7 @@ function World({
             game={game}
             knownTiles={explored}
             visible={visible.has(tile.id)}
-            selected={selectedTile === tile.id}
+            selected={selectedTile === tile.id || swapTargetTile === tile.id}
             reachable={movable.has(tile.id)}
             targeted={targetTiles.has(tile.id)}
             onClick={onTileClick}
@@ -1313,10 +1332,11 @@ function World({
             checkResourceAvailability={!preview && game.status === "playing" && game.currentPlayer === 0}
             showResourceHints={showResourceHints}
             city={tile.cityId ? cityById.get(tile.cityId) : undefined}
+            siegeStart={tile.cityId ? siegeStarts.get(tile.cityId) : undefined}
             tier={buildingTiers[tile.id]}
             change={playingStep?.structures.get(tile.id)}
             issuedAt={combat.issuedAt}
-            hovered={hoveredTile === tile.id}
+            hovered={!previewingSwap && hoveredTile === tile.id}
             onHover={setHoveredTile}
           />
         ))}

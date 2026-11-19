@@ -53,6 +53,7 @@ export function initializePwa() {
   // Desktop-style iPad user agents still advertise Macintosh with touch input.
   const appleMobile = /iPhone|iPad|iPod/.test(device.userAgent) ||
     (/Macintosh/.test(device.userAgent) && device.maxTouchPoints > 1);
+  document.documentElement.toggleAttribute("data-ios", appleMobile || device.standalone === true);
   const installed = () => standalone.matches || device.standalone === true;
   const syncIosLayout = () => document.documentElement.toggleAttribute(
     "data-ios-standalone",

@@ -16,9 +16,11 @@
   grid-template: auto minmax(0, 1fr) auto / minmax(0, 1fr);
   min-height: 0;
 }
-:root[data-ios-standalone] .app.is-playing {
-  /* Reserve the inset outside both bars so artwork and text stay out of system chrome. */
-  padding-block: max(8px, env(safe-area-inset-top, 0px)) max(8px, env(safe-area-inset-bottom, 0px));
+:root[data-ios] .app.is-playing {
+  /* Keep the entire HUD clear of the safe area, with room beyond its edge. */
+  --hud-edge-gap: clamp(12px, 1.7dvh, 16px);
+  padding-block: calc(env(safe-area-inset-top, 0px) + var(--hud-edge-gap))
+    calc(env(safe-area-inset-bottom, 0px) + var(--hud-edge-gap));
   --hud-top-inset: 0px;
   --hud-bottom-inset: 0px;
   background-color: light-dark(#eadfc6, var(--chrome-deep));

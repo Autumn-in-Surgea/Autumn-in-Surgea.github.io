@@ -66,17 +66,19 @@ describe("PWA installation and update lifecycle", () => {
   });
 
   it.each([
-    ["legacy iPhone Home Screen", "iPhone", 5, true, false, true],
-    ["iPhone Safari tab", "iPhone", 5, false, false, false],
-    ["iPad Home Screen with desktop UA", "Macintosh", 5, undefined, true, true],
-    ["macOS installed application", "Macintosh", 0, undefined, true, false],
-    ["Android installed application", "Linux; Android", 5, undefined, true, false],
-  ])("scopes Home Screen spacing to iOS for %s", async (_, userAgent, maxTouchPoints, standalone, matches, iosLayout) => {
+    ["legacy iPhone Home Screen", "iPhone", 5, true, false, true, true],
+    ["iPhone Safari tab", "iPhone", 5, false, false, true, false],
+    ["iPad tab with desktop UA", "Macintosh", 5, undefined, false, true, false],
+    ["iPad Home Screen with desktop UA", "Macintosh", 5, undefined, true, true, true],
+    ["macOS installed application", "Macintosh", 0, undefined, true, false, false],
+    ["Android installed application", "Linux; Android", 5, undefined, true, false, false],
+  ])("detects HUD spacing and standalone layout for %s", async (_, userAgent, maxTouchPoints, standalone, matches, ios, iosStandalone) => {
     Object.assign(navigator, { userAgent, maxTouchPoints, standalone });
     displayMode.matches = matches;
     const pwa = await import("../../src/pwa/register");
     pwa.initializePwa();
-    expect(toggleAttribute).toHaveBeenLastCalledWith("data-ios-standalone", iosLayout);
+    expect(toggleAttribute).toHaveBeenCalledWith("data-ios", ios);
+    expect(toggleAttribute).toHaveBeenCalledWith("data-ios-standalone", iosStandalone);
     expect(pwa.getPwaState().installed).toBe(matches || standalone === true);
   });
 

@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import type { MouseEvent as ReactMouseEvent } from "react";
 import { X } from "lucide-react";
 import { useShallow } from "zustand/react/shallow";
 import {
@@ -34,6 +35,18 @@ type TargetOrder = {
 };
 
 const BoardScene = memo(GameScene);
+
+function suppressTouchContextMenu(event: ReactMouseEvent<HTMLDivElement>) {
+  if (!(event.target instanceof Element) ||
+    event.target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])')) return;
+
+  const nativeEvent = event.nativeEvent;
+  const pointerType = "pointerType" in nativeEvent ? nativeEvent.pointerType : "";
+  if (pointerType === "touch" ||
+    (!pointerType && window.matchMedia("(hover: none) and (pointer: coarse)").matches)) {
+    event.preventDefault();
+  }
+}
 
 export default function App() {
   const {
@@ -125,6 +138,7 @@ export default function App() {
     if (aimedOrder && !previewedOrder) setAimedOrder(null);
   }, [aimedOrder, previewedOrder]);
   const target = previewedOrder?.targetId ?? null;
+  const swapTargetTile = previewedOrder?.action.type === "MOVE" ? previewedOrder.tileId : null;
   const pendingUpgrade = game?.status === "playing" && game.currentPlayer === 0 && !busy
     ? getPendingUpgradeCity(game)
     : undefined;
@@ -241,6 +255,7 @@ export default function App() {
     <div
       className={`app ${screen === "menu" ? "is-menu" : "is-playing"} ${reducedMotion ? "reduce-motion" : ""}`}
       data-menu-theme={settings.menuTheme}
+      onContextMenu={suppressTouchContextMenu}
     >
       {screen === "game" && game && (
         <div className="game-scene">
@@ -252,6 +267,7 @@ export default function App() {
             reachable={reachable}
             attackTargets={attackTargets}
             focusedTarget={target}
+            swapTargetTile={swapTargetTile}
             onTileClick={clickTile}
             onActionBadge={openActionTile}
             onResultReady={onResultReady}

@@ -8,7 +8,7 @@ const timber = "#833e32", tileEdge = "#728db0";
 
 // The lower slope flattens over the long eaves. The corners turn up slightly
 // while the main ridge stays straight, as on the low hip roofs of Liao halls.
-function tiledRoof(m: Miniature, x: number, z: number, y: number, width: number, depth: number,
+export function liaoTiledRoof(m: Miniature, x: number, z: number, y: number, width: number, depth: number,
   rise: number, tile: string, civic = false) {
   const w = width / 2, d = depth / 2;
   const ridge = w - d * 0.78;
@@ -77,7 +77,7 @@ function timberHouse(m: Miniature, x: number, z: number, w: number, d: number, h
   m.box(terracotta, x, floor + h, z, w, 0.011, d);
   const eave = floor + h + 0.006;
   if (gable) crossGable(m, x, z, eave, w + 0.016, d + 0.020);
-  else tiledRoof(m, x, z, eave, w * 1.23, d * 1.32, d * 0.31, cobalt);
+  else liaoTiledRoof(m, x, z, eave, w * 1.23, d * 1.32, d * 0.31, cobalt);
 }
 
 function grainShelter(m: Miniature, x: number, z: number) {
@@ -97,12 +97,16 @@ function grainShelter(m: Miniature, x: number, z: number) {
   m.box(earth, x, ground + 0.019, z, 0.086, 0.038, 0.063);
 }
 
-export function liaoVillage(m: Miniature, _color: string) {
+export function liaoVillageLandmark(m: Miniature, _color: string) {
   timberHouse(m, -0.065, -0.062, 0.205, 0.127, 0.063);
+}
+
+export function liaoVillage(m: Miniature, color: string) {
+  liaoVillageLandmark(m, color);
   grainShelter(m, 0.115, 0.079);
 }
 
-export function liaoTown(m: Miniature, color: string) {
+export function liaoTownLandmark(m: Miniature, color: string) {
   const x = -0.014, z = -0.101;
   const terrace = ground + 0.029;
   // Stone terrace, stairs and a recessed timber façade under an open three-bay porch.
@@ -129,9 +133,13 @@ export function liaoTown(m: Miniature, color: string) {
       m.box(timber, post, 0.198, line, 0.021, 0.010, 0.062);
     }
   }
-  tiledRoof(m, x, z, eave, 0.470, 0.267, 0.071, cobalt, true);
-  // Owner's lacquer is concentrated on the lintel and the small courtyard gate.
+  liaoTiledRoof(m, x, z, eave, 0.470, 0.267, 0.071, cobalt, true);
+  // The lacquered front lintel carries the owner's colour.
   m.box(color, x, 0.168, z + 0.084, 0.059, 0.023, 0.009);
+}
+
+export function liaoTown(m: Miniature, color: string) {
+  liaoTownLandmark(m, color);
   timberHouse(m, -0.168, 0.114, 0.102, 0.143, 0.062, true);
   for (const side of [-1, 1]) {
     m.box(earth, 0.028 + side * 0.132, ground + 0.022, 0.207, 0.118, 0.044, 0.025);

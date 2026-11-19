@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import {
   ArrowRight,
   Check,
@@ -14,6 +14,7 @@ import {
   Building2,
   Gem,
   Palette,
+  X,
 } from "lucide-react";
 import {
   TECHNOLOGIES,
@@ -79,6 +80,9 @@ export function TechPanel({
   onCommand: (a: Action) => void;
 }) {
   const player = game.players[0];
+  const busy = useGameStore(state => state.busy || !!state.playbackStep || !!state.eventNotice);
+  const [inspectedId, setInspectedId] = useState<string | null>(null);
+  const inspectedButton = useRef<HTMLButtonElement>(null);
   const roots = TECHNOLOGIES.filter((t) => !t.prerequisites.length);
   const nodes: {
     tech: TechDefinition;
@@ -104,6 +108,22 @@ export function TechPanel({
       }
     }
   });
+  const inspected = TECHNOLOGIES.find(tech => tech.id === inspectedId);
+  const researched = !!inspected && player.technologies.includes(inspected.id);
+  const connected = (tech: TechDefinition) => tech.tier === 1 ||
+    tech.prerequisites.some(id => player.technologies.includes(id)) ||
+    TECHNOLOGIES.some(child => child.prerequisites.includes(tech.id) && player.technologies.includes(child.id));
+  const cannotResearch = !inspected || researched ? null
+    : busy || game.currentPlayer !== 0 ? "等待本方行动"
+    : validateAction(game, { type: "RESEARCH", techId: inspected.id });
+  const prerequisites = inspected?.prerequisites
+    .map(id => TECHNOLOGIES.find(tech => tech.id === id)?.name)
+    .filter(Boolean)
+    .join("、");
+  const inspectedHint = researched ? "已研究"
+    : inspected && !connected(inspected) && prerequisites ? `先研究${prerequisites}`
+    : cannotResearch ?? "再点一次研究";
+
   return (
     <Modal title="科技树" onClose={onClose} wide menuSurface>
       <TechTreeViewport balance={<>
@@ -145,28 +165,29 @@ export function TechPanel({
           <span>科技</span>
         </div>
         {nodes.map(({ tech, x, y }) => {
-          const done = player.technologies.includes(tech.id),
-            ready =
-              tech.tier === 1 ||
-              tech.prerequisites.some((p) =>
-                player.technologies.includes(p),
-              ) ||
-              TECHNOLOGIES.some(
-                (c) =>
-                  c.prerequisites.includes(tech.id) &&
-                  player.technologies.includes(c.id),
-              );
-          const action: Action = { type: "RESEARCH", techId: tech.id },
-            reason = validateAction(game, action);
+          const done = player.technologies.includes(tech.id);
+          const ready = connected(tech);
+          const selected = inspectedId === tech.id;
           return (
             <button
+              type="button"
               key={tech.id}
               data-tier={tech.tier}
               className={`radial-tech ${done ? "researched" : ready ? "researchable" : "locked"}`}
               style={{ left: `${x}%`, top: `${y}%` }}
-              disabled={done || !!reason || game.currentPlayer !== 0}
-              onClick={() => onCommand(action)}
-              title={`${tech.unlocks}${reason ? `\n${reason}` : ""}`}
+              aria-pressed={selected}
+              aria-controls={selected ? "tech-details" : undefined}
+              onKeyDown={event => {
+                if (event.repeat && event.key === "Enter") event.preventDefault();
+              }}
+              onClick={event => {
+                if (selected && !done && !cannotResearch) {
+                  onCommand({ type: "RESEARCH", techId: tech.id });
+                  return;
+                }
+                inspectedButton.current = event.currentTarget;
+                setInspectedId(tech.id);
+              }}
             >
               <strong>{tech.name}</strong>
               <span>
@@ -182,19 +203,25 @@ export function TechPanel({
           );
         })}
       </TechTreeViewport>
-      <div className="tech-legend">
-        <span>
-          <i className="researched-dot" />
-          已研究
-        </span>
-        <span>
-          <i className="researchable-dot" />
-          可研究
-        </span>
-        <span>
-          <LockKeyhole size={12} />
-          未解锁
-        </span>
+      <div className="tech-information">
+        {inspected ? (
+          <section className="tech-details" id="tech-details" aria-labelledby="tech-details-title" aria-live="polite">
+            <h3 id="tech-details-title">{inspected.name}</h3>
+            {!researched && <Cost value={getTechCost(game, 0, inspected.id)} />}
+            <button type="button" className="tech-details-close" aria-label="关闭科技简介" onClick={() => {
+              setInspectedId(null);
+              inspectedButton.current?.focus({ preventScroll: true });
+            }}><X size={18} aria-hidden="true" /></button>
+            <p className="tech-details-description">{inspected.description}</p>
+            <p className="tech-details-hint">{inspectedHint}</p>
+          </section>
+        ) : (
+          <div className="tech-legend">
+            <span><i className="researched-dot" />已研究</span>
+            <span><i className="researchable-dot" />可研究</span>
+            <span><LockKeyhole size={12} />未解锁</span>
+          </div>
+        )}
       </div>
     </Modal>
   );

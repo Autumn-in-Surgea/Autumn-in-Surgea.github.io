@@ -1,9 +1,12 @@
 import { Miniature } from "../../../scene/miniature";
 import { architecturalEnamel, brass, cobalt, masonry } from "../../../scene/architecturalPalette";
 import { cityStreetDatum } from "./cityMasonry";
-import { liaoVillage, liaoTown } from "./liaoSettlements";
-import { treatyShops, merchantQuarter, judicialQuarter } from "./civicDistricts";
-import { bundNeighbourhood, bundSkyline } from "./bundDistricts";
+import { liaoVillage, liaoTown, liaoVillageLandmark, liaoTownLandmark } from "./liaoSettlements";
+import {
+  treatyShops, merchantQuarter, judicialQuarter,
+  treatyShopsLandmark, merchantQuarterLandmark, judicialQuarterLandmark,
+} from "./civicDistricts";
+import { bundNeighbourhood, bundSkyline, bundNeighbourhoodLandmark, bundSkylineLandmark } from "./bundDistricts";
 
 const footing = "#928980";
 
@@ -29,21 +32,35 @@ function fortifications(m: Miniature, edge: number) {
 }
 
 const stages = [liaoVillage, liaoTown, treatyShops, merchantQuarter, judicialQuarter, bundNeighbourhood, bundSkyline];
+const landmarks = [
+  liaoVillageLandmark, liaoTownLandmark, treatyShopsLandmark, merchantQuarterLandmark,
+  judicialQuarterLandmark, bundNeighbourhoodLandmark, bundSkylineLandmark,
+];
 const widths = [0.47, 0.60, 0.68, 0.77, 0.85, 0.975, 0.975];
 // Small settlements grow across the square. The big districts already reach
 // their tile boundaries, so their additional volume goes into the skyline.
 const footprints = [1.55, 1.39, 1.26, 1.21, 1.12, 1, 1];
 const elevations = [1.36, 1.25, 1.30, 1.24, 1.25, 1.27, 1.24];
 
-export function danubianCity(color: string, level: number, capital: boolean, walls: boolean) {
+interface CityLayout {
+  companions: (model: Miniature, stage: number, enamel: string) => void;
+  skylineFlag?: [x: number, z: number, foot: number, height: number];
+}
+
+export function danubianCity(color: string, level: number, capital: boolean, walls: boolean, layout?: CityLayout) {
   const stage = Math.min(level, stages.length - 1);
   const width = widths[stage];
   const model = new Miniature();
   const enamel = architecturalEnamel(color);
-  stages[stage](model, enamel);
+  if (layout) {
+    landmarks[stage](model, enamel);
+    layout.companions(model, stage, enamel);
+  } else {
+    stages[stage](model, enamel);
+  }
   if (walls && stage > 0) fortifications(model, width / 2 - 0.026);
   if (capital && stage > 0) {
-    if (stage === 6) standard(model, 0.005, -0.400, 0.836, 0.118, enamel);
+    if (stage === 6) standard(model, ...(layout?.skylineFlag ?? [0.005, -0.400, 0.836, 0.118]), enamel);
     else if (stage === 5) standard(model, -0.169, -0.123, 0.643, 0.102, enamel);
     else standard(model, width / 2 - 0.038, -width / 2 + 0.041, 0.051, 0.18 + stage * 0.04, enamel);
   }

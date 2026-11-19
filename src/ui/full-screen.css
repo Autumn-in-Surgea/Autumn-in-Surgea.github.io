@@ -557,10 +557,60 @@
   border-color: var(--menu-brass);
 }
 
+.menu-page .radial-tech[aria-pressed="true"] {
+  outline: 2px solid var(--menu-brass);
+  outline-offset: 2px;
+  opacity: 1;
+}
+
 .menu-page .tech-center {
   color: var(--menu-ink);
   background: var(--menu-button);
   box-shadow: inset 0 0 0 2px var(--menu-inset), inset 0 0 0 3px var(--menu-edge);
+}
+
+.tech-information {
+  display: grid;
+  /* Opening a description keeps the inspected node under the pointer. */
+  block-size: clamp(86px, 12dvh, 100px);
+  padding-block-start: 4px;
+  min-inline-size: 0;
+}
+
+.tech-details {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 44px;
+  grid-template-rows: auto auto auto;
+  align-content: center;
+  align-items: center;
+  column-gap: 8px;
+  padding: 3px 4px 3px 9px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--menu-edge);
+  border-radius: 4px;
+  color: var(--menu-ink);
+  background: var(--menu-button);
+  box-shadow: inset 0 0 0 2px var(--menu-inset);
+  line-height: 1.25;
+}
+
+.tech-details h3, .tech-details .cost { grid-row: 1; }
+.tech-details .cost { grid-column: 2; color: var(--menu-brass); }
+.tech-details-close {
+  grid-area: 1 / 3 / span 2;
+  display: grid;
+  place-items: center;
+  min-height: 44px;
+  padding: 0;
+  color: var(--menu-ink);
+  border-radius: 3px;
+}
+.tech-details-close:hover, .tech-details-close:focus-visible { background: var(--menu-hover); }
+.tech-details-description { grid-area: 2 / 1 / 3 / 3; }
+.tech-details-hint {
+  grid-column: 1 / -1;
+  color: var(--menu-brass);
 }
 
 .menu-page .tech-legend {

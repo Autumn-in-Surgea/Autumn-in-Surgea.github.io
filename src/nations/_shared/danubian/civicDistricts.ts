@@ -47,7 +47,7 @@ function mansardShop(m: Miniature, x: number, y: number, z: number) {
   }
 }
 
-export function treatyShops(m: Miniature, color: string) {
+export function treatyShopsLandmark(m: Miniature, _color: string) {
   // A red-roofed corner inn, with an oriel and the bay window below its cap.
   const eaves = facade(m, -0.125, -0.118, 0.264, 0.200, 0.152, "#ecc38c", 3, 2);
   pitchedRoof(m, -0.125, eaves, -0.118, 0.294, 0.226, 0.087, roofTile, limestone);
@@ -66,6 +66,10 @@ export function treatyShops(m: Miniature, color: string) {
   m.part("octagon", sandstone, x, 0.240, z, 0.13, 0.018, 0.13);
   m.part("spire", roofTile, x, 0.285, z, 0.145, 0.092, 0.145);
   m.part("gem", brass, x, 0.337, z, 0.014, 0.019, 0.014);
+}
+
+export function treatyShops(m: Miniature, color: string) {
+  treatyShopsLandmark(m, color);
   // Two low, separate shopfronts leave a lane across the front of the inn.
   const side = facade(m, 0.204, -0.125, 0.187, 0.130, 0.106, "#e1a882", 2, 2);
   pitchedRoof(m, 0.204, side, -0.125, 0.147, 0.206, 0.059, "#9f533e", limestone, true);
@@ -99,8 +103,8 @@ function loggia(m: Miniature, x: number, z: number, width: number, bays: number)
   m.box(limestone, x, archTop+0.018, z-0.009, width+0.025, 0.019, 0.042);
 }
 
-export function merchantQuarter(m: Miniature, color: string) {
-  // A customs hall, raised loggia and river merchants' offices enclose a small square.
+export function merchantQuarterLandmark(m: Miniature, color: string) {
+  // The customs hall and its raised loggia face the merchants' square.
   const eaves = facade(m, -0.105, -0.122, 0.392, 0.205, 0.225, limestone, 5, 3);
   parapet(m, -0.105, eaves, -0.122, 0.395, 0.210, limestone);
   loggia(m, -0.104, 0.035, 0.361, 3);
@@ -126,6 +130,10 @@ export function merchantQuarter(m: Miniature, color: string) {
   }
   m.part("octagon", limestone, x, eaves+0.151, z, 0.056, 0.026, 0.056);
   m.part("spire", copper, x, eaves+0.174, z, 0.069, 0.035, 0.069);
+}
+
+export function merchantQuarter(m: Miniature, color: string) {
+  merchantQuarterLandmark(m, color);
   const office = facade(m, 0.216, -0.064, 0.158, 0.303, 0.188, brick, 2, 3);
   parapet(m, 0.216, office, -0.064, 0.163, 0.309, "#b98266");
   // A stepped street-end parapet screens the brick exchange's flat roof.
@@ -177,28 +185,24 @@ function glazedEaves(m: Miniature, x: number, z: number, base: number,
   m.box(violetTile, x, base+rise, z, width*crown, 0.005, depth*crown);
 }
 
-// Chamfered brick shoulders and narrow stone cornices turn with the frontage.
-// The tower and its unequal wings adjoin along party walls, across an open court
-// from the separate street buildings. All heights start on the bare tile.
-export function judicialQuarter(m: Miniature, color: string) {
-  const x = -0.062, z = -0.141;
+function courtOffices(m: Miniature, plan: Plan, x: number, z: number, height: number, wall: string, floors: number) {
+  const top = ground + height;
+  masonryCourse(m, plan, x, z, ground, top, 1, wall, floors);
+  masonryCourse(m, plan, x, z, ground+height*0.30, ground+height*0.30+0.009, 1.014, limestone);
+  masonryCourse(m, plan, x, z, top, top+0.010, 1.022, limestone);
+  masonryCourse(m, plan, x, z, top+0.010, top+0.018, 0.97, "#636777");
+}
+
+const judicialX = -0.062, judicialZ = -0.141;
+
+function judicialHall(m: Miniature) {
   const court: Plan = [[-0.202,-0.261], [0.084,-0.261], [0.084,-0.080], [0.071,-0.049],
     [0.039,-0.022], [-0.001,-0.010], [-0.127,-0.010], [-0.169,-0.024], [-0.202,-0.069]];
-  const offices = (plan: Plan, cx: number, cz: number, height: number, wall: string, floors: number) => {
-    const top = ground + height;
-    masonryCourse(m, plan, cx, cz, ground, top, 1, wall, floors);
-    masonryCourse(m, plan, cx, cz, ground+height*0.30, ground+height*0.30+0.009, 1.014, limestone);
-    masonryCourse(m, plan, cx, cz, top, top+0.010, 1.022, limestone);
-    masonryCourse(m, plan, cx, cz, top+0.010, top+0.018, 0.97, "#636777");
-  };
-  offices(court, x, z, 0.265, buffBrick, 4);
-  const west: Plan = [[-0.364,-0.214], [-0.202,-0.250], [-0.202,-0.106],
-    [-0.279,-0.086], [-0.339,-0.072], [-0.364,-0.087]];
-  const east: Plan = [[0.084,-0.250], [0.215,-0.275], [0.304,-0.276], [0.331,-0.252],
-    [0.331,-0.167], [0.306,-0.135], [0.237,-0.127], [0.084,-0.096]];
-  offices(west, -0.281, -0.156, 0.173, smokeBrick, 2);
-  offices(east, 0.206, -0.187, 0.214, buffBrick, 3);
+  courtOffices(m, court, judicialX, judicialZ, 0.265, buffBrick, 4);
+}
 
+function judicialTower(m: Miniature, color: string) {
+  const x = judicialX, z = judicialZ;
   // Projecting portal, recessed glazing and the staircase face the forecourt.
   m.box(shadow, x, ground+0.082, -0.004, 0.112, 0.152, 0.009);
   for (const dx of [-0.066, -0.022, 0.022, 0.066])
@@ -223,6 +227,24 @@ export function judicialQuarter(m: Miniature, color: string) {
   }
   glazedEaves(m, x, z, 0.525, 0.217, 0.196, 0.065, 0.10);
   m.part("octagon", "#bd945d", x, 0.599, z, 0.023, 0.016, 0.023);
+}
+
+// The glazed tower's masonry hall and portal remain the centre of the court.
+export function judicialQuarterLandmark(m: Miniature, color: string) {
+  judicialHall(m);
+  judicialTower(m, color);
+}
+
+export function judicialQuarter(m: Miniature, color: string) {
+  judicialHall(m);
+  // Chamfered brick wings adjoin the centre along their party walls.
+  const west: Plan = [[-0.364,-0.214], [-0.202,-0.250], [-0.202,-0.106],
+    [-0.279,-0.086], [-0.339,-0.072], [-0.364,-0.087]];
+  const east: Plan = [[0.084,-0.250], [0.215,-0.275], [0.304,-0.276], [0.331,-0.252],
+    [0.331,-0.167], [0.306,-0.135], [0.237,-0.127], [0.084,-0.096]];
+  courtOffices(m, west, -0.281, -0.156, 0.173, smokeBrick, 2);
+  courtOffices(m, east, 0.206, -0.187, 0.214, buffBrick, 3);
+  judicialTower(m, color);
 
   const archives = facade(m, -0.289, 0.099, 0.164, 0.155, 0.192, "#b48472", 3, 3);
   parapet(m, -0.289, archives, 0.099, 0.165, 0.156, "#bfa084");
@@ -232,7 +254,7 @@ export function judicialQuarter(m: Miniature, color: string) {
   // The detached east registry rounds off into the lane by the court.
   const registry: Plan = [[0.192,-0.059], [0.347,-0.059], [0.357,-0.048], [0.357,0.090],
     [0.347,0.112], [0.326,0.129], [0.290,0.136], [0.192,0.136]];
-  offices(registry, 0.272, 0.038, 0.192, "#cea77c", 3);
+  courtOffices(m, registry, 0.272, 0.038, 0.192, "#cea77c", 3);
   m.box(copper, 0.260, ground+0.226, 0.012, 0.088, 0.033, 0.066);
 
   const school = facade(m, -0.205, 0.276, 0.275, 0.129, 0.151, "#c68d76", 4, 2);
@@ -243,3 +265,5 @@ export function judicialQuarter(m: Miniature, color: string) {
   for (const dx of [-0.082,0.082]) m.box(smokeBrick, 0.191+dx, ground+0.045, 0.365, 0.013, 0.09, 0.016);
   m.box(color, 0.191, ground+0.096, 0.352, 0.192, 0.014, 0.053, 0.09);
 }
+
+export { glazedEaves, parapet, pitchedRoof };

@@ -121,6 +121,18 @@ a {
   overflow: hidden;
   background: #d5dcd6;
 }
+@media (any-pointer: coarse) {
+  .app {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  .app :is(input, textarea, select, [contenteditable]:not([contenteditable="false"])) {
+    -webkit-touch-callout: default;
+    -webkit-user-select: text;
+    user-select: text;
+  }
+}
 .game-scene {
   position: absolute;
   inset: 0;

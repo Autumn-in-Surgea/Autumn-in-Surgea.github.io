@@ -1,24 +1,17 @@
 import { memo } from "react";
 import * as THREE from "three";
-import { mergeGeometries, mergeVertices } from "three/addons/utils/BufferGeometryUtils.js";
 import type { UnitType } from "../game/types";
 import { miniatureMaterial, setMiniatureColor } from "./miniature";
 import { foreignTerritoryBrightness } from "./territoryMaterials";
+import { makeGlowGeometry, silhouetteGlowProps, unitSilhouetteMask, writeSilhouette } from "./silhouetteGlow";
 
 const glazes = new Map<string, THREE.MeshStandardMaterial>();
 const spentBrightness = 0.40;
-const unitSilhouetteMask = 1;
-const foregroundMaterial = miniatureMaterial.clone();
+// Both painted meshes of every unit make one shared screen-space occupancy mask.
+const foregroundMaterial = writeSilhouette(miniatureMaterial.clone(), unitSilhouetteMask);
 // Draw all pieces after board overlays, keeping depth testing between pieces.
 foregroundMaterial.transparent = true;
 foregroundMaterial.blending = THREE.NoBlending;
-// Both painted meshes of every unit make one shared screen-space occupancy mask.
-foregroundMaterial.stencilWrite = true;
-foregroundMaterial.stencilWriteMask = unitSilhouetteMask;
-foregroundMaterial.stencilRef = unitSilhouetteMask;
-foregroundMaterial.stencilFuncMask = unitSilhouetteMask;
-foregroundMaterial.stencilFunc = THREE.AlwaysStencilFunc;
-foregroundMaterial.stencilZPass = THREE.ReplaceStencilOp;
 
 const spentMaterial = foregroundMaterial.clone();
 const foreignMaterial = foregroundMaterial.clone();
@@ -42,83 +35,16 @@ const foregroundProps = {
 type UnitGeometry = { body: THREE.BufferGeometry; enamel: THREE.BufferGeometry };
 
 const outlines = new WeakMap<UnitGeometry, THREE.InstancedBufferGeometry>();
-const outlineViewport = new THREE.Vector2(1, 1);
-const outlineFrames = new WeakMap<THREE.WebGLRenderer, number>();
-// Each shell pairs a radius in CSS pixels with an opacity. Draw the rim and its
-// softer falloff together, without a fullscreen glow pass or extra draw calls.
-const glowLayers = new THREE.InstancedBufferAttribute(new Float32Array([
-  2.9, 0.08,
-  2.2, 0.15,
-  1.55, 0.91,
-]), 2);
-const outlineMaterial = new THREE.ShaderMaterial({
-  uniforms: { viewport: { value: outlineViewport } },
-  vertexShader: `
-    uniform vec2 viewport;
-    attribute vec2 glowLayer;
-    varying float glowOpacity;
-    void main() {
-      vec4 clip = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      vec2 direction = (projectionMatrix * vec4(normalMatrix * normal, 0.0)).xy * viewport;
-      direction /= max(length(direction), 0.0001);
-      clip.xy += (2.0 * glowLayer.x) * direction / viewport * clip.w;
-      clip.z += 0.0003 * clip.w;
-      glowOpacity = glowLayer.y;
-      gl_Position = clip;
-    }
-  `,
-  fragmentShader: `
-    varying float glowOpacity;
-    void main() {
-      gl_FragColor = vec4(vec3(1.0), glowOpacity);
-      #include <colorspace_fragment>
-    }
-  `,
-  side: THREE.BackSide,
-  transparent: true,
-  depthWrite: false,
-  // A shell can soften the outside edge only, including around adjacent pieces.
-  stencilWrite: true,
-  stencilWriteMask: 0,
-  stencilRef: unitSilhouetteMask,
-  stencilFuncMask: unitSilhouetteMask,
-  stencilFunc: THREE.NotEqualStencilFunc,
-  toneMapped: false,
-});
+const outlineProps = silhouetteGlowProps(unitSilhouetteMask, BOARD_UNIT_RENDER_ORDER + 1);
 
 function outlineGeometry(geometry: UnitGeometry) {
   let shell = outlines.get(geometry);
   if (!shell) {
-    const parts = [geometry.body, geometry.enamel].map((part) =>
-      new THREE.BufferGeometry()
-        .setAttribute("position", part.getAttribute("position"))
-        .setIndex(part.getIndex()),
-    );
-    // Weld flat-shaded corners for the shell only, so the silhouette has no seams.
-    const silhouette = mergeVertices(mergeGeometries(parts));
-    silhouette.computeVertexNormals();
-    shell = new THREE.InstancedBufferGeometry()
-      .setAttribute("position", silhouette.getAttribute("position"))
-      .setAttribute("normal", silhouette.getAttribute("normal"))
-      .setAttribute("glowLayer", glowLayers)
-      .setIndex(silhouette.getIndex());
-    shell.instanceCount = glowLayers.count;
+    shell = makeGlowGeometry(geometry.body, geometry.enamel);
     outlines.set(geometry, shell);
   }
   return shell;
 }
-
-const outlineProps = {
-  renderOrder: BOARD_UNIT_RENDER_ORDER + 1,
-  material: outlineMaterial,
-  raycast: () => {},
-  onBeforeRender(renderer: THREE.WebGLRenderer) {
-    const frame = renderer.info.render.frame;
-    if (outlineFrames.get(renderer) === frame) return;
-    renderer.getSize(outlineViewport);
-    outlineFrames.set(renderer, frame);
-  },
-};
 
 function getGlaze(color: string, brightness: number) {
   const key = `${color}:${brightness}`;

@@ -7,8 +7,17 @@ import { models as rina, terrain as rinaTerrain } from "./rina/models";
 import type { NationId } from "./registry";
 import type { TerrainAssets } from "./terrainAssets";
 import { DEFAULT_TERRAIN_VARIANT } from "./types";
+import { seededRandom } from "../game/map/random";
+import type { BuildingId, Position } from "../game/types";
+import type { BuildingVisualTier } from "../scene/buildingVisualTier";
 
-export type NationModels = typeof danubianModels;
+export interface NationModels {
+  unit: typeof danubianModels.unit;
+  labelHeight: typeof danubianModels.labelHeight;
+  city: (color: string, level: number, capital: boolean, walls: boolean, variant?: number) => ReturnType<typeof danubianModels.city>;
+  building: (type: BuildingId, color: string, tier: BuildingVisualTier, variant?: number) => ReturnType<typeof danubianModels.building>;
+  structureVariantCount?: number;
+}
 export const MODEL_SETS = {
   danubian: danubianModels,
   imperia,
@@ -19,6 +28,13 @@ export const MODEL_SETS = {
 } satisfies Record<string, NationModels>;
 
 export type ModelSetId = keyof typeof MODEL_SETS;
+
+export function structureVariant(models: NationModels, seed: string, { x, y }: Position) {
+  const count = models.structureVariantCount;
+  if (!count) return undefined;
+  // Coordinates remain stable through upgrades, replay, and both old and new saves.
+  return Math.floor(seededRandom(`${seed}:sculpture:${x}:${y}`)() * count);
+}
 
 export const TERRAIN_ASSETS: Record<NationId, TerrainAssets> = {
   imperia: imperiaTerrain,

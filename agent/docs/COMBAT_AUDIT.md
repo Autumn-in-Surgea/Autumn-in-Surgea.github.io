@@ -4,11 +4,11 @@
 
 ## 兵种面板
 
-配置位于 `src/game/data/config.ts`。星数为可在城中训练或由木筏升级的实际费用。乘员决定木筏、侦察船、撞击舰和轰炸舰的当前生命和上限，升级不回血。单位数据以专页和公开总表交叉核对。[战士](https://wiki.polytopia.com/wiki/warrior) · [守卫](https://wiki.polytopia.com/wiki/defender) · [骑士](https://wiki.polytopia.com/wiki/knight) · [剑士](https://wiki.polytopia.com/wiki/swordsman) · [心灵术士](https://wiki.polytopia.com/wiki/mind-bender) · [匕首](https://polytopia.fandom.com/wiki/Dagger) · [陆海单位总表](https://polytopia.fandom.com/wiki/List_of_Units)
+配置位于 `src/game/data/config.ts`。星数为可在城中训练或由木筏升级的实际费用。乘员决定木筏、侦察船、撞击舰和轰炸舰的当前生命和上限，升级不回血。单位数据以专页和公开总表交叉核对。[原作 Warrior](https://wiki.polytopia.com/wiki/warrior) · [守卫](https://wiki.polytopia.com/wiki/defender) · [骑士](https://wiki.polytopia.com/wiki/knight) · [剑士](https://wiki.polytopia.com/wiki/swordsman) · [心灵术士](https://wiki.polytopia.com/wiki/mind-bender) · [匕首](https://polytopia.fandom.com/wiki/Dagger) · [陆海单位总表](https://polytopia.fandom.com/wiki/List_of_Units)
 
 | 单位 | 获取 | 生命上限 | 攻 | 防 | 移动 | 射程 |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
-| 战士 | 2 星 | 10 | 2 | 2 | 1 | 1 |
+| 民兵 | 2 星 | 10 | 2 | 2 | 1 | 1 |
 | 骑手 | 3 星 | 10 | 2 | 1 | 2 | 1 |
 | 守卫 | 3 星 | 15 | 1 | 3 | 1 | 1 |
 | 弓箭手 | 3 星 | 10 | 2 | 1 | 1 | 2 |
@@ -35,14 +35,14 @@
 
 | 本项目可复现局面 | 主目标损血 | 攻击者损血 |
 | --- | ---: | ---: |
-| 平原，满血战士打满血战士 | 5 | 5 |
-| 平原，满血战士打满血守卫 | 4 | 8 |
-| 平原，7/10 战士打 11/15 守卫 | 4 | 7（阵亡） |
-| 城墙内满血守卫遭满血战士攻击 | 1 | 10（阵亡） |
+| 平原，满血民兵打满血民兵 | 5 | 5 |
+| 平原，满血民兵打满血守卫 | 4 | 8 |
+| 平原，7/10 民兵打 11/15 守卫 | 4 | 7（阵亡） |
+| 城墙内满血守卫遭满血民兵攻击 | 1 | 10（阵亡） |
 | 相距两格的满血弓箭手，双方视野已开 | 6 | 2 |
 | 同一位置，守方尚未探索攻击者所在格 | 6 | 0 |
 
-城墙一例中，守卫的公式反击值为 12，战士实际只剩 10 点可扣。残血守卫一例中，战士和守卫的力量分别为 1.4 与 2.2，战士的理论伤害恰好为 3.5。两例均同时断言预览和执行结果。
+城墙一例中，守卫的公式反击值为 12，民兵实际只剩 10 点可扣。残血守卫一例中，民兵和守卫的力量分别为 1.4 与 2.2，民兵的理论伤害恰好为 3.5。两例均同时断言预览和执行结果。
 
 ## 特殊行动与范围伤害
 

@@ -51,15 +51,15 @@ function ripplePair() {
 }
 
 const grass = grassSprig(), ripples = ripplePair();
-const shell = { cap: tileCap, plinth: tilePlinth, plinthColor: "#907e65" };
+const shell = { cap: tileCap, plinth: tilePlinth, plinthColor: "#a98a60" };
 
 export const imperialTerrain = {
   shells: {
-    plain: { ...shell, color: "#b9c38f" },
-    forest: { ...shell, color: "#8ba683" },
-    mountain: { ...shell, color: "#c3b7a2" },
-    shallow: { ...shell, color: "#79afa8" },
-    deep: { ...shell, color: "#4a8795" },
+    plain: { ...shell, color: "#a9c65c" },
+    forest: { ...shell, color: "#74b35a" },
+    mountain: { ...shell, color: "#d4b184" },
+    shallow: { ...shell, color: "#48c8b7" },
+    deep: { ...shell, color: "#306f96" },
   },
   details: { forest: grove, mountain },
   developed: developedLandscape,
@@ -68,8 +68,8 @@ export const imperialTerrain = {
   ruin: ruinModel,
   lighthouse: lighthouseModel,
   inlays: {
-    plain: { geometry: grass, color: "#9aa879" },
-    shallow: { geometry: ripples, color: "#94bbb4" },
-    deep: { geometry: ripples, color: "#6d9ba5" },
+    plain: { geometry: grass, color: "#88af48" },
+    shallow: { geometry: ripples, color: "#80d7c9" },
+    deep: { geometry: ripples, color: "#528dad" },
   },
 } satisfies TerrainAssets;

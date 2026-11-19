@@ -1,7 +1,7 @@
 import { UNITS } from "../data/config";
 import { DEFAULT_TERRAIN_VARIANT } from "../../nations/registry";
 import { distance, neighbors } from "../map/generate";
-import { getReachableTiles, getTerrainDefense } from "../rules/engine";
+import { getBuildingLevel, getReachableTiles, getTerrainDefense } from "../rules/engine";
 import type { City, GameState, Tile, Unit } from "../types";
 
 export interface Knowledge {
@@ -31,6 +31,19 @@ export function observe(s: GameState): Knowledge {
     units: new Map(units.map((u) => [u.id, u])),
     view: { ...s, units },
   };
+}
+
+/** Forecast a present or proposed market from fully observable supply lines. */
+export function observableMarketIncome(s: GameState, k: Knowledge, market: Tile): number {
+  const suppliers = neighbors(s.tiles, s.options.size, market).filter((tile) =>
+    k.visible.has(tile.id) && tile.owner === market.owner &&
+    (tile.building === "windmill" || tile.building === "sawmill" || tile.building === "forge"));
+  // Computing a supplier level reads its own neighbours. An unseen input
+  // cannot tell the AI how productive another faction's market is.
+  const income = suppliers.reduce((stars, supplier) =>
+    neighbors(s.tiles, s.options.size, supplier).every((t) => k.visible.has(t.id))
+      ? stars + getBuildingLevel(s, supplier) : stars, 0);
+  return Math.min(8, income);
 }
 
 /** Rollouts cannot discover actual concealed terrain or units as a side effect. */

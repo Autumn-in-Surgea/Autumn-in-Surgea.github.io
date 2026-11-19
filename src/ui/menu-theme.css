@@ -4,11 +4,11 @@
   --menu-brass: light-dark(#836a3c, #dfc184);
   --menu-edge: light-dark(#b8a37b, #637b90);
   --menu-field: light-dark(#fffaed, #192b3d);
-  --menu-panel: light-dark(#eee3cd, #24384b);
+  --menu-panel: light-dark(#f2e7d0, #283e53);
   --menu-hover: light-dark(#fff6dd, #324b62);
   --menu-inset: light-dark(#fffaed9c, #bcd2e029);
-  --menu-button: linear-gradient(light-dark(#fdf8ec, #334b62), light-dark(#ece2ca, #213549));
-  --menu-selected: linear-gradient(150deg, light-dark(#3d5a78, #536e88), light-dark(#22394f, #2c465f));
+  --menu-button: linear-gradient(light-dark(#fffaed, #365371), light-dark(#f1e6cc, #233a50));
+  --menu-selected: linear-gradient(150deg, light-dark(var(--chrome-raised), #567694), light-dark(#22394f, #2c465f));
   color-scheme: light;
 }
 
@@ -29,11 +29,11 @@
 .menu-shell .menu-actions > button::after { border-color: light-dark(#9c784b5f, #d5ba7f51); }
 .menu-shell .menu-actions > .menu-start {
   border-color: light-dark(#efe0ae, #e9d3a1);
-  background: linear-gradient(145deg, light-dark(#fff3d9, #476989), light-dark(#d4b875, #22394f) 80%);
+  background: linear-gradient(145deg, light-dark(#fff5db, var(--chrome-hover)), light-dark(#ddc17a, #22394f) 80%);
 }
 .menu-shell .menu-actions > button:hover:not(:disabled) {
   border-color: #fff0cb;
-  background: linear-gradient(light-dark(#fff9e7, #476989), light-dark(#ecdbb6, #3d5a78));
+  background: linear-gradient(light-dark(#fff9e7, var(--chrome-hover)), light-dark(#f1dfb8, var(--chrome-raised)));
 }
 .menu-shell .menu-actions > button:disabled { opacity: .73; }
 .menu-shell .menu-footer .pwa-button {
@@ -54,7 +54,7 @@
   border-inline-color: light-dark(#ae946b5d, #8ca6ba36);
   background:
     repeating-linear-gradient(117deg, transparent 0 4px, light-dark(#62432205, #b1c1d408) 4px 5px, transparent 5px 11px),
-    linear-gradient(118deg, light-dark(#fbf6e9, #1c2e41), light-dark(#f3ead6, #182838));
+    linear-gradient(118deg, light-dark(#fbf6e9, #1c2e41), light-dark(var(--chrome-paper), #1a2b3e));
 }
 .menu-page[data-menu-surface] .menu-page-footer {
   border-top-color: var(--menu-edge);

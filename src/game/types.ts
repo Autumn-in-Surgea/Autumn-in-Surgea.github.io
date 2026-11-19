@@ -1,4 +1,5 @@
 import type { NationId } from "../nations/registry";
+import type { BridgeAxis } from "./map/bridgeBanks";
 
 export type CivilizationId = NationId | "neutral";
 export type Terrain = "plain" | "forest" | "mountain" | "shallow" | "deep";
@@ -117,6 +118,7 @@ export interface Tile extends Position {
   owner: number | null;
   cityId: string | null;
   building: BuildingId | null;
+  bridgeAxis?: BridgeAxis;
   road: boolean;
   ruin: boolean;
   builtTurn?: number;

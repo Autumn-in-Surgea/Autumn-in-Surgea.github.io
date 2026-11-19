@@ -1,6 +1,6 @@
 import type { BuildingId } from "../../../game/types";
 import type { BuildingVisualTier as Tier } from "../../../scene/buildingVisualTier";
-import { oreVein, standingWheat } from "../../../scene/landscape";
+import { orePigments, oreVein, standingWheat } from "../../../scene/landscape";
 import { Miniature } from "../../../scene/miniature";
 import { crate, rural } from "./ruralKit";
 
@@ -362,8 +362,8 @@ function extractedOre(m: Miniature) {
   // rock itself is also the flying ore token used by the population animation.
   const x = .072, z = .341;
   for (const [dx,dz,h,angle] of [[-.024,.010,.059,.46],[.017,.012,.070,-.29],[.005,-.037,.052,.32]]) {
-    m.part("gem", "#b77947", x + dx, .099 + h * .38, z + dz, h * .86, h, h * .69, .15, -.09, angle);
-    m.part("gem", "#f1c485", x + dx + .005, .105 + h * .38, z + dz + .005,
+    m.part("gem", orePigments.copper, x + dx, .099 + h * .38, z + dz, h * .86, h, h * .69, .15, -.09, angle);
+    m.part("gem", orePigments.glint, x + dx + .005, .105 + h * .38, z + dz + .005,
       h * .61, h * .75, h * .50, .14, -.06, angle);
   }
 }

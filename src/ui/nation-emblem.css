@@ -17,6 +17,17 @@
 
 .nation-picker { margin-bottom: 12px; }
 .menu-page .nation-picker .civilization-grid { margin-bottom: 6px; }
+.menu-page .nation-picker .civilization-grid--free {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+@media (max-width: 600px) {
+  .menu-page .nation-picker .civilization-grid--free {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+.nation-emblem.civ-emblem--custom {
+  color: var(--civ);
+}
 .nation-picker .civ-card { min-width: 0; gap: 3px; }
 .nation-picker .civ-card small {
   display: block;

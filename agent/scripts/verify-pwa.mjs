@@ -16,8 +16,8 @@ assert.match(html, /name="viewport"[^>]*viewport-fit=cover/);
 assert.match(html, /name="viewport"[^>]*maximum-scale=1(?:\.0)?[,\s"]/);
 assert.match(html, /name="viewport"[^>]*user-scalable=no[,\s"]/);
 assert.match(html, /name="apple-mobile-web-app-status-bar-style" content="black"/);
-assert.equal(manifest.name, "西陆秋色 · Autumn in Surgea");
-assert.equal(manifest.short_name, "西陆秋色");
+assert.equal(manifest.name, "西陆经略 · Autumn in Surgea");
+assert.equal(manifest.short_name, "西陆经略");
 assert.ok(html.includes(`<title>${manifest.name}</title>`));
 const entries = new Map();
 for (const match of worker.matchAll(/\{url:"([^"]+)",revision:(null|"[^"]+")\}/g)) {

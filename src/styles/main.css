@@ -15,11 +15,11 @@
   --menu-max-inline: 100dvh;
   --chrome-ink: #22394f;
   --chrome-deep: #101f32;
-  --chrome-raised: #3d5a78;
-  --chrome-hover: #476989;
-  --chrome-brass: #b39a62;
+  --chrome-raised: #405f81;
+  --chrome-hover: #486f93;
+  --chrome-brass: #bba165;
   --chrome-gilt: #e4cea0;
-  --chrome-paper: #f3ead6;
+  --chrome-paper: #f8eedb;
   --chrome-rule: #b8a37b;
   --chrome-paper-texture:
     repeating-linear-gradient(117deg, transparent 0 4px, #62432205 4px 5px, transparent 5px 11px),

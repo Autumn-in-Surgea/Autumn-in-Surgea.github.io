@@ -2,7 +2,8 @@ import { UNITS } from "../data/config";
 import { distance, isWater, neighbors } from "../map/generate";
 import { movementCost } from "../rules/engine";
 import type { City, GameState, Tile, Unit } from "../types";
-import { frontierTiles, type Knowledge, type ThreatMap } from "./knowledge";
+import { frontierTiles, observableMarketIncome, type Knowledge, type ThreatMap } from "./knowledge";
+import { AI_PROFILES } from "./profiles";
 
 /** A binary heap keeps map-wide navigation O(V log V), including 64² boards. */
 class MinHeap {
@@ -70,6 +71,21 @@ function routeCost(s: GameState, k: Knowledge, u: Unit, from: Tile, to: Tile): n
   return movementCost(k.view, ground, from, to) / UNITS[ground.type].movement;
 }
 
+/** Income after capture, limited to properties currently visible to the AI.
+ * A surveyed town outside vision still represents at least one star per turn. */
+export function captureIncome(s: GameState, k: Knowledge, city: City): number {
+  const id = city.y * s.options.size + city.x;
+  if (city.owner === null || !k.visible.has(id)) return 1;
+  let income = city.level + city.incomeBonus + Math.min(0, city.population);
+  for (const id of city.territory) {
+    if (!k.visible.has(id)) continue;
+    const tile = s.tiles[id];
+    if (tile.building !== "market" || tile.owner !== city.owner) continue;
+    income += observableMarketIncome(s, k, tile);
+  }
+  return Math.max(1, income);
+}
+
 export function navigationField(s: GameState, k: Knowledge, u: Unit, guard?: City): Map<number, number> {
   const values = new Map<number, number>(), heap = new MinHeap();
   const goal = (id: number, cost: number) => {
@@ -83,7 +99,22 @@ export function navigationField(s: GameState, k: Knowledge, u: Unit, guard?: Cit
       if (UNITS[u.type].skills.includes("infiltrate") && c.owner !== null) {
         for (const tile of neighbors(s.tiles, s.options.size, c))
           if (k.known.has(tile.id)) goal(tile.id, 1);
-      } else goal(c.y * s.options.size + c.x, c.owner === null ? 0 : 2);
+      } else {
+        const id = c.y * s.options.size + c.x;
+        const rival = c.owner !== null;
+        let cost = rival ? 2 : 0;
+        if (s.options.difficulty === "normal") {
+          const planningTurns = AI_PROFILES.normal.economicHorizon;
+          const horizon = s.options.mode === "score" ? Math.min(planningTurns, Math.max(1, s.options.maxRounds - s.round)) : planningTurns;
+          const incomeValue = Math.min(5, captureIncome(s, k, c) - 1) * horizon / planningTurns;
+          const occupant = k.occupants.get(id);
+          // Estimate the resistance from the current garrison, and avoid
+          // directing a whole army to the town a friendly unit is securing.
+          const contest = occupant?.owner === k.player ? 3 : occupant ? Math.min(3, UNITS[occupant.type].defense) : 0;
+          cost += contest - incomeValue;
+        }
+        goal(id, cost);
+      }
     }
     // Keeping frontier goals even after seeing an unreachable city prevents
     // an isolated island or mountain barrier from stopping exploration.

@@ -1,5 +1,7 @@
 import { useMemo, type ReactNode } from "react";
 import { Matrix4 } from "three";
+import { bridgeAxes, bridgeAxisSteps, bridgeBanksAt, type BridgeAxis } from "../game/map/bridgeBanks";
+import { isWater } from "../game/map/generate";
 import type { Tile } from "../game/types";
 import { terrainHeight } from "./terrainElevation";
 import { useTerritoryMaterial } from "./territoryMaterials";
@@ -14,23 +16,26 @@ interface SpanProps {
 }
 
 export function bridgeBanks({ tile, tiles, size, explored }: SpanProps) {
-  // Use the same two opposite bank pairs as construction. A hidden tile can
-  // neither choose the direction nor disclose the height of its approach.
-  const bank = (dx: number, dz: number) => {
-    const x = tile.x + dx,
-      z = tile.y + dz;
-    if (x < 0 || x >= size || z < 0 || z >= size) return { score: -3, height: 0 };
-    const neighbor = tiles[z * size + x];
+  // Uncharted shores use a flat approach until their elevations are known.
+  const describeBank = (neighbor: Tile | undefined) => {
+    if (!neighbor) return { score: -3, height: 0 };
     if (!explored.has(neighbor.id)) return { score: 0, height: terrainHeight({ terrain: "plain" }) };
-    const water = neighbor.terrain === "shallow" || neighbor.terrain === "deep";
-    return { score: water ? -3 : 1, height: terrainHeight(neighbor) };
+    return { score: isWater(neighbor) ? -3 : 1, height: terrainHeight(neighbor) };
   };
-  const ns = [bank(0, -1), bank(0, 1)],
-    ew = [bank(-1, 0), bank(1, 0)];
-  const eastWest = ew[0].score + ew[1].score > ns[0].score + ns[1].score;
-  const banks = eastWest ? ew : ns;
+  const pair = (axis: BridgeAxis) => bridgeBanksAt(tiles, size, tile, axis).map(describeBank);
+  const score = (axis: BridgeAxis) => pair(axis).reduce((sum, bank) => sum + bank.score, 0);
+  // Infer the direction from known shores for bridges built before axes were saved.
+  const axis = tile.bridgeAxis ?? bridgeAxes.reduce((best, candidate) =>
+    score(candidate) > score(best) ? candidate : best);
+  const [nearBank, farBank] = pair(axis);
+  const [dx, dz] = bridgeAxisSteps[axis];
   const approach = (height: number) => height - terrainHeight(tile) + roadSurfaceHeight;
-  return { rotation: eastWest ? Math.PI / 2 : 0, nearDeck: approach(banks[0].height), farDeck: approach(banks[1].height) };
+  return {
+    rotation: Math.atan2(dx, dz),
+    length: Math.hypot(dx, dz),
+    nearDeck: approach(nearBank.height),
+    farDeck: approach(farBank.height),
+  };
 }
 
 const pier = new Miniature();
@@ -39,11 +44,16 @@ const pierGeometry = pier.finish();
 
 /** Keeps both ends flush with their banks and extends the footings into the water. */
 export function BridgeSpan({ children, tier, ...props }: SpanProps & { children: ReactNode; tier: BuildingVisualTier }) {
-  const { rotation, nearDeck, farDeck } = bridgeBanks(props);
+  const { rotation, length, nearDeck, farDeck } = bridgeBanks(props);
   const material = useTerritoryMaterial();
   const slope = farDeck - nearDeck;
   const center = (nearDeck + farDeck) / 2 - bridgeDeckHeight;
-  const alignment = useMemo(() => new Matrix4().set(1, 0, 0, 0, 0, 1, slope, center, 0, 0, 1, 0, 0, 0, 0, 1), [slope, center]);
+  const alignment = useMemo(() => new Matrix4().set(
+    1, 0, 0, 0,
+    0, 1, slope, center,
+    0, 0, length, 0,
+    0, 0, 0, 1,
+  ), [slope, center, length]);
   const edge = bridgePierOffset(tier);
   return (
     <group rotation={[0, rotation, 0]}>
@@ -58,7 +68,7 @@ export function BridgeSpan({ children, tier, ...props }: SpanProps & { children:
             key={`${x}/${z}`}
             geometry={pierGeometry}
             material={material}
-            position={[x, 0, z]}
+            position={[x, 0, z * length]}
             scale={[0.06, height + 0.008, 0.106]}
             receiveShadow
             dispose={null}

@@ -89,6 +89,39 @@ describe("map action badges", () => {
     expect(restored.events.at(-1)).toMatchObject({ type: "promotion", unitId: unit.id });
   });
 
+  it("marks a ruin only after the occupying unit can examine it", () => {
+    const game = battlefield();
+    const unit = addUnit(game, 0, "warrior", 3, 3);
+    const tile = game.tiles[unit.x + unit.y * game.options.size];
+    tile.ruin = true;
+    unit.moved = true;
+    expect(getMapBadges(game)).toEqual([]);
+    unit.moved = false;
+    unit.kills = 3;
+    expect(getMapBadges(game)).toMatchObject([
+      { action: "promote", unitId: unit.id, column: -1 },
+      { action: "examine", unitId: unit.id, column: 1 },
+    ]);
+    const result = applyAction(game, { type: "EXAMINE", unitId: unit.id });
+    expect(result.ok).toBe(true);
+    expect(getMapBadges(result.state).some(badge => badge.action === "examine")).toBe(false);
+  });
+
+  it("warns about an expiring reactivation window even without enough stars", () => {
+    const game = battlefield();
+    const unit = addUnit(game, 0, "warrior", 3, 3);
+    unit.upkeep = "suspended";
+    expect(getMapBadges(game)).toEqual([]);
+    unit.upkeep = "reactivation";
+    game.players[0].resources = 0;
+    expect(getMapBadges(game)).toMatchObject([{ action: "reactivate", unitId: unit.id }]);
+    expect(getMapBadges(game, false)).toEqual([]);
+    game.players[0].resources = 10;
+    const result = applyAction(game, { type: "REACTIVATE", unitId: unit.id });
+    expect(result.ok).toBe(true);
+    expect(getMapBadges(result.state)).toEqual([]);
+  });
+
   it.each(["upgrade", "capture"] as const)("keeps %s and promotion side by side above a garrison", (cityAction) => {
     const game = battlefield();
     const city = cityAction === "upgrade" ? game.cities[0] : addCity(game, 3, 3);

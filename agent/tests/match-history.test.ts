@@ -11,6 +11,7 @@ function opening(seed: string): GameOptions {
   return {
     ...structuredClone(DEFAULT_OPTIONS),
     scenario: "free",
+    civilization: "neutral",
     size: 12,
     aiCount: 1,
     mapType: "dryland",
@@ -41,7 +42,7 @@ it("persists the latest ten successful starts newest first, including deliberate
   const initial = await openStore();
   for (let i = 0; i < 9; i++) initial.getState().start(opening(`seed-${i}`));
 
-  const options = opening("  repeat  ");
+  const options = { ...opening("  repeat  "), civilization: "rina" as const };
   options.mapSettings = {
     ...options.mapSettings,
     landRatio: 1,
@@ -58,7 +59,7 @@ it("persists the latest ten successful starts newest first, including deliberate
     "repeat", "repeat", "seed-8", "seed-7", "seed-6", "seed-5", "seed-4", "seed-3", "seed-2", "seed-1",
   ]);
   expect(history[0].options).toMatchObject({
-    civilization: "neutral",
+    civilization: "rina",
     quickMode: false,
     mapSettings: { spawnMode: "custom", customSpawns: [{ x: 1, y: 1 }, { x: 10, y: 10 }] },
   });

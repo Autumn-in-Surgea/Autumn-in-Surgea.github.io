@@ -6,6 +6,7 @@ import { buildingVisualTier, roadSurfaceHeight } from "../../src/scene/buildingV
 import { MODEL_SETS } from "../../src/scene/factionModels";
 import { roadGeometry } from "../../src/scene/RoadInlay";
 import { terrainHeight } from "../../src/scene/terrainElevation";
+import { battlefield } from "./helpers";
 import { DEFAULT_TERRAIN_VARIANT } from "../../src/nations/registry";
 
 describe("city improvement sculptures", () => {
@@ -79,6 +80,27 @@ describe("city improvement sculptures", () => {
     tiles[5].terrain = "deep";
     expect(bridgeBanks(props)).toEqual(partial);
     expect(partial.farDeck).toBe(partial.nearDeck);
+  });
+
+  it("keeps a placed diagonal bridge on its axis and fits both diagonal banks", () => {
+    const game = battlefield();
+    const size = game.options.size;
+    const tile = game.tiles[size + 1];
+    tile.terrain = "deep";
+    tile.bridgeAxis = "northeastSouthwest";
+    game.tiles[2].terrain = "forest";
+    game.tiles[2 * size].terrain = "mountain";
+    const explored = new Set(game.players[0].explored);
+    const props = { tile, tiles: game.tiles, size, explored };
+    const diagonal = bridgeBanks(props);
+    expect(diagonal.rotation).toBeCloseTo(-Math.PI / 4);
+    expect(diagonal.length).toBeCloseTo(Math.SQRT2);
+    expect(diagonal.nearDeck).toBeCloseTo(terrainHeight(game.tiles[2]) - terrainHeight(tile) + roadSurfaceHeight);
+    expect(diagonal.farDeck).toBeCloseTo(terrainHeight(game.tiles[2 * size]) - terrainHeight(tile) + roadSurfaceHeight);
+    explored.delete(2 * size);
+    const hiddenMountain = bridgeBanks(props);
+    expect(hiddenMountain.rotation).toBe(diagonal.rotation);
+    expect(hiddenMountain.farDeck).toBe(hiddenMountain.nearDeck);
   });
 
   it("brings the low road half up to the high road along the edge", () => {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { applyAction, distance, getAiBudget, getArmyTarget, getReachableTiles, isWater, runAiTurnDetailed, TECHNOLOGIES, UNITS } from '../../src/game';
+import { applyAction, distance, getAiBudget, getArmyTarget, getIncome, getReachableTiles, isWater, runAiTurnDetailed, TECHNOLOGIES, UNITS } from '../../src/game';
 import { observe, buildThreatMap, incomingDamage } from '../../src/game/ai/knowledge';
+import { captureIncome } from '../../src/game/ai/navigation';
 import type { GameState, Unit, UnitType } from '../../src/game/types';
 import { addUnit, battlefield, newGame } from './helpers';
 
@@ -147,6 +148,121 @@ describe('bounded complete turns, legal replay and scaling', () => {
     while (state.status === 'playing' && turns < 300) { const result = runAiTurnDetailed(state); replay(state, result); state = result.state; turns++; }
     expect(state.status).toBe('finished'); expect(state.winner).not.toBeNull(); expect(state.players.some(player => player.eliminated)).toBe(true);
   }, 30000);
+});
+
+describe('economic foresight', () => {
+  it('crosses toward a known higher-income city over equally reachable low-income land', () => {
+    const state = tactical(), rival = state.cities[1];
+    state.options.quickMode = true;
+    const richer = { ...rival, id: 'industrial-town', x: 6, y: 6, level: 6, capitalOf: null, territory: [78] };
+    const poorer = { ...richer, id: 'frontier-village', x: 4, owner: null, level: 1, territory: [76] };
+    state.cities.push(richer, poorer);
+    for (const city of [richer, poorer]) {
+      const tile = state.tiles[city.territory[0]];
+      tile.cityId = city.id;
+      tile.owner = city.owner;
+    }
+    const rider = addUnit(state, 0, 'rider', 5, 5);
+    const easy = structuredClone(state);
+    easy.options.difficulty = 'easy';
+    const normal = runAiTurnDetailed(state), simple = runAiTurnDetailed(easy);
+    expect(normal.actions).toContainEqual({ type: 'MOVE', unitId: rider.id, to: 78 });
+    expect(simple.actions).toContainEqual({ type: 'MOVE', unitId: rider.id, to: 76 });
+    const next = applyAction(normal.state, { type: 'END_TURN' }).state;
+    const captured = runAiTurnDetailed(next);
+    expect(captured.actions).toContainEqual({ type: 'CAPTURE', unitId: rider.id });
+    expect(getIncome(captured.state, 0)).toBeGreaterThanOrEqual(getIncome(state, 0) + 6);
+    replay(state, normal); replay(easy, simple); replay(next, captured);
+  });
+
+  it('estimates occupied-city income from observable production only', () => {
+    const state = tactical(), rival = state.cities[1];
+    const plot = (x: number, y: number) => state.tiles[y * state.options.size + x];
+    const market = plot(10, 9), producer = plot(10, 8), source = plot(10, 7);
+    for (const tile of [market, producer, source]) tile.owner = 1;
+    market.building = 'market';
+    producer.building = 'forge';
+    state.players[0].visible = state.players[0].visible.filter((id) => id !== source.id);
+    expect(captureIncome(state, observe(state), rival)).toBe(1);
+    source.terrain = 'mountain';
+    source.building = 'mine';
+    expect(captureIncome(state, observe(state), rival)).toBe(1);
+    state.players[0].visible.push(source.id);
+    expect(captureIncome(state, observe(state), rival)).toBe(2);
+  });
+
+  it('researches a viable farming project and realizes its forecast recurring income', () => {
+    const state = tactical();
+    state.options.quickMode = false;
+    state.players[0].resources = 13;
+    state.players[0].technologies.push('organization');
+    for (const [x,y] of [[4,4],[4,5]]) {
+      const unit = addUnit(state, 0, 'warrior', x, y);
+      unit.moved = unit.attacked = true;
+    }
+    const crop = state.tiles[2 * state.options.size + 2];
+    crop.resource = 'crop';
+    const result = runAiTurnDetailed(state);
+    expect(result.actions.slice(0, 2)).toEqual([
+      { type: 'RESEARCH', techId: 'farming' },
+      { type: 'BUILD', tileId: crop.id, building: 'farm' },
+    ]);
+    expect(getIncome(result.state, 0)).toBe(getIncome(state, 0) + 2);
+    replay(state, result);
+  });
+  it('saves for trade and then funds a market with recurring revenue', () => {
+    const state = tactical();
+    state.options.quickMode = true;
+    state.players[0].resources = 6;
+    state.players[0].technologies = ['riding', 'roads', 'forestry', 'farming', 'construction', 'mathematics'];
+    state.cities[0].level = 2;
+    const id = (x: number, y: number) => y * state.options.size + x;
+    for (let y = 2; y <= 4; y++) for (let x = 1; x <= 4; x++) {
+      const plot = state.tiles[id(x, y)];
+      plot.owner = 0;
+      if (!state.cities[0].territory.includes(plot.id)) state.cities[0].territory.push(plot.id);
+    }
+    for (const [x,y] of [[1,2],[1,3],[1,4],[2,2],[2,4],[3,2],[3,4]]) {
+      const plot = state.tiles[id(x, y)];
+      plot.terrain = 'forest';
+      plot.building = 'lumberHut';
+    }
+    state.tiles[id(2, 3)].building = 'sawmill';
+    state.tiles[id(4, 3)].building = 'windmill';
+    for (const y of [2,4]) state.tiles[id(4, y)].building = 'farm';
+    for (const [x,y] of [[4,4],[4,5]]) {
+      const unit = addUnit(state, 0, 'warrior', x, y);
+      unit.moved = unit.attacked = true;
+    }
+    const turns = [runAiTurnDetailed(state)];
+    expect(turns[0].actions).toEqual([{ type: 'END_TURN' }]);
+    for (let i = 1; i < 3; i++) {
+      const next = applyAction(turns[i-1].state, { type: 'END_TURN' }).state;
+      for (const unit of next.units) unit.moved = unit.attacked = true;
+      turns.push(runAiTurnDetailed(next));
+      replay(next, turns[i]);
+    }
+    expect(turns[1].actions).toContainEqual({ type: 'RESEARCH', techId: 'trade' });
+    expect(turns[2].actions).toContainEqual({ type: 'BUILD', tileId: id(3, 3), building: 'market' });
+    expect(getIncome(turns[2].state, 0)).toBe(getIncome(state, 0) + 8);
+  });
+
+  it('researches a ranged option and fields it alongside an existing melee force', () => {
+    const state = tactical();
+    state.options.quickMode = true;
+    state.players[0].technologies = ['organization', 'hunting', 'climbing', 'riding', 'strategy'];
+    state.players[0].resources = 13;
+    state.cities[0].level = 2;
+    for (const [x,y] of [[4,4],[4,5]]) {
+      const unit = addUnit(state, 0, 'warrior', x, y);
+      unit.moved = unit.attacked = true;
+    }
+    addUnit(state, 1, 'warrior', 6, 6);
+    const result = runAiTurnDetailed(state);
+    expect(result.actions).toContainEqual({ type: 'RESEARCH', techId: 'archery' });
+    expect(result.actions).toContainEqual({ type: 'TRAIN', cityId: state.cities[0].id, unitType: 'archer' });
+    replay(state, result);
+  });
 });
 
 describe('naval logistics and economic prerequisites', () => {

@@ -16,7 +16,7 @@ function mount(
   parent: THREE.Group,
   name: string,
   geometry: THREE.BufferGeometry,
-  material: THREE.Material | THREE.Material[],
+  material: THREE.Material,
 ) {
   const mesh = new THREE.Mesh(geometry, material);
   mesh.name = name;
@@ -70,44 +70,6 @@ function turned(
   const mesh = mount(parent, name, geometry, material);
   mesh.scale.z = depth;
   return mesh;
-}
-
-let capeShape: THREE.BufferGeometry | undefined;
-function cowl(parent: THREE.Group, cloth: THREE.Material, binding: THREE.Material) {
-  if (capeShape) return mount(parent, "Pointed shoulder cape", capeShape, [cloth, binding]);
-  const rings = [
-    // front drop gives the cape a single cut and an unbroken, lighter shoulder line
-    [0.133, 0.931, 0.005],
-    [0.232, 0.893, 0.015],
-    [0.302, 0.846, 0.062],
-    [0.3, 0.822, 0.108],
-    [0.285, 0.822, 0.107],
-  ];
-  const points = [],
-    faces = [];
-  const sides = 48;
-  for (const [r, y, drop] of rings) {
-    for (let i = 0; i < sides; i++) {
-      const angle = (2 * Math.PI * i) / sides;
-      const wave = Math.max(0, Math.cos(angle + 0.44)) ** 5;
-      points.push(r * Math.sin(angle), y - drop * wave, r * 0.89 * Math.cos(angle));
-    }
-  }
-  const geometry = new THREE.BufferGeometry();
-  for (let band = 0; band < rings.length - 1; band++) {
-    for (let i = 0; i < sides; i++) {
-      const j = (i + 1) % sides;
-      const a = band * sides + i,
-        b = band * sides + j;
-      faces.push(a, a + sides, b, b, a + sides, b + sides);
-    }
-    geometry.addGroup(band * sides * 6, sides * 6, band === 2 ? 1 : 0);
-  }
-  geometry.setAttribute("position", new THREE.Float32BufferAttribute(points, 3));
-  geometry.setIndex(faces);
-  geometry.computeVertexNormals();
-  capeShape = geometry;
-  return mount(parent, "Pointed shoulder cape", geometry, [cloth, binding]);
 }
 
 const mittenShape = new THREE.SphereGeometry(1, 18, 12);
@@ -250,8 +212,7 @@ function squareHead(parent: THREE.Group, wood: THREE.Material) {
   head.scale.set(1.1 * horizontalHeadScale, 1.15 * verticalHeadScale, 1.13).multiplyScalar(headSize);
 }
 
-// Fit the sling directly to the coat. Its high side disappears beneath the
-// overhanging cape, leaving the cape and its collar clasp uninterrupted.
+// Follow the turned coat closely so the leather lies flat on the uniform.
 let strapGeometry: THREE.BufferGeometry | undefined;
 function fittedSling() {
   if (strapGeometry) return strapGeometry;
@@ -307,16 +268,17 @@ function fittedSling() {
   return strapGeometry;
 }
 
-function dress(parent: THREE.Group, shoulder: THREE.Mesh, leather: THREE.Material, brass: THREE.Material) {
+function dress(parent: THREE.Group, coat: THREE.Mesh, leather: THREE.Material, brass: THREE.Material) {
   mount(parent, "Crossbody leather strap", fittedSling(), leather);
-  // Fix the single domed button to the actual face of the cape.
+  // Seat the button directly on the curved chest of the coat.
+  coat.updateWorldMatrix(true, false);
   const angle = 0.04,
     outward = new THREE.Vector3(Math.sin(angle), 0, Math.cos(angle));
   const ray = new THREE.Raycaster(
     new THREE.Vector3(0, 0.803, 0).addScaledVector(outward, 1),
     outward.clone().negate(),
   );
-  const hit = ray.intersectObject(shoulder, false)[0];
+  const hit = ray.intersectObject(coat, false)[0];
   const button = turned(
     parent,
     "Single brass coat button",
@@ -334,7 +296,8 @@ function dress(parent: THREE.Group, shoulder: THREE.Mesh, leather: THREE.Materia
     brass,
   );
   button.position.copy(hit.point);
-  button.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), hit.face!.normal);
+  const normal = hit.face!.normal.clone().applyNormalMatrix(new THREE.Matrix3().getNormalMatrix(coat.matrixWorld));
+  button.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
 }
 
 export function makePawnBody(profile: PawnProfile, grip: HandPose) {
@@ -342,7 +305,7 @@ export function makePawnBody(profile: PawnProfile, grip: HandPose) {
   root.name = "Turned wood pawn";
   root.userData = { style: "B" };
   const paint = finish(profile.coat);
-  const cape = finish(profile.fold, 0.6);
+  const collar = finish(profile.fold, 0.6);
   const wood = finish("#e3ad78", 0.49);
   const walnut = finish("#53362b", 0.4);
   const shade = finish(profile.boots, 0.48);
@@ -380,7 +343,7 @@ export function makePawnBody(profile: PawnProfile, grip: HandPose) {
     0.93,
     inlay,
   );
-  turned(root, "Bell coat", coatProfile, coatDepth, paint);
+  const coat = turned(root, "Bell coat", coatProfile, coatDepth, paint);
   turned(
     root,
     "Inlaid coat hem",
@@ -395,23 +358,22 @@ export function makePawnBody(profile: PawnProfile, grip: HandPose) {
   );
   turned(
     root,
-    "Turned collar",
+    "Standing collar",
     [
-      [0, 0.856],
-      [0.142, 0.856],
-      [0.162, 0.877],
-      [0.159, 0.905],
-      [0.118, 0.93],
-      [0.113, 0.97],
-      [0, 0.97],
+      [0, 0.893],
+      [0.151, 0.893],
+      [0.157, 0.909],
+      [0.151, 0.924],
+      [0.139, 0.948],
+      [0.126, 0.962],
+      [0, 0.962],
     ],
-    0.93,
-    shade,
+    0.88,
+    collar,
   );
-  const shoulder = cowl(root, cape, paint);
   const darkStrap = profile.darkStrap;
   const strap = finish(darkStrap ? "#73503b" : "#ab7751", 0.77);
-  dress(root, shoulder, strap, finish("#e9b96e", 0.4, 0.36));
+  dress(root, coat, strap, finish("#e9b96e", 0.4, 0.36));
   squareHead(root, wood);
 
   mittenSleeve(root, -1, grip.other ?? [-0.315, 0.549, 0.107], paint, wood);

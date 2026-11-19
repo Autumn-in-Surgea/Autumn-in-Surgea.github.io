@@ -11,6 +11,7 @@ import {
   UNITS,
   VETERAN_KILLS_REQUIRED,
 } from "../data/config";
+import { bridgeAxes, bridgeBanksAt } from "../map/bridgeBanks";
 import { distance, generateMap, isWater, neighbors } from "../map/generate";
 import { openingNations } from "../map/openingNations";
 import { hashSeed, seededRandom } from "../map/random";
@@ -506,18 +507,19 @@ export function createGame(input: GameOptions): GameState {
     options.scenario === "story"
       ? STORY_SIZE
       : Math.min(64, Math.max(12, Math.floor(options.size)));
-  options.factionNames = selectedNation ? [] : Array.from({ length: options.aiCount + 1 }, (_, id) =>
-    (input.factionNames?.[id] ?? "").trim().slice(0, 20),
-  );
-  options.startingProfiles = selectedNation ? [] : Array.from(
+  const customizableOpenings = options.scenario === "free" || !selectedNation;
+  options.factionNames = customizableOpenings ? Array.from({ length: options.aiCount + 1 }, (_, id) =>
+    roster[id] ? "" : (input.factionNames?.[id] ?? "").trim().slice(0, 20),
+  ) : [];
+  options.startingProfiles = customizableOpenings ? Array.from(
     { length: options.aiCount + 1 },
     (_, id) => {
-      const profile = input.startingProfiles?.[id];
-      return OPENING_PROFILES.some((p) => p.id === profile)
+      const profile = roster[id] ? undefined : input.startingProfiles?.[id];
+      return profile !== undefined && OPENING_PROFILES.some((p) => p.id === profile)
         ? profile
         : "random";
     },
-  );
+  ) : [];
   options.maxRounds =
     options.mode === "score" ? 30 : Math.max(30, options.maxRounds);
   const map = generateMap(options);
@@ -953,6 +955,10 @@ function monumentReady(s: GameState, p: Player, id: MonumentId): boolean {
 function cityOfTile(s: GameState, id: number): City | undefined {
   return s.cities.find((c) => c.territory.includes(id));
 }
+function bridgeConstructionAxis(s: GameState, tile: Tile, player: Player) {
+  return bridgeAxes.find((axis) => bridgeBanksAt(s.tiles, s.options.size, tile, axis)
+    .every((bank) => bank && !isWater(bank) && player.explored.includes(bank.id)));
+}
 function canPlaceBuilding(
   s: GameState,
   t: Tile | undefined,
@@ -984,34 +990,7 @@ function canPlaceBuilding(
     (n) => n.owner === p.id,
   );
   if (id === "port" && !adjacent.some((n) => !isWater(n))) return false;
-  if (id === "bridge") {
-    const opposite = [
-      [
-        [-1, 0],
-        [1, 0],
-      ],
-      [
-        [0, -1],
-        [0, 1],
-      ],
-    ];
-    if (
-      !opposite.some((pair) =>
-        pair.every(([dx, dy]) => {
-          const x = t.x + dx,
-            y = t.y + dy;
-          return (
-            x >= 0 &&
-            y >= 0 &&
-            x < s.options.size &&
-            y < s.options.size &&
-            !isWater(s.tiles[y * s.options.size + x])
-          );
-        }),
-      )
-    )
-      return false;
-  }
+  if (id === "bridge" && !bridgeConstructionAxis(s, t, p)) return false;
   const need =
     id === "windmill"
       ? "farm"
@@ -2081,12 +2060,14 @@ export function applyAction(source: GameState, a: Action): ActionResult {
       if (a.type === "BUILD") {
         p.resources -= BUILDINGS[a.building].cost;
         t.building = a.building;
+        if (a.building === "bridge") t.bridgeAxis = bridgeConstructionAxis(s, t, p);
         t.builtTurn = s.round;
         t.resource = null;
         if (BUILDINGS[a.building].monument)
           p.builtMonuments.push(a.building as MonumentId);
       } else {
         t.building = null;
+        delete t.bridgeAxis;
         delete t.builtTurn;
       }
       updateAdjacentPopulation(s, before, award, a.type === "BUILD" ? t.id : undefined);

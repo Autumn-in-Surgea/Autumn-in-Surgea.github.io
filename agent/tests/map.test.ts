@@ -168,6 +168,35 @@ describe("three distinct world modes", () => {
       "白川共和",
     ]);
   });
+
+  it("starts with a selected nation and independently configurable free-mode opponents", () => {
+    const nation = getNation("rina")!;
+    const options = {
+      scenario: "free" as const,
+      size: 32,
+      civilization: nation.id,
+      aiCount: 10,
+      factionNames: ["Ignored player name", "Custom rival"],
+      startingProfiles: ["luxury", "hunting"],
+    };
+    const game = newGame(options);
+    expect(game.players).toHaveLength(11);
+    expect(game.players[0]).toMatchObject({
+      civilization: nation.id,
+      name: nation.name,
+      color: nation.color,
+      technologies: nation.opening.technologies,
+      resources: nation.opening.stars,
+    });
+    expect(game.cities.find(city => city.capitalOf === 0)?.name).toBe(nation.capital);
+    expect(game.players[1]).toMatchObject({
+      civilization: "neutral",
+      name: "Custom rival",
+      technologies: ["hunting"],
+    });
+    expect(game.players.slice(1).every(player => player.civilization === "neutral")).toBe(true);
+    expect(deserializeGame(serializeGame(game))).toEqual(game);
+  });
 });
 
 describe("map sizes, topology and configurable generation", () => {
@@ -347,6 +376,7 @@ describe("map sizes, topology and configurable generation", () => {
     expect(world.starts).toEqual(
       spawns.map((position) => position.y * 20 + position.x),
     );
+    for (const id of world.starts) expect(world.tiles[id].terrain).toBe("plain");
     expect(() =>
       generateMap({
         ...options,
@@ -365,6 +395,46 @@ describe("map sizes, topology and configurable generation", () => {
         },
       }),
     ).toThrow();
+    const mountain = world.tiles.find(tile => tile.terrain === "mountain" &&
+      tile.x > 0 && tile.x < 19 && tile.y > 0 && tile.y < 19)!;
+    expect(() =>
+      generateMap({
+        ...options,
+        mapSettings: {
+          ...options.mapSettings,
+          customSpawns: [mountain, spawns[1]],
+        },
+      }),
+    ).toThrow(/山地/);
+  });
+
+  it.each(["balanced", "random"] as const)("puts all %s free-mode settlements on clear flat terrain", (spawnMode) => {
+    const options = {
+      ...DEFAULT_OPTIONS,
+      scenario: "free" as const,
+      size: 24,
+      aiCount: 4,
+      seed: "mountain-settlements",
+      mapSettings: {
+        ...DEFAULT_OPTIONS.mapSettings,
+        landRatio: 1,
+        mountainRatio: 0.45,
+        forestRatio: 0.35,
+        villageDensity: 0.09,
+        spawnMode,
+      },
+    };
+    const map = generateMap(options);
+    const game = newGame(options);
+    expect(map.starts).toHaveLength(5);
+    expect(map.villages.length).toBeGreaterThan(0);
+    expect(map.tiles.filter(tile => tile.terrain === "mountain").length).toBeGreaterThan(200);
+    const positions = game.cities.map(city => city.y * options.size + city.x);
+    expect(positions).toEqual([...map.starts, ...map.villages]);
+    for (const id of positions) {
+      expect(map.tiles[id]).toMatchObject({ terrain: "plain", resource: null, ruin: false });
+      expect(game.tiles[id]).toMatchObject({ terrain: "plain", resource: null, ruin: false });
+    }
   });
 });
 

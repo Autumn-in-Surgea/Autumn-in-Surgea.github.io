@@ -31,6 +31,16 @@ button.map-action-badge { pointer-events: auto; }
   --badge-fill: #f1eaf9;
   --badge-edge: #75618e;
 }
+.map-action-badge[data-action="examine"] {
+  --badge-ink: #345274;
+  --badge-fill: #edf5fa;
+  --badge-edge: #728ea7;
+}
+.map-action-badge[data-action="reactivate"] {
+  --badge-ink: #773d2a;
+  --badge-fill: #fff0df;
+  --badge-edge: #ae6e4e;
+}
 .map-action-badge[data-action="training"] {
   --badge-ink: #f2dfab;
   --badge-fill: #273843ee;

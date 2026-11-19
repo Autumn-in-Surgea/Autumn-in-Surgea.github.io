@@ -544,8 +544,8 @@ export const BUILDINGS: Record<BuildingId, BuildingDefinition> = {
     5,
     0,
     "roads",
-    ["shallow"],
-    "连接隔水相望的陆地，陆军通行与道路连接。",
+    ["shallow", "deep"],
+    "沿直线跨过一格水面，连接两侧陆地。",
   ),
   altarOfPeace: {
     ...b(

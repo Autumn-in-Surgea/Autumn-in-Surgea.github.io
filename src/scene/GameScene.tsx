@@ -35,7 +35,7 @@ import { BoardFrame, tileCap, tilePlinth } from "./BoardFrame";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { bindBoardGestures, canHoverBoard, takeBoardTap } from "./boardGestures";
 import type { City, GameEvent, GameState, Tile } from "../game/types";
-import { getCityCapacity, getCityIncome, getCityUnitCount, getUnitsWithAvailableActions, isUnitVisible } from "../game";
+import { getCityCapacity, getCityIncome, getCityUnitCount, getUnitsWithAvailableActions, getVisibleResource, isUnitVisible } from "../game";
 import { PlaybackContext, useBoardClock, usePlaybackClock } from "./playbackClock";
 import { ShotEffect, projectileName } from "./ShotEffect";
 import { carryStrikes, collapseDuration, hitFeedbackDuration, planEncounter } from "./combatMotion";
@@ -87,6 +87,7 @@ export interface GameSceneProps {
 
 const mapCameraOffset = new THREE.Vector3(13, 17, 13);
 const mapViewAngles = new THREE.Spherical().setFromVector3(mapCameraOffset);
+const panCoastSeconds = 0.21;
 
 function CameraRig({
   game,
@@ -115,6 +116,7 @@ function CameraRig({
     replayId?: number;
   } | null>(null);
   const panStep = useRef(new THREE.Vector3());
+  const coastVelocity = useRef(new THREE.Vector3());
   const finishPan = useCallback(() => {
     const id = automaticPan.current?.replayId;
     automaticPan.current = null;
@@ -127,7 +129,7 @@ function CameraRig({
     controls.enableRotate = false;
     controls.minPolarAngle = controls.maxPolarAngle = mapViewAngles.phi;
     controls.minAzimuthAngle = controls.maxAzimuthAngle = mapViewAngles.theta;
-    // The rendered camera moves by the full pointer delta on the next frame.
+    // Track the pointer directly. Apply the inertial tail only after release.
     controls.enableDamping = false;
     controls.screenSpacePanning = true;
     controls.panSpeed = 1;
@@ -150,14 +152,27 @@ function CameraRig({
       controls.mouseButtons.LEFT = controls.mouseButtons.RIGHT = action;
     };
     const canvas = gl.domElement;
-    const disconnectGestures = bindBoardGestures(canvas, onDrag);
+    const right = new THREE.Vector3(), up = new THREE.Vector3();
+    const disconnectGestures = bindBoardGestures(canvas, onDrag, (vx, vy) => {
+      if (!(camera instanceof THREE.OrthographicCamera) || !canvas.clientWidth || !canvas.clientHeight) return;
+      const speedScale = Math.min(1, 1050 / Math.hypot(vx, vy));
+      const dx = vx * speedScale * (camera.right - camera.left) / (camera.zoom * canvas.clientWidth);
+      const dy = vy * speedScale * (camera.top - camera.bottom) / (camera.zoom * canvas.clientHeight);
+      right.setFromMatrixColumn(camera.matrix, 0);
+      up.setFromMatrixColumn(camera.matrix, 1);
+      coastVelocity.current.copy(right).multiplyScalar(-dx).addScaledVector(up, dy);
+    });
+    const startCameraInput = () => {
+      coastVelocity.current.set(0, 0, 0);
+      finishPan();
+    };
     canvas.addEventListener("pointerdown", choosePanAction, true);
-    controls.addEventListener("start", finishPan);
+    controls.addEventListener("start", startCameraInput);
     controls.connect(canvas);
     return () => {
       canvas.removeEventListener("pointerdown", choosePanAction, true);
       disconnectGestures();
-      controls.removeEventListener("start", finishPan);
+      controls.removeEventListener("start", startCameraInput);
       controls.dispose();
       cameraControls.current = null;
     };
@@ -169,6 +184,7 @@ function CameraRig({
     const x = preview ? 0 : (focus?.x ?? offset) - offset;
     const z = preview ? 0 : (focus?.y ?? offset) - offset;
     automaticPan.current = null;
+    coastVelocity.current.set(0, 0, 0);
     controls.target.set(x, 0, z);
     camera.position.copy(controls.target).add(mapCameraOffset);
     camera.zoom = preview
@@ -188,6 +204,7 @@ function CameraRig({
   useLayoutEffect(() => {
     if (replayTile === null || replayId === undefined) return;
     automaticPan.current = null;
+    coastVelocity.current.set(0, 0, 0);
     const controls = cameraControls.current;
     if (!controls) {
       onReplayFocus(replayId);
@@ -243,6 +260,16 @@ function CameraRig({
     if (!controls) return;
     const step = Math.min(delta, 0.05);
     const pan = automaticPan.current;
+    const velocity = coastVelocity.current;
+    if (pan || reducedMotion) velocity.set(0, 0, 0);
+    const coasting = velocity.lengthSq() * camera.zoom ** 2 > 14 ** 2;
+    if (coasting) {
+      const retention = Math.exp(-step / panCoastSeconds);
+      const distance = panCoastSeconds * (1 - retention);
+      camera.position.addScaledVector(velocity, distance);
+      controls.target.addScaledVector(velocity, distance);
+      velocity.multiplyScalar(retention);
+    }
     if (pan) {
       pan.elapsed = reducedMotion ? pan.duration : Math.min(pan.duration, pan.elapsed + step);
       const progress = pan.elapsed / pan.duration;
@@ -256,7 +283,7 @@ function CameraRig({
     const z = THREE.MathUtils.clamp(controls.target.z, -bound, bound);
     const dy =
       THREE.MathUtils.clamp(controls.target.y, -3, 3) - controls.target.y;
-    if (!pan && x === controls.target.x && z === controls.target.z && dy === 0) return;
+    if (!pan && !coasting && x === controls.target.x && z === controls.target.z && dy === 0) return;
     camera.position.x += x - controls.target.x;
     camera.position.y += dy;
     camera.position.z += z - controls.target.z;
@@ -287,6 +314,7 @@ function paintLabel(
   style: typeof defaultLabelStyle,
   cityDetails?: CityNameplateDetails,
   cityMotion?: CityNameplateMotion,
+  cityBackgroundOpacity = 0.28,
 ) {
   const canvas = texture.image as HTMLCanvasElement;
   const ctx = canvas.getContext("2d")!;
@@ -312,11 +340,12 @@ function paintLabel(
     ctx.fillStyle = kind === "city"
       ? detailRow ? "#172b3b" : "#1f2f2f"
       : "#f5f0e3f2";
-    ctx.globalAlpha = kind === "city" ? 0.28 : 1;
+    ctx.save();
+    ctx.globalAlpha = kind === "city" ? cityBackgroundOpacity : 1;
     ctx.beginPath();
     ctx.roundRect(1, 1, canvas.width - 2, canvas.height - 2, kind === "city" ? 9 : 11);
     ctx.fill();
-    ctx.globalAlpha = 1;
+    ctx.restore();
   }
   ctx.font = font;
   ctx.textAlign = "center";
@@ -343,6 +372,7 @@ function Label({
   opacity = 1,
   materialRef,
   cityDetails,
+  cityBackgroundOpacity,
   reducedMotion = false,
 }: {
   text: string;
@@ -352,6 +382,7 @@ function Label({
   opacity?: number;
   materialRef?: Ref<THREE.SpriteMaterial>;
   cityDetails?: CityNameplateDetails;
+  cityBackgroundOpacity?: number;
   reducedMotion?: boolean;
 }) {
   const style = useContext(MapLabelStyle);
@@ -376,7 +407,7 @@ function Label({
   const originY = position[1];
   function draw(details?: CityNameplateDetails, cityMotion?: CityNameplateMotion) {
     if (!sprite.current) return;
-    paintLabel(texture, text, color, kind, style, details, cityMotion);
+    paintLabel(texture, text, color, kind, style, details, cityMotion, cityBackgroundOpacity);
     painted.current = details;
     sprite.current.scale.set(texture.image.width / pixelsPerUnit, texture.image.height / pixelsPerUnit, 1);
   }
@@ -400,7 +431,7 @@ function Label({
       sprite.current.position.y = originY;
       sprite.current.material.opacity = opacity;
     }
-  }, [texture, style, text, color, kind, showDetails, population, units, capacity, income, reducedMotion, clock, originY, opacity]);
+  }, [texture, style, text, color, kind, showDetails, population, units, capacity, income, reducedMotion, clock, originY, opacity, cityBackgroundOpacity]);
   useFrame(() => {
     const active = motion.current;
     if (!active || !sprite.current) return;
@@ -688,7 +719,7 @@ const TileView = memo(function TileView({
               kind="city"
               text={city.name}
               color="#e3decb"
-              opacity={visible ? 1 : 0.8}
+              cityBackgroundOpacity={visible ? 0.28 : 0.224}
               cityDetails={cityDetails}
               reducedMotion={reducedMotion}
               // Keep the plate centered just in front of the city.
@@ -1174,9 +1205,14 @@ function World({
     () => new Map(game.cities.map((city) => [city.id, city])),
     [game.cities],
   );
-  const selectedCityId = !preview && selectedUnit === null && selectedTile !== null && explored.has(selectedTile)
-    ? game.tiles[selectedTile]?.cityId : null;
-  const selectedCity = selectedCityId ? cityById.get(selectedCityId) : undefined;
+  const selectedCity = useMemo(() => {
+    if (preview || selectedUnit !== null || selectedTile === null || !explored.has(selectedTile)) return;
+    const tile = game.tiles[selectedTile];
+    if (tile.cityId) return cityById.get(tile.cityId);
+    if (tile.owner !== null && (getVisibleResource(game, tile, 0) || tile.building || tile.terrain === "forest")) {
+      return game.cities.find(city => city.owner === tile.owner && city.territory.includes(tile.id));
+    }
+  }, [preview, game, explored, selectedTile, selectedUnit, cityById]);
   const [view, setView] = useState<{ ids: number[]; simple: boolean }>({
     ids: [...explored].slice(0, 420),
     simple: false,

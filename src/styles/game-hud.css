@@ -8,12 +8,12 @@
   --hud-content-width: min(100%, var(--menu-max-inline, 100dvh), 46rem);
   --hud-top-inset: env(safe-area-inset-top, 0px);
   --hud-bottom-inset: env(safe-area-inset-bottom, 0px);
-  --hud-panel: light-dark(#eee6d3, #192c42);
+  --hud-panel: light-dark(#f2ead7, #1b3048);
   --hud-edge-shadow: light-dark(#2f241a2e, #03091133);
   --hud-command-icon-size: clamp(23px, calc(var(--hud-bar-height) - 33px), 27px);
   --hud-key-border: light-dark(#967746, #a18757);
-  --hud-key-top: light-dark(#fff8e8, #4d6680);
-  --hud-key-face: light-dark(#efe2c6, #324c67);
+  --hud-key-top: light-dark(#fff9ea, #506d89);
+  --hud-key-face: light-dark(#f3e6c9, #354f6d);
   --hud-key-shade: light-dark(#d9c6a1, #223a55);
   --hud-key-glint: light-dark(#fffdf5, #aac5df45);
   --hud-key-crown: light-dark(#fff9e6, #e9ebdb8f);
@@ -141,8 +141,8 @@ button.hud-stars:hover, button.hud-stars:focus-visible { background: light-dark(
 
 .hud-command-inner > .hud-end-turn {
   --hud-key-border: light-dark(#916e38, #c6ac77);
-  --hud-key-top: light-dark(#f6e3ae, #aa8a4f);
-  --hud-key-face: light-dark(#e7cd8d, #826733);
+  --hud-key-top: light-dark(#fae7ae, #b08f4e);
+  --hud-key-face: light-dark(#ebd18d, #876b33);
   --hud-key-shade: light-dark(#cca960, #624a24);
   --hud-key-glint: light-dark(#fff5cf, #efd5a47a);
   --hud-key-crown: light-dark(#fff4d0, #efdfa6);

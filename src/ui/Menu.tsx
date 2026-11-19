@@ -18,9 +18,9 @@ import {
 } from "../game";
 import { NATIONS } from "../nations/registry";
 import { NationEmblem } from "./NationEmblem";
-import { generateMap } from "../game/map/generate";
+import { distance, generateMap, isSettlementTerrain } from "../game/map/generate";
 import { STORY_NATIONS, STORY_SIZE } from "../game/map/story";
-import type { GameOptions, MapSettings, Tile } from "../game/types";
+import type { CivilizationId, GameOptions, MapSettings, Tile } from "../game/types";
 import { hasSavedGame, useGameStore } from "../store/gameStore";
 import { AnimatedNumber, useNumberMotion } from "./AnimatedNumber";
 import { Modal } from "./Common";
@@ -101,13 +101,15 @@ export function MainMenu({
 
 function NewGame({ onClose }: { onClose: () => void }) {
   const start = useGameStore((s) => s.start);
+  const [openingSeed] = useState(randomSeed);
   const [options, setOptions] = useState<GameOptions>(() => ({
     ...DEFAULT_OPTIONS,
-    seed: randomSeed(),
+    seed: openingSeed,
     factionNames: [],
     startingProfiles: [],
     mapSettings: { ...DEFAULT_OPTIONS.mapSettings, customSpawns: [] },
   }));
+  const [freeCivilization, setFreeCivilization] = useState<CivilizationId>("neutral");
   const [randomMapSize, setRandomMapSize] = useState(DEFAULT_OPTIONS.size);
   const [error, setError] = useState("");
   const [spawnIndex, setSpawnIndex] = useState(0);
@@ -121,7 +123,9 @@ function NewGame({ onClose }: { onClose: () => void }) {
     free = options.scenario === "free";
   const quickMode = options.quickMode !== false;
   const roster = story ? STORY_NATIONS : NATIONS;
-  const nation = free ? undefined : roster.find(item => item.id === options.civilization) ?? roster[0];
+  const civilization = free ? freeCivilization : options.civilization;
+  const nation = free && civilization === "neutral" ? undefined :
+    roster.find(item => item.id === civilization) ?? roster[0];
   const manualSpawns = free && options.mapSettings.spawnMode === "custom";
   const change = (patch: Partial<GameOptions>) => {
     setError("");
@@ -131,19 +135,21 @@ function NewGame({ onClose }: { onClose: () => void }) {
     setError("");
     setOptions((o) => ({ ...o, mapSettings: { ...o.mapSettings, ...patch } }));
   };
-  const { scenario, civilization, size, mapType, seed, aiCount } = options;
+  const { scenario, size, mapType, aiCount } = options;
+  const seed = options.seed.trim() || openingSeed;
+  const previewSpawnMode = options.mapSettings.spawnMode === "random" ? "random" : "balanced";
   const { landRatio, forestRatio, mountainRatio, resourceDensity, villageDensity, noiseScale } = options.mapSettings;
   const previewOptions = useMemo<GameOptions>(() => ({
     ...DEFAULT_OPTIONS,
     scenario, civilization, size, mapType, aiCount,
-    seed: seed || "preview",
+    seed,
     mapSettings: {
       ...DEFAULT_OPTIONS.mapSettings,
       landRatio, forestRatio, mountainRatio, resourceDensity, villageDensity, noiseScale,
-      spawnMode: "balanced",
+      spawnMode: previewSpawnMode,
     },
   }), [scenario, civilization, size, mapType, seed, aiCount, landRatio, forestRatio, mountainRatio,
-    resourceDensity, villageDensity, noiseScale]);
+    resourceDensity, villageDensity, noiseScale, previewSpawnMode]);
   const displayedOptions = useDeferredValue(previewOptions);
   const preview = useMemo(() => {
     if (displayedOptions.scenario === "fair") return null;
@@ -156,7 +162,20 @@ function NewGame({ onClose }: { onClose: () => void }) {
   }, [displayedOptions]);
   const previewIsCurrent = displayedOptions === previewOptions;
   const setSpawn = (x: number, y: number) => {
+    if (x <= 0 || y <= 0 || x >= size - 1 || y >= size - 1) {
+      setError("请选择地图内部一格。");
+      return;
+    }
+    const tile = preview?.tiles[y * size + x];
+    if (!tile || !isSettlementTerrain(tile)) {
+      setError("请选择平原或森林作为出生点。");
+      return;
+    }
     const spawns = options.mapSettings.customSpawns.slice();
+    if (spawns.some((point, index) => point && index !== spawnIndex && distance(point, tile) < 3)) {
+      setError("出生点至少相距 3 格。");
+      return;
+    }
     spawns[spawnIndex] = { x, y };
     mapChange({ customSpawns: spawns });
     setSpawnIndex((i) => Math.min(options.aiCount, i + 1));
@@ -200,7 +219,7 @@ function NewGame({ onClose }: { onClose: () => void }) {
                   start({
                     ...options,
                     civilization: nation?.id ?? "neutral",
-                    seed: options.seed.trim() || randomSeed(),
+                    seed,
                     maxRounds: 30,
                   });
                   onClose();
@@ -231,24 +250,46 @@ function NewGame({ onClose }: { onClose: () => void }) {
             ),
           )}
         </div>
-        {nation && (
-          <section className="nation-picker" aria-label="选择国家">
-            <div className="civilization-grid" role="group" aria-label="国家">
-              {roster.map(c => (
-                <button
-                  key={c.id}
-                  className={`civ-card ${nation.id === c.id ? "selected" : ""}`}
-                  style={{ "--civ": c.color } as React.CSSProperties}
-                  aria-pressed={nation.id === c.id}
-                  onClick={() => change({ civilization: c.id })}
-                >
-                  <NationEmblem nation={c} className="civ-emblem" />
-                  <strong>{c.name}</strong>
-                  <small lang="en">{c.english}</small>
-                  {nation.id === c.id && <Check className="civ-check" size={15} aria-hidden="true" />}
-                </button>
-              ))}
-            </div>
+        <section className="nation-picker" aria-label="选择国家">
+          <div className={`civilization-grid${free ? " civilization-grid--free" : ""}`} role="group" aria-label="国家">
+            {roster.map(c => (
+              <button
+                key={c.id}
+                className={`civ-card ${nation?.id === c.id ? "selected" : ""}`}
+                style={{ "--civ": c.color } as React.CSSProperties}
+                aria-pressed={nation?.id === c.id}
+                onClick={() => {
+                  if (free) {
+                    setFreeCivilization(c.id);
+                    setError("");
+                  } else {
+                    change({ civilization: c.id });
+                  }
+                }}
+              >
+                <NationEmblem nation={c} className="civ-emblem" />
+                <strong>{c.name}</strong>
+                <small lang="en">{c.english}</small>
+                {nation?.id === c.id && <Check className="civ-check" size={15} aria-hidden="true" />}
+              </button>
+            ))}
+            {free && (
+              <button
+                className={`civ-card ${!nation ? "selected" : ""}`}
+                style={{ "--civ": "#8b7653" } as React.CSSProperties}
+                aria-pressed={!nation}
+                onClick={() => {
+                  setFreeCivilization("neutral");
+                  setError("");
+                }}
+              >
+                <span className="nation-emblem civ-emblem civ-emblem--custom"><Flag size={23} aria-hidden="true" /></span>
+                <strong>自定义</strong>
+                {!nation && <Check className="civ-check" size={15} aria-hidden="true" />}
+              </button>
+            )}
+          </div>
+          {nation && (
             <dl className="nation-opening" style={{ borderInlineStartColor: nation.color }} aria-label="开局配置">
               <div>
                 <dt>科技</dt>
@@ -258,8 +299,8 @@ function NewGame({ onClose }: { onClose: () => void }) {
               <div><dt>首都</dt><dd>{nation.capital} · <AnimatedNumber value={nation.opening.cityLevel} /> 级</dd></div>
               <div><dt>星星</dt><dd><AnimatedNumber value={nation.opening.stars} /></dd></div>
             </dl>
-          </section>
-        )}
+          )}
+        </section>
         <div className="setup-grid">
           <label>
             <span>地图大小</span>
@@ -419,10 +460,10 @@ function NewGame({ onClose }: { onClose: () => void }) {
           <details className="faction-settings" open>
             <summary>
               <Flag size={16} />
-              阵营名称
+              自定义阵营设置
             </summary>
             <div className="faction-inputs">
-              {Array.from({ length: options.aiCount + 1 }, (_, i) => (
+              {Array.from({ length: options.aiCount + 1 }, (_, i) => i).slice(nation ? 1 : 0).map((i) => (
                 <label key={i}>
                   <span>{i === 0 ? "玩家" : `AI ${i}`}</span>
                   <input
@@ -618,17 +659,11 @@ function MapPreview({
       aria-label={editable ? "点击地图设置出生点" : "地图预览"}
       onClick={(e) => {
         if (!editable) return;
-        const r = e.currentTarget.getBoundingClientRect();
-        onSelect(
-          Math.min(
-            size - 1,
-            Math.floor(((e.clientX - r.left) / r.width) * size),
-          ),
-          Math.min(
-            size - 1,
-            Math.floor(((e.clientY - r.top) / r.height) * size),
-          ),
-        );
+        const canvas = e.currentTarget;
+        const rect = canvas.getBoundingClientRect();
+        const x = Math.floor((e.clientX - rect.left - canvas.clientLeft) * size / canvas.clientWidth);
+        const y = Math.floor((e.clientY - rect.top - canvas.clientTop) * size / canvas.clientHeight);
+        onSelect(x, y);
       }}
     />
   );

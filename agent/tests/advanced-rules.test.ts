@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   applyAction,
+  canBuild,
   getBuildingLevel,
   getCityIncome,
   getIncome,
@@ -12,6 +13,7 @@ import {
   UNITS,
 } from "../../src/game";
 import type { Action, GameState } from "../../src/game/types";
+import { deserializeGame, serializeGame } from "../../src/store/save";
 import { addCity, addUnit, battlefield, newGame } from "./helpers";
 
 function act(game: GameState, action: Action): GameState {
@@ -181,15 +183,62 @@ describe("real development, transport and support actions", () => {
     expect(getReachableTiles(game, unit.id)).toContain(at(3, 1));
     expect(game.players[0].resources).toBe(91);
   });
-  it("creates a real bridge across shallow water for land units", () => {
+  it.each([
+    ["shallow", "northSouth", [2, 0], [2, 2]],
+    ["deep", "westEast", [1, 1], [3, 1]],
+    ["shallow", "northwestSoutheast", [1, 0], [3, 2]],
+    ["deep", "northeastSouthwest", [3, 0], [1, 2]],
+  ] as const)("builds a %s bridge along the %s axis between plain and mountain banks", (terrain, axis, near, far) => {
     let game = battlefield();
     const tileId = at(2, 1);
-    game.tiles[tileId].terrain = "shallow";
+    for (const tile of game.tiles) if (!tile.cityId) tile.terrain = terrain;
+    game.tiles[at(near[0], near[1])].terrain = "plain";
+    game.tiles[at(far[0], far[1])].terrain = "mountain";
+    game.players[0].technologies = game.players[0].technologies.filter((tech) => tech !== "sailing");
+    expect(canBuild(game, tileId, "bridge")).toBe(true);
+
     game = act(game, { type: "BUILD", tileId, building: "bridge" });
-    const unit = addUnit(game, 0, "warrior", 1, 1);
-    expect(getReachableTiles(game, unit.id)).toContain(tileId);
+    expect(game.tiles[tileId]).toMatchObject({ building: "bridge", bridgeAxis: axis, terrain });
     expect(game.players[0].resources).toBe(95);
+    const restored = deserializeGame(serializeGame(game));
+    expect(restored.tiles[tileId].bridgeAxis).toBe(axis);
+    delete restored.tiles[tileId].bridgeAxis;
+    expect(deserializeGame(serializeGame(restored)).tiles[tileId].building).toBe("bridge");
+
+    const unit = addUnit(game, 0, "warrior", near[0], near[1]);
+    expect(getReachableTiles(game, unit.id)).toContain(tileId);
+    game = act(game, { type: "MOVE", unitId: unit.id, to: tileId });
+    game = cycle(game);
+    game = act(game, { type: "MOVE", unitId: unit.id, to: at(far[0], far[1]) });
+    expect(game.units.find((candidate) => candidate.id === unit.id)).toMatchObject({
+      type: "warrior", x: far[0], y: far[1],
+    });
   });
+
+  it("requires a single water tile with surveyed opposite banks inside the board", () => {
+    const game = battlefield();
+    const center = game.tiles[at(2, 1)];
+    for (const tile of game.tiles) if (!tile.cityId) tile.terrain = "deep";
+    game.tiles[at(4, 1)].terrain = "plain";
+    game.tiles[at(3, 2)].terrain = "mountain";
+    expect(canBuild(game, center.id, "bridge")).toBe(false);
+
+    const edge = game.tiles[at(0, 1)];
+    game.tiles[at(11, 0)].terrain = "plain";
+    expect(canBuild(game, edge.id, "bridge")).toBe(false);
+
+    const east = game.tiles[at(3, 1)];
+    east.terrain = "forest";
+    expect(canBuild(game, center.id, "port")).toBe(false);
+    game.players[0].explored = game.players[0].explored.filter((id) => id !== east.id);
+    expect(canBuild(game, center.id, "bridge")).toBe(false);
+    game.players[0].explored.push(east.id);
+    expect(canBuild(game, center.id, "bridge")).toBe(true);
+
+    center.terrain = "plain";
+    expect(canBuild(game, center.id, "bridge")).toBe(false);
+  });
+
   it("boards a port, upgrades the raft and disembarks preserving the original unit", () => {
     let game = battlefield();
     game.options.quickMode = true;

@@ -7,7 +7,7 @@ import {
 import type { Action, GameState, Unit } from "../types";
 import { chooseCityReward, chooseEconomic, chooseReactivation, getMaintenanceBudget } from "./economy";
 import { buildThreatMap, incomingDamage, observe } from "./knowledge";
-import { defensiveOrders, navigationField } from "./navigation";
+import { captureIncome, defensiveOrders, navigationField } from "./navigation";
 import { AI_PROFILES, getAiBudget, getArmyTarget } from "./profiles";
 import { chooseAttack, chooseFocus, chooseMove } from "./tactics";
 export { AI_PROFILES, getAiBudget, getArmyTarget } from "./profiles";
@@ -104,7 +104,8 @@ export function runAiTurnDetailed(input: GameState, maxActions?: number,
   const priority = (u: Unit) => {
     const c = k.cities.find((c) => c.x === u.x && c.y === u.y && c.owner !== player);
     const attack = chooseAttack(s, k, u, profile.coordinated, focus);
-    return (c ? 200 : 0) + (guards.has(u.id) ? 80 : 0) +
+    return (c ? 200 + (profile.coordinated ? Math.min(5, captureIncome(s, k, c)) * 7 : 0) : 0) +
+      (guards.has(u.id) ? 80 : 0) +
       (attack ? attack.score + UNITS[u.type].range * 8 : 0) +
       (u.type === "mindBender" ? 15 : 0);
   };

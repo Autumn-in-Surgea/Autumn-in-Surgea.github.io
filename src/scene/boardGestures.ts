@@ -3,6 +3,10 @@ interface Contact {
   y: number;
 }
 
+interface PanSample extends Contact {
+  time: number;
+}
+
 interface GestureState {
   contacts: Map<number, Contact>;
   dragged: boolean;
@@ -12,9 +16,21 @@ interface GestureState {
 const gestures = new WeakMap<HTMLCanvasElement, GestureState>();
 
 /** Classify a tap before the controller sees movement and before R3F picks on release. */
-export function bindBoardGestures(canvas: HTMLCanvasElement, onDrag: () => void) {
+export function bindBoardGestures(
+  canvas: HTMLCanvasElement,
+  onDrag: () => void,
+  onPanRelease: (velocityX: number, velocityY: number) => void,
+) {
   const state: GestureState = { contacts: new Map(), dragged: false, tap: null };
   gestures.set(canvas, state);
+  const panSamples: PanSample[] = [];
+  let panPointer: number | null = null;
+
+  function sample(event: PointerEvent) {
+    const time = event.timeStamp;
+    while (panSamples.length > 1 && time - panSamples[0].time > 85) panSamples.shift();
+    panSamples.push({ x: event.clientX, y: event.clientY, time });
+  }
 
   function down(event: PointerEvent) {
     const { contacts } = state;
@@ -25,6 +41,13 @@ export function bindBoardGestures(canvas: HTMLCanvasElement, onDrag: () => void)
     if (!contacts.size) {
       state.dragged = false;
       state.tap = null;
+      panSamples.length = 0;
+      panPointer = event.button === 0 || event.button === 2 ? event.pointerId : null;
+      if (panPointer !== null) sample(event);
+    } else {
+      // Pinching and panning with two fingers should end exactly where released.
+      panSamples.length = 0;
+      panPointer = null;
     }
     contacts.set(event.pointerId, { x: event.clientX, y: event.clientY });
     if (contacts.size === 2 && !state.dragged) {
@@ -42,6 +65,7 @@ export function bindBoardGestures(canvas: HTMLCanvasElement, onDrag: () => void)
       event.stopImmediatePropagation();
       return;
     }
+    if (panPointer === event.pointerId) sample(event);
     if (state.dragged) return;
     if (withinTapRadius(event, initial)) {
       // Keep tiny movement under a tapping finger from translating the board.
@@ -59,6 +83,19 @@ export function bindBoardGestures(canvas: HTMLCanvasElement, onDrag: () => void)
       return;
     }
     state.contacts.delete(event.pointerId);
+    if (panPointer === event.pointerId) {
+      if (state.dragged && event.type === "pointerup") {
+        const last = panSamples.at(-1)!;
+        const start = panSamples[0];
+        const duration = last.time - start.time;
+        const pause = event.timeStamp - last.time;
+        if (duration >= 8 && pause < 140) {
+          const speed = 1 - Math.max(0, pause - 45) / 95;
+          onPanRelease((last.x - start.x) * speed * 1000 / duration, (last.y - start.y) * speed * 1000 / duration);
+        }
+      }
+      panPointer = null;
+    }
     if (event.type !== "pointerup" || event.button !== 0 || state.contacts.size ||
       state.dragged || !withinTapRadius(event, initial)) return;
 

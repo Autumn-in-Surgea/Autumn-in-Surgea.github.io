@@ -3,15 +3,15 @@ import { Miniature } from "./miniature";
 import { fishShoal, seaStar } from "./tidalResources";
 
 const leaves = {
-  fir: ["#315345", "#48725a", "#679276"],
-  broadleaf: ["#48654a", "#5f8058", "#849e65"],
+  fir: ["#1c7953", "#1ea357", "#45cb73"],
+  broadleaf: ["#2a9631", "#44b42e", "#93d742"],
 };
 
 // Short trunks and overlapping facets keep a dense stand below the taller pieces.
 function tree(m: Miniature, x: number, z: number, scale: number, kind: keyof typeof leaves, simple: boolean) {
   const [shade, body, light] = leaves[kind];
   const y = (h: number) => h * scale;
-  m.part(simple ? "box" : "octagon", "#735941", x, y(0.108), z, y(0.058), y(0.216), y(0.063));
+  m.part(simple ? "box" : "octagon", "#96602b", x, y(0.108), z, y(0.058), y(0.216), y(0.063));
   if (kind === "fir") {
     m.part(simple ? "spire4" : "whorl", shade, x, y(0.225), z, y(0.31), y(0.257), y(0.29), 0, 0.23);
     if (!simple) m.part("spire", body, x - y(0.015), y(0.306), z, y(0.26), y(0.24), y(0.245), 0, -0.13);
@@ -37,10 +37,10 @@ const trees: readonly [number, number, number, keyof typeof leaves][] = [
 ];
 
 function cutStump(m: Miniature, x: number, z: number, d: number, h: number) {
-  m.part("octagon", "#735941", x, h / 2, z, d, h, d * .93);
-  m.part("octagon", "#cba977", x, h - .002, z, d * .84, .004, d * .79);
+  m.part("octagon", "#96602b", x, h / 2, z, d, h, d * .93);
+  m.part("octagon", "#e2ae62", x, h - .002, z, d * .84, .004, d * .79);
   for (const angle of [.3, 2.5, 4.4]) {
-    m.part("hip", "#735941", x + Math.sin(angle) * d * .42, h * .16,
+    m.part("hip", "#96602b", x + Math.sin(angle) * d * .42, h * .16,
       z + Math.cos(angle) * d * .42, d * .27, h * .32, d * .63, 0, angle);
   }
 }
@@ -92,12 +92,12 @@ function crag(m: Miniature, x: number, z: number, width: number, depth: number,
       return [x + yawC*u - yawS*v, height*(h + jag*tooth), z + yawS*u + yawC*v];
     });
   const bands = [
-    { ring: contour(1, 0.002, 0, 0, 0), color: "#58677a" },
-    { ring: contour(0.91, 0.18, 0.009, -0.02, 0.06), color: "#68778a" },
-    { ring: contour(0.58, 0.45, -0.035, -0.1, 0.13), color: "#8a8996" },
-    { ring: contour(0.34, 0.69, -0.105, -0.16, 0.18), color: highPeak ? "#c4c4c5" : "#aaa89e" },
-    { ring: contour(0.16, 0.88, -0.17, -0.14, 0.09), color: highPeak ? "#e4ddd5" : "#bebbb4" },
-    { ring: contour(0.07, 1, -0.2, -0.17, 0.025), color: "#deddd7" },
+    { ring: contour(1, 0.002, 0, 0, 0), color: "#3a6dad" },
+    { ring: contour(0.91, 0.18, 0.009, -0.02, 0.06), color: "#3a75c1" },
+    { ring: contour(0.58, 0.45, -0.035, -0.1, 0.13), color: "#7a76bc" },
+    { ring: contour(0.34, 0.69, -0.105, -0.16, 0.18), color: highPeak ? "#d1d1d6" : "#c0ba9a" },
+    { ring: contour(0.16, 0.88, -0.17, -0.14, 0.09), color: highPeak ? "#ede8e0" : "#cbc3b0" },
+    { ring: contour(0.07, 1, -0.2, -0.17, 0.025), color: "#e8e7e1" },
   ];
   const silhouette = simple ? [bands[0], bands[2], bands[3], bands[5]] : bands;
   for (let j = 1; j < silhouette.length; j++) {
@@ -108,7 +108,7 @@ function crag(m: Miniature, x: number, z: number, width: number, depth: number,
       drawFace(lower.color, [upper.ring[i], upper.ring[k], lower.ring[k]]);
     }
   }
-  drawFace(highPeak ? "#e9e6dc" : "#c9c8bf", silhouette[silhouette.length-1].ring.slice().reverse());
+  drawFace(highPeak ? "#f1efe7" : "#d6d4c2", silhouette[silhouette.length-1].ring.slice().reverse());
 }
 
 // Remove only the front of the original ridge at the adit. The clipping planes
@@ -153,7 +153,7 @@ function quarryFace(m: Miniature, color: string, face: Point[], part: LandscapeP
   for (let i = 0; i < cut.length; i++) {
     const a = cut[i], b = cut[(i + 1) % cut.length];
     if (a[0] !== b[0] || (a[0] !== -.226 && a[0] !== -.034)) continue;
-    m.face("#666d78", [b, a, back(a), back(b)]);
+    m.face("#436498", [b, a, back(a), back(b)]);
   }
 }
 
@@ -172,7 +172,7 @@ function mountainSpurs(m: Miniature, simple: boolean, part: LandscapePart | "nat
   for (const [x, z, size] of [[-.293,.286,.072],[-.12,.34,.092],[.265,.134,.095]]) {
     const onTrack = quarry && x === -.12;
     if (onTrack ? removed : standing) {
-      m.part("crystal", "#9b9ca0", x, size * .35, z, size, size * .7, size * .83, -.18, .37, -.21);
+      m.part("crystal", "#909abd", x, size * .35, z, size, size * .7, size * .83, -.18, .37, -.21);
     }
   }
 }
@@ -198,13 +198,13 @@ export function developedLandscape(kind: Site, simple: boolean, part: LandscapeP
 }
 
 function fruitBush(m: Miniature, x: number, z: number, scale: number) {
-  m.beam("#805c42", [x, 0.008, z], [x - 0.017 * scale, 0.144 * scale, z], 0.026 * scale);
-  m.part("crown", "#467b55", x, 0.125 * scale, z, 0.164 * scale, 0.132 * scale, 0.15 * scale, 0, 0.31);
-  m.part("crown", "#7da66a", x - 0.028 * scale, 0.175 * scale, z - 0.018 * scale,
+  m.beam("#a65d28", [x, 0.008, z], [x - 0.017 * scale, 0.144 * scale, z], 0.026 * scale);
+  m.part("crown", "#19a942", x, 0.125 * scale, z, 0.164 * scale, 0.132 * scale, 0.15 * scale, 0, 0.31);
+  m.part("crown", "#72d945", x - 0.028 * scale, 0.175 * scale, z - 0.018 * scale,
     0.104 * scale, 0.089 * scale, 0.101 * scale, 0, -0.31);
   for (const [i, [dx, y, dz, width]] of [[-0.05, 0.141, 0.058, 0.043], [0.028, 0.197, 0.034, 0.035],
     [0.058, 0.136, 0.046, 0.039]].entries()) {
-    m.part("gem", i === 1 ? "#f2a258" : "#c85441", x + dx * scale, y * scale, z + dz * scale,
+    m.part("gem", i === 1 ? "#fa983f" : "#ed3e26", x + dx * scale, y * scale, z + dz * scale,
       width * scale, width * 0.91 * scale, width * scale, 0.13, i * 0.4, -0.16);
   }
 }
@@ -222,16 +222,16 @@ function wheatPatch(m: Miniature, centerX: number, centerZ: number, scale: numbe
     [0.009, -0.037, 0.235, 0.012], [0.036, 0.033, 0.202, 0.022]]) {
     const x = centerX + dx, z = centerZ + dz, h = height * scale;
     const top = x + lean;
-    m.beam("#a47936", [x, 0.008, z], [top, h, z], 0.013, 0.011);
-    m.part("gem", "#b9a154", x + lean * 0.37 + 0.017, h * 0.46, z, 0.025, 0.095, 0.021, 0.12, 0.22, -0.57);
+    m.beam("#d38b1a", [x, 0.008, z], [top, h, z], 0.013, 0.011);
+    m.part("gem", "#e4b92d", x + lean * 0.37 + 0.017, h * 0.46, z, 0.025, 0.095, 0.021, 0.12, 0.22, -0.57);
     for (let row = 0; row < 2; row++) {
       const spread = 0.021 - row * 0.004, rise = h - 0.04 + row * 0.03;
       for (const side of [-1, 1]) {
-        m.part("gem", side === 1 ? "#efbf56" : "#ce9643",
+        m.part("gem", side === 1 ? "#fbbe38" : "#f3a025",
           top + side * spread * 0.77, rise, z - side * spread * 0.64, 0.039, 0.069, 0.044, 0, 0.69, -side * 0.63);
       }
     }
-    m.part("gem", "#f6d27c", top + lean * 0.1, h + 0.024, z, 0.026, 0.059, 0.027, 0, 0.2, -lean);
+    m.part("gem", "#face62", top + lean * 0.1, h + 0.024, z, 0.026, 0.059, 0.027, 0, 0.2, -lean);
   }
 }
 
@@ -240,14 +240,16 @@ export function standingWheat(m: Miniature) {
     [-0.135, 0.123, 0.76], [0.119, 0.13, 0.86]]) wheatPatch(m, x, z, scale);
 }
 
+export const orePigments = { bedrock: "#366aa4", copper: "#e37115", glint: "#fcba64" } as const;
+
 function orePocket(m: Miniature, x: number, z: number, scale: number, angle: number) {
-  m.part("crown", "#536476", x, 0.041 * scale, z, 0.199 * scale, 0.082 * scale, 0.153 * scale, -0.09, angle);
+  m.part("crown", orePigments.bedrock, x, 0.041 * scale, z, 0.199 * scale, 0.082 * scale, 0.153 * scale, -0.09, angle);
   for (const [dx, dz, width, height, tilt] of [[-0.046, 0.021, 0.063, 0.088, 0.46],
     [0.008, 0.029, 0.078, 0.108, -0.29], [0.051, -0.013, 0.052, 0.07, 0.32]]) {
     const ox = x + dx * scale, oz = z + dz * scale, w = width * scale, h = height * scale;
     const y = h * 0.70;
-    m.part("gem", "#b77947", ox, y, oz, w, h, w * 0.82, 0.15, angle, tilt);
-    m.part("gem", "#f1c485", ox + 0.008, y + 0.012, oz + 0.01,
+    m.part("gem", orePigments.copper, ox, y, oz, w, h, w * 0.82, 0.15, angle, tilt);
+    m.part("gem", orePigments.glint, ox + 0.008, y + 0.012, oz + 0.01,
       w * 0.64, h * 0.69, w * 0.69, 0.14, angle + 0.03, tilt);
   }
 }
@@ -282,25 +284,25 @@ function carveDeer(m: Miniature, x: number, z: number, size: number, heading: nu
   function beam(color: string, from: Point, to: Point, width: number) {
     m.beam(color, place(from), place(to), width * size);
   }
-  part("crown", adult ? "#a56946" : "#ba8c60", [-0.018, 0.155, 0], 0.193, 0.105, 0.097);
-  part("crown", "#be8452", [0.045, 0.163, 0], 0.123, 0.109, 0.091, -0.12);
-  part("gem", "#f0d2a6", [-0.099, 0.177, 0], 0.075, 0.067, 0.061, -0.48);
-  beam("#ba8758", [0.067, 0.151, 0], [0.118, 0.249, 0.004], 0.054);
-  part("gem", "#e1ba87", [0.109, 0.215, 0.013], 0.046, 0.075, 0.055, -0.39);
-  part("crown", "#d3a478", [0.133, 0.255, 0.009], 0.10, 0.066, 0.058, -0.4);
-  part("gem", "#644c43", [0.176, 0.242, 0.015], 0.04, 0.027, 0.037, -0.32);
+  part("crown", adult ? "#d26423" : "#df893a", [-0.018, 0.155, 0], 0.193, 0.105, 0.097);
+  part("crown", "#e38534", [0.045, 0.163, 0], 0.123, 0.109, 0.091, -0.12);
+  part("gem", "#f7d7a9", [-0.099, 0.177, 0], 0.075, 0.067, 0.061, -0.48);
+  beam("#dd8536", [0.067, 0.151, 0], [0.118, 0.249, 0.004], 0.054);
+  part("gem", "#f2bf78", [0.109, 0.215, 0.013], 0.046, 0.075, 0.055, -0.39);
+  part("crown", "#eba664", [0.133, 0.255, 0.009], 0.10, 0.066, 0.058, -0.4);
+  part("gem", "#814a36", [0.176, 0.242, 0.015], 0.04, 0.027, 0.037, -0.32);
   for (const side of [-1, 1]) {
     const hock: Point = [-0.080, 0.076, side * 0.034];
-    beam("#9b7051", [-0.053, 0.14, side * 0.028], hock, 0.029);
-    beam("#745641", hock, [-0.066 + side * 0.013, 0.012, side * 0.039], 0.019);
-    beam("#745641", [0.051, 0.142, side * 0.033], [0.06 - side * 0.016, 0.012, side * 0.037], 0.02);
-    part("gem", "#c49169", [0.101, 0.282, side * 0.032], 0.041, 0.065, 0.029, 0.6);
+    beam("#c16d31", [-0.053, 0.14, side * 0.028], hock, 0.029);
+    beam("#94562c", hock, [-0.066 + side * 0.013, 0.012, side * 0.039], 0.019);
+    beam("#94562c", [0.051, 0.142, side * 0.033], [0.06 - side * 0.016, 0.012, side * 0.037], 0.02);
+    part("gem", "#e19559", [0.101, 0.282, side * 0.032], 0.041, 0.065, 0.029, 0.6);
     if (adult) {
-      beam("#ae8c64", [0.11, 0.277, side * 0.019], [0.081, 0.323, side * 0.045], 0.016);
-      beam("#c2a481", [0.081, 0.323, side * 0.045], [0.049, 0.347, side * 0.062], 0.013);
-      beam("#c2a481", [0.081, 0.323, side * 0.045], [0.092, 0.353, side * 0.054], 0.013);
+      beam("#cf9a5c", [0.11, 0.277, side * 0.019], [0.081, 0.323, side * 0.045], 0.016);
+      beam("#dcae77", [0.081, 0.323, side * 0.045], [0.049, 0.347, side * 0.062], 0.013);
+      beam("#dcae77", [0.081, 0.323, side * 0.045], [0.092, 0.353, side * 0.054], 0.013);
     } else {
-      part("gem", "#f0d2a6", [-0.028, 0.201, side * 0.035], 0.034, 0.023, 0.024);
+      part("gem", "#f7d7a9", [-0.028, 0.201, side * 0.035], 0.034, 0.023, 0.024);
     }
   }
 }

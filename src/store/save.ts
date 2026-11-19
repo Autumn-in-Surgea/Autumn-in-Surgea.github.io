@@ -1,3 +1,4 @@
+import { bridgeAxes } from "../game/map/bridgeBanks";
 import {
   BUILDINGS,
   CIVILIZATIONS,
@@ -319,6 +320,12 @@ export function deserializeGame(raw: string): GameState {
         players.every((player) => player.civilization !== "neutral"),
       "国家列表",
     );
+  else if (options.scenario === "free")
+    check(
+      players[0].civilization === options.civilization &&
+        players.slice(1).every(player => player.civilization === "neutral"),
+      "国家列表",
+    );
   else
     check(
       options.civilization === "neutral" && players.every((player) => player.civilization === "neutral"),
@@ -366,7 +373,8 @@ export function deserializeGame(raw: string): GameState {
     check(
       (tile.builtTurn === undefined ||
         (count(tile.builtTurn) && tile.builtTurn <= round)) &&
-        (tile.buildingLevel === undefined || count(tile.buildingLevel)),
+        (tile.buildingLevel === undefined || count(tile.buildingLevel)) &&
+        (tile.bridgeAxis === undefined || (tile.building === "bridge" && oneOf(tile.bridgeAxis, bridgeAxes))),
       "建筑状态",
     );
     return tile;

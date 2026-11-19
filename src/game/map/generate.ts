@@ -9,6 +9,8 @@ export const distance = (a: Position, b: Position): number =>
   Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
 export const isWater = (tile: Tile): boolean =>
   tile.terrain === "shallow" || tile.terrain === "deep";
+export const isSettlementTerrain = ({ terrain }: Pick<Tile, "terrain">): boolean =>
+  terrain === "plain" || terrain === "forest";
 export function neighbors(tiles: Tile[], size: number, tile: Position): Tile[] {
   const found: Tile[] = [];
   for (let dy = -1; dy <= 1; dy++)
@@ -76,9 +78,7 @@ function distributeStarts(
   const interior = tiles.filter(
     (t) => t.x > 0 && t.y > 0 && t.x < size - 1 && t.y < size - 1,
   );
-  const candidates = interior.filter(
-    (t) => !isWater(t) && t.terrain !== "mountain",
-  );
+  const candidates = interior.filter(isSettlementTerrain);
   const pool = allowIslands ? interior : candidates;
   const starts: number[] = [];
   const minGap = 3;
@@ -139,6 +139,7 @@ export function validateCustomSpawns(
   for (let i = 0; i < points.length; i++) {
     const p = points[i];
     if (
+      !p ||
       !Number.isInteger(p.x) ||
       !Number.isInteger(p.y) ||
       p.x < 1 ||
@@ -150,7 +151,7 @@ export function validateCustomSpawns(
         `第 ${i + 1} 个出生点必须位于地图内部的整数坐标，不能在边缘或界外。`,
       );
     const tile = tiles[p.y * size + p.x];
-    if (isWater(tile) || tile.terrain === "mountain")
+    if (!isSettlementTerrain(tile))
       throw new Error(`第 ${i + 1} 个出生点位于水域或山地，请选择平原或森林。`);
     if (ids.some((id) => distance(tile, tiles[id]) < 3))
       throw new Error(
@@ -309,7 +310,8 @@ export function generateMap(options: GameOptions): GeneratedMap {
   const candidateTiles = tiles
     .filter(
       (t) =>
-        !isWater(t) && t.x > 0 && t.y > 0 && t.x < size - 1 && t.y < size - 1,
+        (free ? isSettlementTerrain(t) : !isWater(t)) &&
+        t.x > 0 && t.y > 0 && t.x < size - 1 && t.y < size - 1,
     )
     .map((tile) => ({ tile, rank: villageRand() }))
     .sort((a, b) => a.rank - b.rank);
@@ -355,10 +357,8 @@ export function generateMap(options: GameOptions): GeneratedMap {
       }
     }
   }
-  if (!free)
-    for (const id of towns) {
-      tiles[id].terrain = "plain";
-    }
+  // Cities replace the ground cover before resource rolls and preview rendering.
+  for (const id of towns) tiles[id].terrain = "plain";
   markCoasts(tiles, size);
   const nearTown = new Uint8Array(size * size).fill(255);
   for (const id of towns) {
@@ -440,8 +440,10 @@ export function generateMap(options: GameOptions): GeneratedMap {
     tiles[id].resource = null;
     tiles[id].ruin = false;
   }
-  const anchors = openingNations(options).slice(0, starts.length).map(({ terrainVariant }, i) => ({
-    tileId: starts[i], terrainVariant,
+  const nations = openingNations(options);
+  const anchors = starts.map((tileId, i) => ({
+    tileId,
+    terrainVariant: nations[i]?.terrainVariant ?? DEFAULT_TERRAIN_VARIANT,
   }));
   return { tiles: assignTerrainVariants(tiles, anchors), starts, villages };
 }

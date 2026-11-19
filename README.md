@@ -1,4 +1,4 @@
-# 西陆秋色 / Autumn in Surgea
+# 西陆经略 / Autumn in Surgea
 
 v0.1 版离线 Web 回合制策略游戏原型。使用 TypeScript、React、Three.js / React Three Fiber、Zustand 和 Vite。所有模式共用一套游戏规则，规则参考 Polytopia 普通部落体系及公开更新说明；代码、界面和程序化几何模型独立实现。
 

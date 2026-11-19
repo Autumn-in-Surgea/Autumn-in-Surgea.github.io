@@ -62,13 +62,14 @@ function FreeSettings({ options }: { options: GameOptions }) {
       </dl>
       <ul className="match-history-factions">
         {Array.from({ length: options.aiCount + 1 }, (_, index) => {
+          const nation = index === 0 ? getNation(options.civilization) : undefined;
           const profile = OPENING_PROFILES.find(({ id }) => id === options.startingProfiles[index]);
           const spawn = map.spawnMode === "custom" ? map.customSpawns[index] : undefined;
           return (
             <li key={index}>
               <strong>{index ? `AI ${index}` : "玩家"}</strong>
-              <span>{options.factionNames[index] || "随机阵营"}</span>
-              <span>{profile?.name || "随机开局"}</span>
+              <span>{(nation?.name ?? options.factionNames[index]) || "随机阵营"}</span>
+              {!nation && <span>{profile?.name || "随机开局"}</span>}
               {spawn && <code>({spawn.x + 1}, {spawn.y + 1})</code>}
             </li>
           );

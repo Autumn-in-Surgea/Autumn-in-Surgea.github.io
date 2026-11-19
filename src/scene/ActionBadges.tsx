@@ -1,7 +1,7 @@
 import { useRef } from "react";
 import type { RefObject } from "react";
 import { useFrame } from "@react-three/fiber";
-import { Award, ChevronsUp, Clock3, Flag } from "lucide-react";
+import { Award, ChevronsUp, Clock3, Compass, Flag, RotateCcw } from "lucide-react";
 import { Matrix4, Vector3 } from "three";
 import { validateAction } from "../game/rules/engine";
 import { UNITS, VETERAN_KILLS_REQUIRED } from "../game/data/config";
@@ -11,7 +11,7 @@ import { factionForOwner } from "../nations/registry";
 import { MODEL_SETS } from "./factionModels";
 import "./actionBadges.css";
 
-export type BadgeAction = "upgrade" | "capture" | "promote";
+export type BadgeAction = "upgrade" | "capture" | "promote" | "examine" | "reactivate";
 export type OpenBadge = (
   tileId: number,
   action: BadgeAction,
@@ -25,7 +25,7 @@ export type MapBadge = {
 } & (
   | { action: "upgrade"; cityName: string; unitId?: undefined }
   | { action: "capture"; cityName: string; unitId: string }
-  | { action: "promote"; unitName: string; unitId: string }
+  | { action: "promote" | "examine" | "reactivate"; unitName: string; unitId: string }
   | { action: "training"; cityName: string; unitId?: undefined }
 );
 
@@ -36,6 +36,8 @@ const badgeStyles = {
   upgrade: { icon: ChevronsUp, title: "升级" },
   capture: { icon: Flag, title: "占领" },
   promote: { icon: Award, title: "晋升" },
+  examine: { icon: Compass, title: "探索" },
+  reactivate: { icon: RotateCcw, title: "激活" },
 } as const;
 
 export function getMapBadges(game: GameState, showActions = true): MapBadge[] {
@@ -55,7 +57,7 @@ export function getMapBadges(game: GameState, showActions = true): MapBadge[] {
   );
   const cityBadges = new Map<number, MapBadge>();
   const trainingBadges = new Map<number, MapBadge>();
-  const badges: MapBadge[] = [];
+  const unitBadges: MapBadge[] = [];
   const highRises = new Set<number>();
 
   function unitPosition(tileId: number, unit: Unit): MapBadge["position"] {
@@ -110,38 +112,46 @@ export function getMapBadges(game: GameState, showActions = true): MapBadge[] {
     }
   }
   if (!canAct) return [...trainingBadges.values()];
+  const groups = new Map<number, MapBadge[]>();
+  for (const badge of cityBadges.values()) groups.set(badge.tileId, [badge]);
   for (const [tileId, unit] of garrisons) {
-    if (unit.kills < VETERAN_KILLS_REQUIRED || unit.veteran || !visible.has(tileId) ||
-      validateAction(game, { type: "PROMOTE", unitId: unit.id })) continue;
-    const position = unitPosition(tileId, unit);
-    const cityBadge = cityBadges.get(tileId);
-    const trainingBadge = trainingBadges.get(tileId);
-    if (cityBadge) {
-      position[0] = cityBadge.position[0];
-      position[1] = Math.max(position[1], cityBadge.position[1]);
-      position[2] = cityBadge.position[2];
-      cityBadge.position = position;
-      cityBadge.column = -1;
+    if (!visible.has(tileId)) continue;
+    const append = (action: "promote" | "examine" | "reactivate") => {
+      const badge: MapBadge = {
+        action, tileId, unitId: unit.id,
+        unitName: UNITS[unit.type].name, position: unitPosition(tileId, unit),
+      };
+      unitBadges.push(badge);
+      const group = groups.get(tileId);
+      if (group) group.push(badge);
+      else groups.set(tileId, [badge]);
+    };
+    if (unit.upkeep === "reactivation") {
+      // Keep the one-turn deadline visible even when the player has to raise the fee.
+      append("reactivate");
+      continue;
     }
-    if (trainingBadge) {
-      trainingBadge.position = position;
-      trainingBadge.column = cityBadge ? 2.45 : -0.85;
-    }
-    badges.push({
-      action: "promote", tileId, unitId: unit.id,
-      unitName: UNITS[unit.type].name, position,
-      column: cityBadge ? 1 : trainingBadge ? 0.85 : undefined,
+    if (unit.kills >= VETERAN_KILLS_REQUIRED && !unit.veteran &&
+      !validateAction(game, { type: "PROMOTE", unitId: unit.id })) append("promote");
+    if (game.tiles[tileId].ruin &&
+      !validateAction(game, { type: "EXAMINE", unitId: unit.id })) append("examine");
+  }
+  for (const [tileId, actions] of groups) {
+    const training = trainingBadges.get(tileId);
+    if (actions.length === 1 && !training) continue;
+    const [x, y, z] = actions[0].position;
+    const height = Math.max(y, training?.position[1] ?? y, ...actions.map(badge => badge.position[1]));
+    const position: MapBadge["position"] = [x, height, z];
+    actions.forEach((badge, index) => {
+      badge.position = position;
+      badge.column = actions.length === 1 ? -0.85 : index * 2 - (actions.length - 1);
     });
+    if (training) {
+      training.position = position;
+      training.column = actions.length === 1 ? 0.85 : actions.length + 0.45;
+    }
   }
-  for (const [tileId, clock] of trainingBadges) {
-    const cityBadge = cityBadges.get(tileId);
-    if (!cityBadge || clock.column !== undefined) continue;
-    clock.position = [cityBadge.position[0], Math.max(clock.position[1], cityBadge.position[1]), cityBadge.position[2]];
-    cityBadge.position = clock.position;
-    cityBadge.column = -0.85;
-    clock.column = 0.85;
-  }
-  return [...cityBadges.values(), ...badges, ...trainingBadges.values()];
+  return [...cityBadges.values(), ...unitBadges, ...trainingBadges.values()];
 }
 
 export interface MapBadgesProps {
@@ -176,7 +186,9 @@ export function MapBadgeLayer({
         const { icon: Icon, title } = badgeStyles[action];
         const label = badge.action === "upgrade" ? `选择${badge.cityName}的升级奖励`
           : badge.action === "capture" ? `查看占领${badge.cityName}的单位`
-          : `查看可晋升老兵的${badge.unitName}`;
+          : badge.action === "promote" ? `查看可晋升老兵的${badge.unitName}`
+          : badge.action === "examine" ? `查看可探索遗迹的${badge.unitName}`
+          : `查看待重新激活的${badge.unitName}`;
         return (
           <button
             key={key}

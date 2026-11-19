@@ -4,6 +4,7 @@ import { hashSeed } from "../map/random";
 import { applyAction, getAttackTargets, getReachableTiles, previewCombat } from "../rules/engine";
 import type { Action, City, GameState, Unit } from "../types";
 import { incomingDamage, observe, simulationState, type Knowledge, type ThreatMap } from "./knowledge";
+import { captureIncome } from "./navigation";
 import type { AiProfile } from "./profiles";
 
 export interface SimulationBudget { used: number; limit: number }
@@ -74,8 +75,10 @@ export function chooseMove(
     const discoveries = neighbors(s.tiles, s.options.size, t).filter((t) => !k.known.has(t.id)).length;
     score += discoveries * (guard ? 0 : 2) + (t.ruin && !guard ? 15 : 0);
     const city = t.cityId ? k.cities.find((c) => c.id === t.cityId) : undefined;
-    if (city && city.owner !== k.player && (city.owner === null || !s.players[k.player].peaceWith.includes(city.owner)))
+    if (city && city.owner !== k.player && (city.owner === null || !s.players[k.player].peaceWith.includes(city.owner))) {
       score += city.owner === null ? 36 : 28;
+      if (profile.coordinated) score += Math.min(16, (captureIncome(s, k, city) - 1) * 4);
+    }
     if (guard) {
       score += (distance(u, guard) - distance(t, guard)) * 18;
       if (distance(t, guard) === 0) score += 35;

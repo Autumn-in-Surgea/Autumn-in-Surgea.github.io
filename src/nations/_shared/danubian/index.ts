@@ -2,7 +2,7 @@ import type { BuildingId, UnitType } from "../../../game/types";
 import type { BuildingVisualTier } from "../../../scene/buildingVisualTier";
 import { danubianBuilding } from "./buildings";
 import { danubianCity } from "./cities";
-import { danubianUnit } from "./units";
+import { danubianUnit, fieldGunMuzzle, rifleMuzzle } from "./units";
 
 // Model-specific heights keep action badges above helmets and masts.
 const tallPieceLabels: Partial<Record<UnitType, number>> = {
@@ -11,8 +11,13 @@ const tallPieceLabels: Partial<Record<UnitType, number>> = {
   raft: .57, dinghy: .51, scout: .85, rammer: .48,
   bomber: .81, juggernaut: .94, pirate: .71,
 };
+const weaponMuzzles: Partial<Record<UnitType, [number, number, number]>> = {
+  archer: rifleMuzzle,
+  catapult: fieldGunMuzzle,
+};
 export const danubianModels = {
   unit: danubianUnit,
+  weaponMuzzles,
   city: (color: string, level: number, capital: boolean, walls: boolean) => danubianCity(color, level, capital, walls),
   building: (type: BuildingId, color: string, tier: BuildingVisualTier) => danubianBuilding(type, color, tier),
   labelHeight: (type: UnitType) => tallPieceLabels[type] ?? 0.84,

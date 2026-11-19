@@ -2,33 +2,37 @@ import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import type { GameState, Position } from "../game/types";
+import { factionForOwner } from "../nations/registry";
 import { Piece, terrainHeight } from "./models";
+import { MODEL_SETS } from "./factionModels";
 import { clampProgress, easeInOut, easeOut } from "./motion";
-import { incomingOffset, sampleAttackPose } from "./combatMotion";
+import type { PresentedUnit } from "./motion";
+import { incomingOffset } from "./combatMotion";
 import { usePlaybackClock } from "./playbackClock";
+import { unitFacingAt, unitFacingYaw } from "./unitFacing";
+import { unitBoardPosition, strikeTransform } from "./unitMotion";
 import type { Projectile, Strike } from "./combatMotion";
 
 const up = new THREE.Vector3(0, 1, 0);
 const titles: Record<Projectile, string> = {
-  arrow: "箭矢",
-  stone: "投石",
+  arrow: "步枪弹",
+  stone: "野战炮弹",
   bolt: "弩矢",
   shell: "炮弹",
 };
 
 function Missile({ type }: { type: Projectile }) {
-  if (type === "stone")
-    return (
-      <>
-        <Piece shape="octa" color="#64594f" scale={[0.109, 0.12, 0.103]} />
-        <Piece
-          shape="box"
-          color="#b49d77"
-          position={[0.056, 0.018, 0.036]}
-          scale={[0.052, 0.11, 0.044]}
-        />
-      </>
-    );
+  if (type === "arrow") return <>
+    <Piece shape="cylinder" color="#ddac60" scale={[0.043, 0.10, 0.043]} />
+    <Piece shape="cone" color="#f7dfa3" position={[0, 0.08, 0]} scale={[0.043, 0.071, 0.043]} />
+    <Piece shape="cone" color="#aa7041" rotation={[Math.PI, 0, 0]}
+      position={[0, -0.12, 0]} scale={[0.029, 0.146, 0.029]} />
+  </>;
+  if (type === "stone") return <>
+    <Piece shape="cylinder" color="#43535a" scale={[0.093, 0.15, 0.093]} />
+    <Piece shape="cylinder" color="#bd8d4c" position={[0, -0.05, 0]} scale={[0.099, 0.027, 0.099]} />
+    <Piece shape="cone" color="#8b969a" position={[0, 0.126, 0]} scale={[0.093, 0.103, 0.093]} />
+  </>;
   if (type === "shell")
     return (
       <>
@@ -48,17 +52,16 @@ function Missile({ type }: { type: Projectile }) {
         />
       </>
     );
-  const bolt = type === "bolt";
   return (
     <>
       <Piece
         shape="cylinder"
-        color={bolt ? "#465a58" : "#805637"}
-        scale={[bolt ? 0.025 : 0.017, 0.37, bolt ? 0.025 : 0.017]}
+        color="#465a58"
+        scale={[0.025, 0.37, 0.025]}
       />
       <Piece
         shape="pyramid"
-        color={bolt ? "#e6ae64" : "#536672"}
+        color="#e6ae64"
         position={[0, 0.22, 0]}
         scale={[0.055, 0.14, 0.055]}
       />
@@ -90,12 +93,14 @@ function tilePoint(game: GameState, at: Position, offset: number) {
 export function ShotEffect({
   game,
   strike,
+  shooter,
   offset,
   issuedAt,
   reducedMotion,
 }: {
   game: GameState;
   strike: Strike;
+  shooter?: PresentedUnit;
   offset: number;
   issuedAt: number;
   reducedMotion: boolean;
@@ -103,6 +108,17 @@ export function ShotEffect({
   const playback = usePlaybackClock();
   const missile = useRef<THREE.Group>(null);
   const burst = useRef<THREE.Group>(null);
+  const muzzle = useRef<THREE.Group>(null);
+  const rifle = strike.projectile === "arrow";
+  const fieldGun = strike.projectile === "stone";
+  const localMuzzle = shooter && (rifle || fieldGun)
+    ? MODEL_SETS[factionForOwner(game.players, shooter.unit.owner).modelSet].weaponMuzzles?.[shooter.unit.type]
+    : undefined;
+  const launchFacing = shooter && unitFacingAt(
+    shooter.turns,
+    (issuedAt - shooter.cue.issuedAt) / 1000 + strike.launch,
+    shooter.initialFacing,
+  );
   const end = useMemo(() => {
     const point = tilePoint(game, strike.at, offset);
     if (strike.contact) {
@@ -114,15 +130,15 @@ export function ShotEffect({
   }, [game.tiles, strike, offset]);
   const start = useMemo(() => {
     if (strike.from) {
-      const origin = tilePoint(game, strike.from, offset);
-      if (strike.projectile) {
-        const pose = sampleAttackPose(strike, strike.launch);
-        const dx = strike.at.x - strike.from.x, dz = strike.at.y - strike.from.y;
-        const distance = Math.hypot(dx, dz) || 1;
-        origin.x += dx * pose.travel / distance;
-        origin.z += dz * pose.travel / distance;
-        origin.y += pose.lift;
+      const pose = strikeTransform(game, strike, strike.launch);
+      if (localMuzzle && launchFacing) {
+        const origin = new THREE.Vector3(...unitBoardPosition(game, strike.from, offset));
+        const barrelTip = new THREE.Vector3(...localMuzzle)
+          .applyEuler(new THREE.Euler(pose.pitch, unitFacingYaw[launchFacing], 0, "YXZ"));
+        return origin.add(barrelTip).add(new THREE.Vector3(pose.x, pose.y, pose.z));
       }
+      const origin = tilePoint(game, strike.from, offset);
+      if (strike.projectile) origin.add(new THREE.Vector3(pose.x, pose.y, pose.z));
       return origin;
     }
     const [x, z] = incomingOffset(strike.id);
@@ -132,15 +148,17 @@ export function ShotEffect({
       end.y + 0.72,
       strike.at.y - offset + z,
     );
-  }, [game.tiles, strike, offset, end]);
+  }, [game, strike, offset, end, localMuzzle, launchFacing]);
   const tangent = useMemo(() => new THREE.Vector3(), []);
   const arc = !strike.from
     ? 0.06
-    : strike.projectile === "stone"
-      ? 1.15
-      : strike.projectile === "shell"
-        ? 0.64
-        : 0.34;
+    : fieldGun
+      ? 0.78
+      : rifle
+        ? 0.09
+        : strike.projectile === "shell"
+          ? 0.64
+          : 0.34;
   useFrame(() => {
     const time = (playback.time - issuedAt) / 1000;
     const progress = clampProgress(
@@ -155,6 +173,11 @@ export function ShotEffect({
       tangent.subVectors(end, start);
       tangent.y += 4 * arc * (1 - 2 * t);
       missile.current.quaternion.setFromUnitVectors(up, tangent.normalize());
+    }
+    if (muzzle.current) {
+      const flash = (time - strike.launch) / (fieldGun ? 0.14 : 0.09);
+      muzzle.current.visible = !reducedMotion && flash >= 0 && flash < 1;
+      muzzle.current.scale.setScalar((fieldGun ? 1 : 0.58) * (1 - easeInOut(flash)));
     }
     if (!burst.current) return;
     const p = clampProgress(
@@ -176,6 +199,10 @@ export function ShotEffect({
           <Missile type={strike.projectile} />
         </group>
       )}
+      {strike.from && localMuzzle && <group ref={muzzle} name="land-muzzle-flash" position={start} visible={false}>
+        <Piece shape="octa" color="#f1ae58" scale={[0.21, 0.15, 0.21]} />
+        <Piece shape="octa" color="#fff1b8" scale={[0.11, 0.18, 0.11]} />
+      </group>}
       <group ref={burst} visible={false} position={end}>
         {[0, 1, 2, 3].map((i) => (
           <group key={i} rotation={[0, (i * Math.PI) / 2 + 0.3, 0]}>

@@ -1,7 +1,7 @@
 import { memo, useEffect, useMemo } from "react";
 import * as THREE from "three";
 import type { Player, Tile } from "../game/types";
-import { colorForOwner } from "./factionModels";
+import { boardColorForOwner } from "./factionModels";
 import { terrainCapOffset, terrainHeight } from "./terrainElevation";
 
 const material = new THREE.MeshBasicMaterial({
@@ -16,7 +16,7 @@ const bands = [[-0.033, 0], [-0.019, 1], [0.019, 1], [0.033, 0]] as const;
 export function makeTerritoryBorders(tiles: Tile[], players: Player[], explored: ReadonlySet<number>, size: number) {
   const positions: number[] = [], colors: number[] = [], indices: number[] = [];
   const corners = new Map<number, { x: number; z: number; low: number; high: number; owner: number }>();
-  const inks = players.map(player => new THREE.Color(colorForOwner(players, player.id)));
+  const inks = players.map(player => new THREE.Color(boardColorForOwner(players, player.id)));
   const offset = (size - 1) / 2;
   function section(x: number, y: number, z: number, nx: number, nz: number, ink: THREE.Color, connect: boolean) {
     const i = positions.length / 3;
@@ -77,7 +77,8 @@ interface TerritoryProps {
 function sameBoundaries(before: TerritoryProps, after: TerritoryProps) {
   if (before.size !== after.size || before.explored.size !== after.explored.size ||
     before.players.length !== after.players.length ||
-    before.players.some((player, i) => player.color !== after.players[i].color)) return false;
+    before.players.some((player, i) =>
+      player.color !== after.players[i].color || player.civilization !== after.players[i].civilization)) return false;
   if (before.tiles === after.tiles && before.explored === after.explored) return true;
   for (const id of before.explored) {
     const old = before.tiles[id], next = after.tiles[id];

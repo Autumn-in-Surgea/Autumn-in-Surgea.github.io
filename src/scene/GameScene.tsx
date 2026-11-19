@@ -16,8 +16,8 @@ import { Canvas, events, useFrame, useThree } from "@react-three/fiber";
 import type { ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
 import { factionForOwner } from "../nations/registry";
-import { getTerrainAssets } from "../nations/models";
-import { colorForOwner, MODEL_SETS } from "./factionModels";
+import { representativeTerrain } from "../nations/models";
+import { boardColorForOwner, MODEL_SETS } from "./factionModels";
 import { SceneQuality } from "./SceneQuality";
 import { knownTerrainHeight, terrainCapOffset } from "./terrainElevation";
 import { TerrainInlays } from "./TerrainInlays";
@@ -41,7 +41,7 @@ import { ShotEffect, projectileName } from "./ShotEffect";
 import { carryStrikes, collapseDuration, hitFeedbackDuration, planEncounter } from "./combatMotion";
 import type { CombatFrame, Strike } from "./combatMotion";
 import { unitAppearDuration, usePresentedUnits, useUnitMotion } from "./unitMotion";
-import { getMapBadges, MapBadgeButtons, MapBadgePositions } from "./ActionBadges";
+import { getMapBadges, MapBadgeLayer, MapBadgePositions } from "./ActionBadges";
 import type { MapBadgesProps, OpenBadge } from "./ActionBadges";
 import { clampProgress, easeInOut, easeOut, getFreshEvents } from "./motion";
 import type { PresentedUnit } from "./motion";
@@ -445,7 +445,7 @@ function Label({
 
 const fogShell = { cap: tileCap, plinth: tilePlinth, color: "#a2aca5", plinthColor: "#798681" };
 const boardShell = (tile: Tile, known: boolean) =>
-  known ? getTerrainAssets(tile.terrainVariant).shells[tile.terrain] : fogShell;
+  known ? representativeTerrain.shells[tile.terrain] : fogShell;
 
 interface ShellBatch {
   cap: THREE.BufferGeometry;
@@ -523,7 +523,7 @@ function BoardPatch({ tiles, cap, plinth, explored, visible, offset, onClick, on
       const dark = visible.has(tile.id) && isForeignTerritory(tile.owner);
       const wasDark = !!old && !!previous?.visible.has(old.id) && isForeignTerritory(old.owner);
       if (!old || old.id !== tile.id || known !== wasKnown || dark !== wasDark ||
-        (known && (old.terrain !== tile.terrain || old.terrainVariant !== tile.terrainVariant))) {
+        (known && old.terrain !== tile.terrain)) {
         const brightness = dark ? foreignTerritoryBrightness : 1;
         const shell = boardShell(tile, known);
         base.setColorAt(i, color.set(shell.plinthColor).multiplyScalar(brightness));
@@ -783,7 +783,7 @@ function AnimatedUnit({
     onFinish,
   );
   const tile = game.tiles[unit.y * game.options.size + unit.x];
-  const color = colorForOwner(game.players, unit.owner);
+  const color = boardColorForOwner(game.players, unit.owner);
   const { modelSet } = factionForOwner(game.players, unit.owner);
   return (
     <group
@@ -1031,6 +1031,7 @@ function Effects({
   visible,
   reducedMotion,
   combat,
+  presented,
   onFeedbackEnds,
 }: {
   game: GameState;
@@ -1038,6 +1039,7 @@ function Effects({
   visible: Set<number>;
   reducedMotion: boolean;
   combat: { strikes: Strike[]; issuedAt: number };
+  presented: readonly PresentedUnit[];
   onFeedbackEnds: (time: number) => void;
 }) {
   const playback = usePlaybackClock();
@@ -1099,6 +1101,7 @@ function Effects({
             <ShotEffect
               game={game}
               strike={event.strike}
+              shooter={presented.find(({ unit }) => unit.id === event.strike?.attackerId)}
               offset={offset}
               issuedAt={event.issuedAt!}
               reducedMotion={reducedMotion}
@@ -1135,7 +1138,7 @@ function World({
   showResourceHints = true,
   preview = false,
   badges,
-  badgeButtons,
+  badgeElements,
 }: GameSceneProps & MapBadgesProps) {
   const replay = playbackStep?.focusTile != null ? playbackStep : null;
   const [focusedReplayId, setFocusedReplayId] = useState<number | null>(null);
@@ -1355,7 +1358,7 @@ function World({
       />
       <MapBadgePositions
         badges={badges}
-        badgeButtons={badgeButtons}
+        badgeElements={badgeElements}
         renderedIds={renderedIds}
       />
       <ambientLight intensity={0.71} color="#f2f7ff" />
@@ -1450,6 +1453,7 @@ function World({
             combat={combat}
             game={game}
             offset={offset}
+            presented={presented}
             visible={visible}
             reducedMotion={reducedMotion}
             onFeedbackEnds={onFeedbackEnds}
@@ -1550,11 +1554,12 @@ export default function GameScene(props: GameSceneProps) {
     );
     return () => { active = false; };
   }, []);
+  const replay = props.playbackStep?.focusTile != null ? props.playbackStep : null;
   const badges = useMemo(
-    () => (props.preview || props.playbackStep?.focusTile != null ? [] : getMapBadges(props.game)),
-    [props.game, props.preview, props.playbackStep],
+    () => props.preview ? [] : getMapBadges(replay?.previousGame ?? props.game, !replay && !!props.onActionBadge),
+    [props.game, props.preview, props.onActionBadge, replay],
   );
-  const badgeButtons = useRef(new Map<string, HTMLButtonElement>());
+  const badgeElements = useRef(new Map<string, HTMLElement>());
   return (
     <div
       className={`game-scene${props.preview ? " game-scene-preview" : ""}`}
@@ -1588,14 +1593,14 @@ export default function GameScene(props: GameSceneProps) {
           >
             <MapLabelStyle.Provider value={labelStyle}>
               <WorldModelLibrary>
-                <World {...props} badges={badges} badgeButtons={badgeButtons} />
+                <World {...props} badges={badges} badgeElements={badgeElements} />
               </WorldModelLibrary>
             </MapLabelStyle.Provider>
           </Canvas>
-          {badges.length > 0 && props.onActionBadge && (
-            <MapBadgeButtons
+          {badges.length > 0 && (
+            <MapBadgeLayer
               badges={badges}
-              badgeButtons={badgeButtons}
+              badgeElements={badgeElements}
               onOpen={props.onActionBadge}
               reducedMotion={props.reducedMotion}
             />

@@ -1,7 +1,8 @@
 import { useContext, useLayoutEffect, useRef, type CSSProperties, type ReactNode } from "react";
 import {
-  ArrowLeftRight, Award, Axe, BrainCircuit, Compass, Crosshair, Eye, Flag, Hammer, Heart,
-  RotateCcw, Route, Shield, Sprout, Swords, Trash2, Trees, Users, Waves, Zap,
+  ArrowLeftRight, ArrowUpRight, Award, Binoculars, BriefcaseMedical, Compass, Crosshair, Eye, Flag,
+  Footprints, Hammer, Heart, PersonStanding, RotateCcw, Route, Shield, ShieldHalf, Shovel, Sprout, Swords,
+  Target, Trash2, Trees, Truck, Users, Waves, Zap,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -74,17 +75,17 @@ const resourceNames: Record<Resource, string> = {
   starfish: "海星",
 };
 const unitIcons: Record<UnitType, LucideIcon> = {
-  warrior: Axe,
+  warrior: PersonStanding,
   rider: Zap,
-  defender: Shield,
+  defender: Shovel,
   archer: Crosshair,
-  swordsman: Swords,
-  catapult: Crosshair,
-  knight: Zap,
-  mindBender: BrainCircuit,
-  cloak: Eye,
-  dagger: Swords,
-  giant: Users,
+  swordsman: ArrowUpRight,
+  catapult: Target,
+  knight: ShieldHalf,
+  mindBender: BriefcaseMedical,
+  cloak: Binoculars,
+  dagger: Footprints,
+  giant: Truck,
   raft: Waves,
   scout: Compass,
   rammer: Waves,
@@ -101,7 +102,7 @@ const rewards: Record<Reward, { title: string; note: string; icon: LucideIcon }>
   population: { title: "人口", note: "增加 3 人口", icon: Users },
   territory: { title: "边界扩张", note: "领土扩大 1 格", icon: Flag },
   park: { title: "公园", note: "增加 250 分", icon: Trees },
-  giant: { title: "巨人", note: "生成巨人", icon: Users },
+  giant: { title: UNITS.giant.name, note: "部署一辆装甲车", icon: Truck },
 };
 
 interface Command {
@@ -117,6 +118,11 @@ interface Command {
 function tileDevelopment(game: GameState, tile: Tile) {
   const candidates: Command[] = [];
   const player = game.players[0];
+  if (hasTech(player, "roads") && (tile.owner === null || tile.owner === 0) &&
+    !tile.road && !tile.cityId && ["forest", "plain"].includes(tile.terrain)) {
+    candidates.push({ action: { type: "ROAD", tileId: tile.id }, label: "道路", icon: Route, cost: 3 });
+  }
+  if (tile.owner !== 0 && tile.resource !== "starfish") return candidates;
   const resource = getVisibleResource(game, tile, 0);
   const harvestAvailable = resource === "starfish"
     ? !tile.building && hasTech(player, "navigation")
@@ -148,12 +154,6 @@ function tileManagement(game: GameState, tile: Tile) {
   const player = game.players[0];
   const tileId = tile.id;
   const candidates: Command[] = [];
-  if (
-    hasTech(player, "roads") && (tile.owner === null || tile.owner === 0) &&
-    !tile.road && !tile.cityId && ["forest", "plain"].includes(tile.terrain)
-  ) {
-    candidates.push({ action: { type: "ROAD", tileId }, label: "道路", icon: Route, cost: 3 });
-  }
   if (tile.owner !== 0) return candidates;
   if (!tile.building && !tile.cityId && !tile.ruin) {
     if (tile.terrain === "forest") {
@@ -447,7 +447,7 @@ export function SelectionControls({
     commands = cityCommands(game, knownCity);
   } else if (!unitVisible && !knownCity && explored && player.visible.includes(tileId)) {
     commands = [
-      ...(tile.owner === 0 || tile.resource === "starfish" ? tileDevelopment(game, tile) : []),
+      ...tileDevelopment(game, tile),
       ...tileManagement(game, tile),
     ];
   }
@@ -497,9 +497,9 @@ function targetPreview(game: GameState, unit: Unit, target: Unit) {
   if (UNITS[unit.type].skills.includes("convert")) {
     if (validateAction(game, { type: "CONVERT", unitId: unit.id, targetId: target.id })) return null;
     return (
-      <div className="hud-convert-preview" role="status" aria-label="转化预估">
-        <BrainCircuit size={18} aria-hidden="true" />
-        <span>转化后，<strong>{UNITS[target.type].name}</strong>加入我方</span>
+      <div className="hud-convert-preview" role="status" aria-label="劝降预估">
+        <BriefcaseMedical size={18} aria-hidden="true" />
+        <span>劝降后，<strong>{UNITS[target.type].name}</strong>加入我方</span>
       </div>
     );
   }

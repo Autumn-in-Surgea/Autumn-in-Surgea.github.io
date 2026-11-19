@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { applyAction } from "../../src/game";
+import { hashSeed } from "../../src/game/map/random";
 import type { UnitType } from "../../src/game/types";
 import { observeMoves } from "../../src/workers/visibleMove";
 import {
@@ -13,6 +14,7 @@ import {
   strikeMotionEndsAt,
 } from "../../src/scene/combatMotion";
 import { rememberCombatEvents } from "../../src/workers/combatEvents";
+import { movementDuration } from "../../src/scene/motion";
 import { addUnit, battlefield } from "./helpers";
 
 function shoot(weapon: UnitType, retaliation = false) {
@@ -343,5 +345,71 @@ describe("friendly move presentation", () => {
     expect(result.ok).toBe(true);
     const [path] = observeMoves(before, result.state, move);
     expect(path).toMatchObject({ path: [52, 53, 54], passing: [1] });
+  });
+});
+
+describe("involuntary movement presentation", () => {
+  it("animates an exhausted garrison displaced by its city's giant reward", () => {
+    const before = battlefield();
+    const city = before.cities[0];
+    city.level = 5;
+    city.pendingRewards = 1;
+    city.pendingRewardLevels = [5];
+    const garrison = addUnit(before, 0, "warrior", city.x, city.y);
+    garrison.moved = true;
+    garrison.attacked = true;
+    const reward = { type: "CITY_REWARD", reward: "giant", cityId: city.id } as const;
+    const result = applyAction(before, reward);
+    expect(result.ok).toBe(true);
+    expect(result.state.units).toContainEqual(expect.objectContaining({ type: "giant", x: city.x, y: city.y }));
+    const moves = observeMoves(before, result.state, reward);
+    expect(moves).toEqual([{ id: before.nextId - 0.5, unitId: garrison.id, path: [13, 0] }]);
+    rememberCombatEvents(result.state, [], moves);
+    expect(planEncounter(before, result.state).journeys.get(garrison.id)).toEqual([
+      expect.objectContaining({
+        path: [{ x: 1, y: 1 }, { x: 0, y: 0 }], start: 0, duration: movementDuration(Math.SQRT2),
+      }),
+    ]);
+  });
+
+  it("animates an exploring transport forced to land by a ruin reward", () => {
+    const before = battlefield();
+    const tile = before.tiles[65];
+    tile.terrain = "shallow";
+    tile.ruin = true;
+    const scout = addUnit(before, 0, "raft", tile.x, tile.y);
+    scout.carried = { type: "warrior", kills: 0, maxHp: 10, veteran: false };
+    const seed = Array.from({ length: 100 }, (_, index) => `displaced-ruin-${index}`)
+      .find((candidate) => hashSeed(`${candidate}:ruin:${tile.id}`) % 3 === 1);
+    expect(seed).toBeDefined();
+    before.options.seed = seed!;
+    const examine = { type: "EXAMINE", unitId: scout.id } as const;
+    const result = applyAction(before, examine);
+    expect(result.ok).toBe(true);
+    expect(result.state.units).toContainEqual(expect.objectContaining({ id: scout.id, type: "warrior", x: 4, y: 4 }));
+    expect(result.state.units).toContainEqual(expect.objectContaining({ type: "rammer", x: tile.x, y: tile.y }));
+    expect(observeMoves(before, result.state, examine)).toEqual([
+      { id: before.nextId - 0.5, unitId: scout.id, path: [65, 52] },
+    ]);
+  });
+
+  it("suppresses an enemy garrison's path when its origin or destination is unobserved", () => {
+    const before = battlefield();
+    before.currentPlayer = 1;
+    const city = before.cities[1];
+    city.level = 5;
+    city.pendingRewards = 1;
+    city.pendingRewardLevels = [5];
+    before.players[0].visible = [city.y * before.options.size + city.x];
+    const garrison = addUnit(before, 1, "warrior", city.x, city.y);
+    const reward = { type: "CITY_REWARD", reward: "giant", cityId: city.id } as const;
+    const result = applyAction(before, reward);
+    expect(result.ok).toBe(true);
+    const moves = observeMoves(before, result.state, reward);
+    expect(moves).toEqual([{ id: before.nextId - 0.5, unitId: garrison.id, path: [] }]);
+    rememberCombatEvents(result.state, [], moves);
+    const plan = planEncounter(before, result.state);
+    expect(plan.hiddenJourneys.has(garrison.id)).toBe(true);
+    expect(plan.journeys.has(garrison.id)).toBe(false);
   });
 });

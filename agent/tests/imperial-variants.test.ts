@@ -81,22 +81,30 @@ describe("Imperial architecture variations", () => {
     }
   });
 
-  it.each(Object.values(BUILDINGS).map(b => b.id))("gives %s four shapes at each of its three tiers", type => {
+  it.each(Object.values(BUILDINGS).map(b => b.id))("gives %s one sculpture at each of its three tiers", type => {
     for (const tier of [1, 2, 3] as const) {
       const base = MODEL_SETS.danubian.building(type, "#937051", tier);
-      verifyVariations(base, variant => MODEL_SETS.imperia.building(type, "#937051", tier, variant));
+      const sculpture = MODEL_SETS.imperia.building(type, "#937051", tier);
+      base.computeBoundingBox();
+      sculpture.computeBoundingBox();
+      const { min, max } = sculpture.boundingBox!;
+      expect(Math.max(-min.x, -min.z, max.x, max.z)).toBeLessThanOrEqual(0.5);
+      expect(min.y).toBeGreaterThanOrEqual(base.boundingBox!.min.y - 0.002);
+      expect(sculpture.getAttribute("color").count).toBe(sculpture.getAttribute("position").count);
+      base.dispose();
+      sculpture.dispose();
     }
   });
 
-  it("regenerates the same choices from old saves without storing any structure index", () => {
+  it("regenerates the same city layouts from old saves without storing a layout index", () => {
     const game = newGame({ scenario: "story", civilization: "imperia", seed: "imperial-workshops" });
     const oldSave = JSON.parse(serializeGame(game));
     for (const tile of oldSave.game.tiles) delete tile.terrainVariant;
     const restored = deserializeGame(JSON.stringify(oldSave));
-    const choices = game.tiles.map(tile => structureVariant(MODEL_SETS.imperia, game.options.seed, tile));
+    const choices = game.cities.map(city => structureVariant(MODEL_SETS.imperia, game.options.seed, city));
     expect(new Set(choices)).toEqual(new Set([0, 1, 2, 3]));
-    expect(restored.tiles.map(tile => structureVariant(MODEL_SETS.imperia, restored.options.seed, tile))).toEqual(choices);
-    expect(restored.tiles.map(tile => structureVariant(MODEL_SETS.imperia, "different-seed", tile))).not.toEqual(choices);
+    expect(restored.cities.map(city => structureVariant(MODEL_SETS.imperia, restored.options.seed, city))).toEqual(choices);
+    expect(restored.cities.map(city => structureVariant(MODEL_SETS.imperia, "different-seed", city))).not.toEqual(choices);
   });
 
   it("uses the terrain nation's village model then switches to the current owner's models", () => {

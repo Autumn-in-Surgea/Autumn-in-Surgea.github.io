@@ -281,7 +281,7 @@ export function usePresentedUnits(
   return { presented, finish };
 }
 
-function positionOf(
+export function unitBoardPosition(
   game: GameState,
   unit: Pick<Unit, "x" | "y">,
   offset: number,
@@ -317,7 +317,7 @@ interface Track {
   finished: boolean;
 }
 
-function strikeTransform(game: GameState, strike: Strike, elapsed: number) {
+export function strikeTransform(game: GameState, strike: Strike, elapsed: number) {
   const from = strike.from!;
   const pose = sampleAttackPose(strike, elapsed);
   const dx = strike.contact?.x ?? strike.at.x - from.x;
@@ -343,10 +343,10 @@ export function useUnitMotion(
   const root = useRef<THREE.Group>(null);
   const model = useRef<THREE.Group>(null);
   const label = useRef<THREE.Group>(null);
-  const target = positionOf(game, record.unit, offset);
+  const target = unitBoardPosition(game, record.unit, offset);
   const initial = useRef<MotionVector>(
     record.cue.from && playback.time - record.cue.issuedAt < 800
-      ? positionOf(game, record.cue.from, offset)
+      ? unitBoardPosition(game, record.cue.from, offset)
       : target,
   );
   const output = useRef<MotionVector>([...target]);
@@ -370,7 +370,7 @@ export function useUnitMotion(
     if (!root.current || !model.current) return;
     const cue = record.cue;
     const running = track.current;
-    const to = positionOf(game, record.unit, offset);
+    const to = unitBoardPosition(game, record.unit, offset);
     const from: MotionVector = initialized.current
       ? [
           root.current.position.x,
@@ -378,7 +378,7 @@ export function useUnitMotion(
           root.current.position.z,
         ]
       : cue.from
-        ? positionOf(game, cue.from, offset)
+        ? unitBoardPosition(game, cue.from, offset)
         : [...to];
     initialized.current = true;
     // Missing/hidden origins must snap to the known endpoint, never cross fog.
@@ -397,7 +397,7 @@ export function useUnitMotion(
         points.push(...running.path.points.slice(running.segment));
       if (cue.path)
         points.push(
-          ...cue.path.slice(1).map((point) => positionOf(game, point, offset)),
+          ...cue.path.slice(1).map((point) => unitBoardPosition(game, point, offset)),
         );
     }
     points.push(to);
@@ -422,7 +422,7 @@ export function useUnitMotion(
           duration: leg.duration,
           swap: leg.swap,
           advanceAfter: leg.advanceAfter,
-          path: createMotionPath(leg.path.map((point) => positionOf(game, point, offset)), leg.passing),
+          path: createMotionPath(leg.path.map((point) => unitBoardPosition(game, point, offset)), leg.passing),
           handoff: strike?.from ? strikeTransform(game, strike, leg.start) : previousAdvance?.handoff,
         };
       }),

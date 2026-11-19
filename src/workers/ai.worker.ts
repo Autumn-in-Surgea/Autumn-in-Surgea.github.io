@@ -27,8 +27,8 @@ function runTurn(request: AiRequest): AiResponse {
   const moves: WitnessedMove[] = [];
   const combatEvents: GameEvent[] = [];
   const { state } = runAiTurnDetailed(request.state, undefined, (before, after, action) => {
-    if (action.type !== "ATTACK" && action.type !== "MOVE") return;
     moves.push(...observeMoves(before, after, action));
+    if (action.type !== "ATTACK" && action.type !== "MOVE") return;
     const lastId = before.events.at(-1)?.id ?? 0;
     for (const event of after.events)
       if (event.id > lastId && event.combat?.targetVisible) combatEvents.push(event);

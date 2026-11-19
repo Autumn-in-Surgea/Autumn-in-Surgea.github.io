@@ -29,6 +29,7 @@ export interface StructureChange {
 export const sinkSeconds = 0.36;
 export const riseSeconds = 0.54;
 export const exchangePause = 0.065;
+export const roadPlaybackRate = 2.2;
 export function exchangeDuration(exchange: ModelExchange | null) {
   if (exchange === "replace") return sinkSeconds + exchangePause + riseSeconds;
   if (exchange === "rise") return riseSeconds;
@@ -85,11 +86,10 @@ export function planStructurePlayback(before: GameState, after: GameState) {
     const oldCity = old.cityId ? oldCities.get(old.cityId) : undefined;
     const newCity = tile.cityId ? newCities.get(tile.cityId) : undefined;
     const tierChanged = oldTiers[id] !== newTiers[id];
-    const ownerChanged = old.owner !== tile.owner;
     const sceneryChanged = discovered ? hasStructure(tile) : old.building !== tile.building ||
-      !sameCityModel(oldCity, newCity) || (!!tile.building && (tierChanged || ownerChanged));
+      !sameCityModel(oldCity, newCity) || (!!tile.building && tierChanged);
     const roadChanged = discovered ? hasRoadModel(tile) : hasRoadModel(old) !== hasRoadModel(tile) ||
-      (hasRoadModel(tile) && (tierChanged || ownerChanged || changedConnections.has(id)));
+      (hasRoadModel(tile) && (tierChanged || changedConnections.has(id)));
     if (!sceneryChanged && !roadChanged) continue;
 
     const scenery = sceneryChanged ? exchange(!discovered && hasScenery(before, old), !!hasScenery(after, tile)) : null;
@@ -98,7 +98,8 @@ export function planStructurePlayback(before: GameState, after: GameState) {
     const delay = discovered ? 0.19 : 0;
     structures.set(id, { scenery, road, previousGame: before, previousCity: oldCity,
       previousTier: oldTiers[id] as BuildingVisualTier, previousExplored: wasExplored, delay });
-    structureDuration = Math.max(structureDuration, delay + Math.max(exchangeDuration(scenery), exchangeDuration(road)));
+    structureDuration = Math.max(structureDuration,
+      delay + Math.max(exchangeDuration(scenery), exchangeDuration(road) / roadPlaybackRate));
   }
   return { structures, structureDuration };
 }

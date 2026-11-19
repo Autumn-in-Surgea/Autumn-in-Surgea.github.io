@@ -1,11 +1,11 @@
 import { createContext, memo, useContext, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import type { BufferGeometry, MeshStandardMaterial } from "three";
-import type { BuildingId, City, Player, Position, Tile } from "../game/types";
+import type { BuildingId, City, Player, Tile } from "../game/types";
 import { siteLandscape } from "./landscape";
 import type { BuildingVisualTier } from "./buildingVisualTier";
-import type { ModelSetId } from "../nations/registry";
-import { getTerrainAssets, structureVariant, type NationModels } from "../nations/models";
+import { nation as imperia } from "../nations/imperia";
+import { representativeTerrain, structureVariant, type NationModels } from "../nations/models";
 import { cityAppearance, MODEL_SETS } from "./factionModels";
 import { useTerritoryMaterial } from "./territoryMaterials";
 import { makeGlowGeometry, resourceSilhouetteMask, silhouetteGlowProps, writeSilhouette } from "./silhouetteGlow";
@@ -66,17 +66,14 @@ function Sculpture({ modelKey, build, highlight = false }: {
 
 export const TerrainDetails = memo(function TerrainDetails({ tile, simple = false }: { tile: Tile; simple?: boolean }) {
   if (tile.cityId || tile.lighthouse) return null;
-  const assets = getTerrainAssets(tile.terrainVariant);
-  const variation = (tile.x * 7 + tile.y * 13) % 6;
   if (tile.building) {
     const site = siteLandscape(tile);
-    return site && <Sculpture modelKey={`site:${tile.terrainVariant}:${site}:${variation}:${simple}`}
-      build={() => assets.developed(site, variation, simple)} />;
+    return site && <Sculpture modelKey={`site:${site}:${simple}`}
+      build={() => representativeTerrain.developed(site, simple)} />;
   }
-  const build = assets.details[tile.terrain];
-  const style = tile.terrain === "mountain" ? variation % 3 : variation;
-  return build ? <Sculpture modelKey={`terrain:${tile.terrainVariant}:${tile.terrain}:${style}:${simple}`}
-    build={() => build(style, simple)} /> : null;
+  const build = representativeTerrain.details[tile.terrain];
+  return build ? <Sculpture modelKey={`terrain:${tile.terrain}:${simple}`}
+    build={() => build(simple)} /> : null;
 });
 
 export const Resources = memo(function Resources({ tile, highlight }: {
@@ -85,8 +82,8 @@ export const Resources = memo(function Resources({ tile, highlight }: {
 }) {
   const kind = tile.resource;
   if (!kind || tile.cityId || tile.building) return null;
-  return <Sculpture modelKey={`resource:${tile.terrainVariant}:${kind}`}
-    build={() => getTerrainAssets(tile.terrainVariant).resource(kind)} highlight={highlight} />;
+  return <Sculpture modelKey={`resource:${kind}`}
+    build={() => representativeTerrain.resource(kind)} highlight={highlight} />;
 });
 
 export const CityModel = memo(function CityModel({ city, players, seed, terrainVariant }: {
@@ -99,16 +96,12 @@ export const CityModel = memo(function CityModel({ city, players, seed, terrainV
     build={() => models.city(color, level, capital, walls, variant)} />;
 });
 
-export const BuildingModel = memo(function BuildingModel({ type, color, modelSet, tier, seed, tile }: {
-  type: BuildingId; color: string; modelSet: ModelSetId; tier: BuildingVisualTier; seed: string; tile: Position;
+export const BuildingModel = memo(function BuildingModel({ type, tier }: {
+  type: BuildingId; tier: BuildingVisualTier;
 }) {
-  const models: NationModels = MODEL_SETS[modelSet];
-  const variant = structureVariant(models, seed, tile);
-  return <Sculpture modelKey={`building:${modelSet}:${type}:${color}:${tier}:${variant ?? ""}`}
-    build={() => models.building(type, color, tier, variant)} />;
+  return <Sculpture modelKey={`building:${type}:${tier}`}
+    build={() => MODEL_SETS.imperia.building(type, imperia.color, tier)} />;
 });
 
-export const RuinModel = ({ terrainVariant }: Pick<Tile, "terrainVariant">) =>
-  <Sculpture modelKey={`ruin:${terrainVariant}`} build={getTerrainAssets(terrainVariant).ruin} />;
-export const LighthouseModel = ({ terrainVariant }: Pick<Tile, "terrainVariant">) =>
-  <Sculpture modelKey={`lighthouse:${terrainVariant}`} build={getTerrainAssets(terrainVariant).lighthouse} />;
+export const RuinModel = () => <Sculpture modelKey="ruin" build={representativeTerrain.ruin} />;
+export const LighthouseModel = () => <Sculpture modelKey="lighthouse" build={representativeTerrain.lighthouse} />;

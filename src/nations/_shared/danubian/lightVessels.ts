@@ -8,7 +8,7 @@ type Paint = { keel: string; chine: string; hull: string; deck: string };
 const teak = "#b79264";
 const umber = "#604031";
 const brass = "#d0aa68";
-const enamel = "#fffdf1";
+const enamel = "#ffffff";
 const steel = "#6a8390";
 const darkSteel = "#34454d";
 
@@ -37,7 +37,8 @@ function hull(sculpt: Sculpture, x: number, z: number, deck: number,
   function band(mesh: Miniature, color: string, lower: Point[], upper: Point[]) {
     for (const [index, point] of lower.entries()) {
       const next = (index + 1) % lower.length;
-      mesh.face(color, [point, upper[index], upper[next], lower[next]]);
+      mesh.face(color, [point, upper[index], upper[next]]);
+      mesh.face(color, [point, upper[next], lower[next]]);
     }
   }
   const keel = ring(.57, .88, .014, .18);
@@ -52,11 +53,14 @@ function hull(sculpt: Sculpture, x: number, z: number, deck: number,
     sculpt.body.face(paint.deck, [[x, deck, z], rim[(index + 1) % rim.length], point]);
 }
 
-function pennant(mesh: Miniature, mast: Point, end: Point, color: string) {
+export function foldedPennant(mesh: Miniature, mast: Point, end: Point, topToHem = .033) {
   const [x, y, z] = mast;
-  const vertices: Point[] = [[x, y - .033, z], mast, end];
-  mesh.face(color, vertices);
-  mesh.face(color, vertices.reverse());
+  const hem: Point = [x, y - topToHem, z];
+  const fold: Point = [x + (end[0] - x) * .5 + .013, y - topToHem * .38, (z + end[2]) / 2];
+  for (const facet of [[hem, mast, fold], [hem, fold, end], [fold, mast, end]]) {
+    mesh.face(enamel, facet);
+    mesh.face(enamel, facet.reverse());
+  }
 }
 
 function lateenRig(sculpt: Sculpture, z: number, deck: number, top: number, scale: number) {
@@ -69,15 +73,16 @@ function lateenRig(sculpt: Sculpture, z: number, deck: number, top: number, scal
   body.beam(umber, [0, deck, z], mast, .019 * scale);
   body.beam(teak, forward, peak, .012 * scale);
   body.beam(brass, [0, top - .082 * scale, z], [0, top - .135 * scale, z], .022 * scale);
-  const edge = [forward, peak, clew];
-  const cloth = ["#f1e2c0", "#e3cb9f", "#faf1d9"];
+  const edge: Point[] = [forward, peak, clew,
+    [.065 * scale, top - .251 * scale, z + .038 * scale]];
+  const cloth = ["#f1e2c0", "#e3cb9f", "#faf1d9", "#e7d6b0"];
   for (const [index, point] of edge.entries()) {
     const face = [point, edge[(index + 1) % edge.length], billow];
     body.face(cloth[index], face);
     body.face(cloth[index], face.reverse());
   }
   body.beam("#b69972", clew, [0, deck + .024, z + .125 * scale], .006);
-  pennant(sculpt.enamel, mast, [.014 * scale, top - .016 * scale, z + .094 * scale], enamel);
+  foldedPennant(sculpt.enamel, mast, [.014 * scale, top - .016 * scale, z + .094 * scale]);
 }
 
 function caravel(sculpt: Sculpture) {
@@ -88,7 +93,10 @@ function caravel(sculpt: Sculpture) {
   // Low foredeck and a glazed stern gallery anchor the rig to its hull.
   body.part("bevel", umber, 0, .176, -.247, .094, .026, .072);
   body.part("bevel", umber, 0, .182, .259, .139, .080, .135);
-  body.part("bevel", teak, 0, .232, .259, .149, .026, .134);
+  for (const side of [-1, 1]) {
+    const roof: Point[] = [[0, .253, .196], [side * .073, .226, .190], [side * .068, .228, .326], [0, .259, .329]];
+    body.face(side > 0 ? teak : brass, side < 0 ? roof : roof.reverse());
+  }
   body.box(brass, 0, .192, .325, .110, .038, .010);
   for (const x of [-.033, 0, .033])
     body.box("#2f454e", x, .193, .332, .018, .023, .007);
@@ -111,14 +119,19 @@ function torpedoLaunch(sculpt: Sculpture, x: number, z: number) {
   const { body } = sculpt;
   const deck = .067;
   hull(sculpt, x, z, deck, launchStations, launchPaint);
-  body.part("bevel", steel, x, .094, z - .044, .063, .043, .102);
-  body.part("bevel", "#9cb0ae", x, .122, z - .051, .072, .015, .074);
+  body.part("hip", steel, x, .094, z - .044, .063, .052, .102);
+  const bridgeTip: Point = [x, .137, z - .069];
+  for (const side of [-1, 1]) {
+    const facet: Point[] = [[x + side * .030, .113, z - .092], [x + side * .033, .113, z - .011],
+      [x, .132, z - .016], bridgeTip];
+    body.face(side > 0 ? "#9cb0ae" : "#bcc8c5", side < 0 ? facet : facet.reverse());
+  }
   body.box("#253840", x, .111, z - .093, .047, .019, .010);
   body.part("bevel", brass, x, .089, z - .152, .033, .018, .045);
   body.part("octagon", darkSteel, x, .111, z + .037, .034, .085, .040, -.14);
   body.part("octagon", "#212c32", x, .154, z + .030, .035, .013, .043, -.14);
   body.beam(steel, [x, .123, z - .059], [x, .196, z - .051], .008);
-  pennant(sculpt.enamel, [x, .195, z - .051], [x + .004, .180, z + .004], enamel);
+  foldedPennant(sculpt.enamel, [x, .195, z - .051], [x + .004, .180, z + .004]);
 
   // Slender deck tubes read at game scale as part of the period silhouette.
   for (const side of [-1, 1]) {

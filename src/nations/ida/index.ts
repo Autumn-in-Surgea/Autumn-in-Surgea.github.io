@@ -7,6 +7,7 @@ export const nation = {
   english: "Ida",
   capital: "绯川",
   color: "#b35e59",
+  boardColor: "#ef596f",
   lightColor: "#e8b7ac",
   description: "南方绯红的群岛文明。",
   images: { emblem },

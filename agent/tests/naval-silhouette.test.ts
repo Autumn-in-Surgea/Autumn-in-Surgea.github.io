@@ -20,11 +20,15 @@ it("keeps the bomber long while narrowing its full silhouette relative to the ju
 });
 
 it.each(["raft", "dinghy", "pirate", "scout", "rammer", "bomber", "juggernaut"] as const)(
-  "keeps the %s inside the diagonal board footprint and below its action badge height",
+  "gives %s untoned faction enamel and stays within its board footprint",
   type => {
     const bounds = measure(type);
     const { x: beam, z: length } = bounds.getSize(new Vector3());
     expect((beam + length) / Math.SQRT2).toBeLessThan(1);
     expect(danubianModels.labelHeight(type) - bounds.max.y).toBeGreaterThan(.1);
+    const { enamel } = danubianModels.unit(type);
+    enamel.computeBoundingBox();
+    expect(enamel.boundingBox!.max.y - enamel.boundingBox!.min.y).toBeGreaterThan(.13);
+    expect([...enamel.getAttribute("color").array].every(channel => channel === 1)).toBe(true);
   },
 );

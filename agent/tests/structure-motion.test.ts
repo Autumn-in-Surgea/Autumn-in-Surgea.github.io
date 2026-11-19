@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { applyAction } from "../../src/game";
-import { buildTileTiers, exchangeDuration, exchangePause, planStructurePlayback, sinkSeconds } from "../../src/store/structurePlayback";
+import { buildTileTiers, exchangeDuration, exchangePause, planStructurePlayback, roadPlaybackRate, sinkSeconds } from "../../src/store/structurePlayback";
 import { exposedHeight } from "../../src/scene/structureMotion";
 import { battlefield } from "./helpers";
 
@@ -58,9 +58,10 @@ describe("city and improvement exchanges", () => {
     const plan = planStructurePlayback(game, built);
     expect(plan.structures.get(road)).toMatchObject({ road: "rise", scenery: null });
     expect(plan.structures.get(cityTile)).toMatchObject({ road: "replace", scenery: null });
+    expect(plan.structureDuration).toBeCloseTo(exchangeDuration("replace") / roadPlaybackRate);
   });
 
-  it("replaces an occupied city's colours and structures even when the captured city keeps its level", () => {
+  it("replaces the captured city's model while keeping its facilities and roads in place", () => {
     const game = battlefield();
     const city = game.cities[1];
     const [id] = city.territory.filter(i => !game.tiles[i].cityId);
@@ -70,8 +71,7 @@ describe("city and improvement exchanges", () => {
     for (const i of city.territory) captured.tiles[i].owner = 0;
     const plan = planStructurePlayback(game, captured);
     expect(plan.structures.get(city.x + city.y * 12)?.scenery).toBe("replace");
-    expect(plan.structures.get(id)).toMatchObject({ scenery: "replace", road: "replace" });
-    expect(plan.structures.get(id)?.previousGame.tiles[id].owner).toBe(1);
+    expect(plan.structures.has(id)).toBe(false);
   });
 
   it("shows a newly discovered skyline once and never reconstructs a change hidden behind fog", () => {

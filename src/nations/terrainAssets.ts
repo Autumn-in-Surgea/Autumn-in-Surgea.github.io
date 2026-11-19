@@ -10,7 +10,7 @@ export interface TerrainShell {
 }
 
 type TerrainInlay = { geometry: BufferGeometry; color: string };
-type TerrainDetail = (variation: number, simple: boolean) => BufferGeometry;
+type TerrainDetail = (simple: boolean) => BufferGeometry;
 
 /** Regional sculpture and paint. Shells share the board's coordinates and surface height. */
 export interface TerrainAssets {

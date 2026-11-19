@@ -13,13 +13,15 @@ import type { BuildingVisualTier } from "../scene/buildingVisualTier";
 
 export interface NationModels {
   unit: typeof danubianModels.unit;
+  weaponMuzzles?: typeof danubianModels.weaponMuzzles;
   labelHeight: typeof danubianModels.labelHeight;
   city: (color: string, level: number, capital: boolean, walls: boolean, variant?: number) => ReturnType<typeof danubianModels.city>;
-  building: (type: BuildingId, color: string, tier: BuildingVisualTier, variant?: number) => ReturnType<typeof danubianModels.building>;
+  building: (type: BuildingId, color: string, tier: BuildingVisualTier) => ReturnType<typeof danubianModels.building>;
   structureVariantCount?: number;
 }
 export const MODEL_SETS = {
-  danubian: danubianModels,
+  // Free-mode custom countries borrow the imperial sculpt and paint their own enamel.
+  danubian: { ...danubianModels, unit: imperia.unit, weaponMuzzles: imperia.weaponMuzzles, labelHeight: imperia.labelHeight },
   imperia,
   determia,
   nosta,
@@ -43,7 +45,8 @@ export const TERRAIN_ASSETS: Record<NationId, TerrainAssets> = {
   ida: idaTerrain,
   rina: rinaTerrain,
 };
+export const representativeTerrain = TERRAIN_ASSETS[DEFAULT_TERRAIN_VARIANT];
 
 export function getTerrainAssets(variant: NationId): TerrainAssets {
-  return TERRAIN_ASSETS[variant] ?? TERRAIN_ASSETS[DEFAULT_TERRAIN_VARIANT];
+  return TERRAIN_ASSETS[variant] ?? representativeTerrain;
 }

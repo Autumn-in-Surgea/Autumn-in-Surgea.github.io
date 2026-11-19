@@ -1,7 +1,7 @@
 import { memo } from "react";
 import * as THREE from "three";
 import type { UnitType } from "../game/types";
-import { miniatureMaterial, setMiniatureColor } from "./miniature";
+import { miniatureMaterial } from "./miniature";
 import { foreignTerritoryBrightness } from "./territoryMaterials";
 import { makeGlowGeometry, silhouetteGlowProps, unitSilhouetteMask, writeSilhouette } from "./silhouetteGlow";
 
@@ -10,6 +10,8 @@ const spentBrightness = 0.40;
 // Both painted meshes of every unit make one shared screen-space occupancy mask.
 const foregroundMaterial = writeSilhouette(miniatureMaterial.clone(), unitSilhouetteMask);
 // Draw all pieces after board overlays, keeping depth testing between pieces.
+// Keep the carved face's hard planes and the turned shoulders' smooth normals.
+foregroundMaterial.flatShading = false;
 foregroundMaterial.transparent = true;
 foregroundMaterial.blending = THREE.NoBlending;
 
@@ -20,12 +22,14 @@ foreignMaterial.color.multiplyScalar(foreignTerritoryBrightness);
 
 export const BOARD_UNIT_RENDER_ORDER = 5;
 const landHealthAnchor: [number, number, number] = [0.018, 0.12, 0.018];
+const armoredCarHealthAnchor: [number, number, number] = [0.145, 0.09, 0.145];
 const navalHealthOffsets: Partial<Record<UnitType, number>> = {
   raft: 0.24, dinghy: 0.19, pirate: 0.20, scout: 0.20, rammer: 0.22,
   bomber: 0.24, juggernaut: 0.26,
 };
 
 export function unitHealthAnchor(type: UnitType): [number, number, number] {
+  if (type === "giant") return armoredCarHealthAnchor;
   // Follow the near diagonal so the number stays centered for either ship heading.
   const offset = navalHealthOffsets[type];
   return offset === undefined ? landHealthAnchor : [offset, 0, offset];
@@ -63,7 +67,7 @@ function getGlaze(color: string, brightness: number) {
   let glaze = glazes.get(key);
   if (!glaze) {
     glaze = foregroundMaterial.clone();
-    setMiniatureColor(glaze.color, color).multiplyScalar(brightness);
+    glaze.color.set(color).multiplyScalar(brightness);
     glazes.set(key, glaze);
   }
   return glaze;

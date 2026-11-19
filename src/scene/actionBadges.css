@@ -4,13 +4,12 @@
   overflow: hidden;
   pointer-events: none;
 }
-button.map-action-badge {
+.map-action-badge {
   --badge-ink: #58421c;
   --badge-fill: #fff1cc;
   --badge-edge: #846437;
   position: absolute;
   visibility: hidden;
-  pointer-events: auto;
   translate: -50% -100%;
   display: grid;
   place-items: center;
@@ -21,6 +20,7 @@ button.map-action-badge {
   border-radius: 10px;
   line-height: 1;
 }
+button.map-action-badge { pointer-events: auto; }
 .map-action-badge[data-action="capture"] {
   --badge-ink: #224e4a;
   --badge-fill: #e9f6e8;
@@ -30,6 +30,13 @@ button.map-action-badge {
   --badge-ink: #41345f;
   --badge-fill: #f1eaf9;
   --badge-edge: #75618e;
+}
+.map-action-badge[data-action="training"] {
+  --badge-ink: #f2dfab;
+  --badge-fill: #273843ee;
+  --badge-edge: #ab9469;
+  min-height: 0;
+  padding: 0 2px 4px;
 }
 .map-action-tag {
   position: relative;
@@ -76,6 +83,13 @@ button.map-action-badge {
 .map-action-badge[data-compact] .map-action-tag > span {
   display: none;
 }
+.map-action-badge[data-action="training"] .map-action-tag {
+  padding: 3px;
+  border-radius: 50%;
+  box-shadow: inset 0 1px 0 #fff2, 0 2px 3px #15212a66;
+  animation: none;
+}
+.map-action-badge[data-action="training"] .map-action-tag::after { content: none; }
 @keyframes map-action-float {
   0%, 100% {
     transform: translateY(0);

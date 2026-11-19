@@ -1,4 +1,4 @@
-import { getTerrainAssets } from "../nations/models";
+import { representativeTerrain } from "../nations/models";
 import { useDeferredValue, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
@@ -587,7 +587,7 @@ function MapPreview({
     const w = 480 / size;
     ctx.clearRect(0, 0, 480, 480);
     for (const t of tiles) {
-      ctx.fillStyle = getTerrainAssets(t.terrainVariant).shells[t.terrain].color;
+      ctx.fillStyle = representativeTerrain.shells[t.terrain].color;
       ctx.fillRect(t.x * w, t.y * w, Math.ceil(w), Math.ceil(w));
     }
     starts.forEach((p, i) => {

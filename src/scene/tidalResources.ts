@@ -3,7 +3,7 @@ import { Miniature } from "./miniature";
 type Point = [number, number, number];
 
 // Broad planes carry the back, silver flank and belly even at board scale.
-function trout(m: Miniature, x: number, z: number, size: number, heading: number) {
+function trout(m: Miniature, x: number, z: number, size: number, heading: number, golden: boolean) {
   const cos = Math.cos(heading), sin = Math.sin(heading);
   function point([a, b, c]: Point): Point {
     return [x + size * (a * cos + c * sin), 0.009 + size * b, z + size * (-a * sin + c * cos)];
@@ -23,7 +23,9 @@ function trout(m: Miniature, x: number, z: number, size: number, heading: number
     [a, mid - h * 0.26, w], [a, mid - h, 0],
     [a, mid - h * 0.26, -w], [a, mid + h * 0.36, -w * 0.95],
   ]);
-  const flank = ["#75988a", "#c5d0b4", "#dfd8b0", "#dfd8b0", "#b1c6b0", "#6b9486"];
+  const flank = golden
+    ? ["#788d77", "#d2c38a", "#f3d7a2", "#f3d7a2", "#ccc197", "#6d867e"]
+    : ["#608c85", "#a9cbc0", "#d6e2bf", "#d6e2bf", "#8dbab5", "#507c7f"];
   for (let i = 1; i < rings.length; i++) {
     for (let j = 0; j < flank.length; j++) {
       const next = (j + 1) % flank.length;
@@ -41,7 +43,7 @@ function trout(m: Miniature, x: number, z: number, size: number, heading: number
     const top: Point = [-0.198, 0.145, 0];
     const bottom: Point = [-0.195, 0.031, 0];
     const tailFaces: Point[][] = [[root, top, wrist], [root, notch, top], [root, bottom, notch], [root, wrist, bottom]];
-    for (const corners of tailFaces) face("#bc8059", ...(side === 1 ? corners : corners.reverse()));
+    for (const corners of tailFaces) face(golden ? "#d08a57" : "#bb775e", ...(side === 1 ? corners : corners.reverse()));
     const eye = point([0.125, 0.09, side * 0.037]);
     m.part("gem", "#394f4e", ...eye, 0.02*size, 0.021*size, 0.008*size, 0, heading);
   }
@@ -76,19 +78,27 @@ function trout(m: Miniature, x: number, z: number, size: number, heading: number
 
 export function fishShoal() {
   const m = new Miniature();
-  trout(m, -0.053, -0.063, 1, 0.59);
-  trout(m, 0.076, 0.126, 0.69, Math.PI + 0.35);
+  trout(m, -0.117, -0.079, 0.7, 0.57, false);
+  trout(m, 0.097, -0.133, 0.56, 0.3, true);
+  trout(m, 0.082, 0.085, 0.65, 0.63, false);
+  trout(m, -0.10, 0.139, 0.50, 0.77, true);
   return m.finish();
 }
 
-export function seaStar() {
-  const m = new Miniature();
-  const hub: Point = [0, 0.103, 0];
+function star(m: Miniature, x: number, z: number, size: number, heading: number, coral: boolean) {
+  const cos = Math.cos(heading), sin = Math.sin(heading);
+  function place([a, y, b]: Point): Point {
+    return [x + size * (a * cos + b * sin), y * size, z + size * (-a * sin + b * cos)];
+  }
+  const [side, dark, base, light, tip, dots] = coral
+    ? ["#a65550", "#c6695b", "#d97c65", "#ed9674", "#f9b58c", "#f5cd9e"]
+    : ["#825565", "#986474", "#b27686", "#cb8b97", "#e6a1ad", "#f1c4b9"];
+  const hub = place([0, 0.103, 0]);
   const lengths = [0.35, 0.315, 0.34, 0.327, 0.36];
   const angles = [0.16, 1.38, 2.67, 3.93, 5.16];
   const bend = [0.063, -0.052, 0.068, 0.037, -0.059];
   function radial(angle: number, r: number, y: number, offset = 0): Point {
-    return [r*Math.cos(angle) - offset*Math.sin(angle), y, r*Math.sin(angle) + offset*Math.cos(angle)];
+    return place([r*Math.cos(angle) - offset*Math.sin(angle), y, r*Math.sin(angle) + offset*Math.cos(angle)]);
   }
   // Positive yaw in the board plane is clockwise when viewed from above.
   function top(color: string, a: Point, b: Point, c: Point) {
@@ -96,45 +106,51 @@ export function seaStar() {
     m.face(color, up >= 0 ? [a,b,c] : [a,c,b]);
   }
   function edge(a: Point, b: Point) {
-    m.face("#a55e4b", [a, b, [b[0],0.012,b[2]], [a[0],0.012,a[2]]]);
+    m.face(side, [a, b, [b[0],0.012*size,b[2]], [a[0],0.012*size,a[2]]]);
   }
 
   const valleys = angles.map((angle,i) => radial((angle + (angles[i+1] ?? angles[0] + 2*Math.PI))/2, 0.108, 0.044));
   for (let i = 0; i < angles.length; i++) {
     const angle = angles[i], length = lengths[i];
     let left = valleys[(i + 4) % 5], right = valleys[i], spine = radial(angle,0.084,0.096);
-    top("#e2a16e", hub, left, spine);
-    top("#da9163", hub, spine, right);
+    top(light, hub, left, spine);
+    top(base, hub, spine, right);
     for (const [u, half, h] of [[0.46,0.056,0.078],[0.73,0.036,0.06],[0.92,0.021,0.038]]) {
       const shift = bend[i]*u*u;
       const l = radial(angle,length*u,0.025,shift-half);
       const r = radial(angle,length*u,0.026,shift+half);
       const crest = radial(angle,length*u,h,shift);
-      top("#d9875a", left, spine, crest);
-      top("#de9766", left, crest, l);
-      top("#edb07b", spine, right, r);
-      top("#e7a370", spine, r, crest);
+      top(dark, left, spine, crest);
+      top(base, left, crest, l);
+      top(tip, spine, right, r);
+      top(light, spine, r, crest);
       edge(left, l);
       edge(r, right);
       left = l; right = r; spine = crest;
     }
-    const tip = radial(angle,length,0.022,bend[i]);
-    top("#df9367", left, spine, tip);
-    top("#efb780", spine, right, tip);
-    edge(left,tip); edge(tip,right);
-    for (const [u, y, w] of [[0.31,0.092,0.037],[0.50,0.079,0.032],[0.70,0.065,0.024]]) {
-      m.part("crown","#f2d19b",...radial(angle,length*u,y,bend[i]*u*u),w,w*0.56,w,0,angle);
+    const end = radial(angle,length,0.022,bend[i]);
+    top(base, left, spine, end);
+    top(tip, spine, right, end);
+    edge(left,end); edge(end,right);
+    if (coral) for (const [u, y, w] of [[0.31,0.092,0.048],[0.56,0.074,0.041]]) {
+      m.part("gem", dots, ...radial(angle,length*u,y,bend[i]*u*u), w*size,w*size*0.56,w*size,0,angle+heading);
     }
   }
   // Five grooves meet around a shallow central rosette.
   const inner = angles.map(angle => radial(angle, 0.042, 0.111));
   const outer = angles.map((angle,i) => radial(angle, 0.077, 0.092, bend[i]*0.025));
-  const centre: Point = [0,0.118,0];
+  const centre = place([0, 0.118, 0]);
   for (let i = 0; i < angles.length; i++) {
     const next = (i+1) % angles.length;
-    top("#f2c692", centre, inner[i], inner[next]);
-    top("#d99168", inner[i], outer[i], inner[next]);
-    top("#e6a77a", inner[next], outer[i], outer[next]);
+    top(dots, centre, inner[i], inner[next]);
+    top(dark, inner[i], outer[i], inner[next]);
+    top(light, inner[next], outer[i], outer[next]);
   }
+}
+
+export function seaStar() {
+  const m = new Miniature();
+  star(m, -0.107, -0.053, 0.69, 0.18, true);
+  star(m, 0.161, 0.141, 0.45, -0.31, false);
   return m.finish();
 }

@@ -1,4 +1,5 @@
 import type { Miniature } from "../../../scene/miniature";
+import { foldedPennant } from "./lightVessels";
 
 const armoredPlate = "#536677";
 const darkArmor = "#303f50";
@@ -6,13 +7,20 @@ const turretRoof = "#97a6aa";
 const glazedDeck = "#be9e70";
 const brass = "#cfac68";
 const glass = "#182c3a";
-const enamelWhite = "#fffdf1";
+const enamelWhite = "#ffffff";
+type Point = [number, number, number];
 
 function armoredTurret(body: Miniature, z: number, foot: number, heading: number) {
   const direction = Math.cos(heading);
   body.part("drum", darkArmor, 0, foot + .016, z, .156, .035, .142);
   body.part("bevel", armoredPlate, 0, foot + .051, z, .145, .052, .128, 0, heading);
-  body.part("bevel", turretRoof, 0, foot + .079, z, .134, .015, .111, 0, heading);
+  const lid: Point[] = [[-.045, foot + .075, z - .053], [-.064, foot + .075, z - .027],
+    [-.064, foot + .075, z + .030], [-.041, foot + .075, z + .053],
+    [.041, foot + .075, z + .053], [.064, foot + .075, z + .030],
+    [.064, foot + .075, z - .027], [.045, foot + .075, z - .053]];
+  const ridge: Point = [0, foot + .099, z + direction * .008];
+  for (let i = 0; i < lid.length; i++)
+    body.face(i < 4 ? turretRoof : "#a9b6b7", [lid[i], lid[(i + 1) % lid.length], ridge]);
   for (const x of [-.032, .032]) {
     body.beam(darkArmor, [x, foot + .058, z + direction * .052],
       [x, foot + .073, z + direction * .140], .030);
@@ -75,7 +83,9 @@ export function carveDreadnoughtDeck(
   body.part("octagon", turretRoof, 0, director - .004, -.120, .101, .035, .080);
   body.part("octagon", darkArmor, 0, director + .017, -.120, .075, .016, .057);
   body.beam(brass, [0, director + .014, -.120], [0, director + .066, -.120], .013);
-  enamel.part("bevel", enamelWhite, .032, director + .049, -.120, .069, .041, .013, 0, -.23);
+  foldedPennant(enamel, [0, director + .064, -.120], [.081, director + .044, -.107], .046);
   body.beam(armoredPlate, [0, deck + .061, .239], [0, deck + .263, .269], .016);
   body.box(turretRoof, 0, deck + .216, .264, .114, .012, .012);
+  for (const side of [-1, 1])
+    body.beam(brass, [side * width * .346, deck + .062, .095], [0, deck + .216, .264], .006);
 }

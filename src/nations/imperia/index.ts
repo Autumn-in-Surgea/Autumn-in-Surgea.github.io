@@ -7,6 +7,7 @@ export const nation = {
   english: "Imperia",
   capital: "中京",
   color: "#94735b",
+  boardColor: "#e99054",
   lightColor: "#d8c7b0",
   description: "中央大陆的旧日秩序。",
   images: { emblem },

@@ -8,6 +8,37 @@ import { deserializeGame, serializeGame } from "../../src/store/save";
 import { addCity, addUnit, battlefield } from "./helpers";
 
 describe("map action badges", () => {
+  it("marks the player's queued training while it lasts and keeps rival orders private", () => {
+    const game = battlefield();
+    const city = game.cities[0];
+    const result = applyAction(game, { type: "TRAIN", unitType: "archer", cityId: city.id });
+    expect(result.ok).toBe(true);
+    const after = result.state;
+    after.cities[1].training = { unitType: "knight", readyRound: game.round + 3 };
+    expect(getMapBadges(after)).toMatchObject([{ action: "training", cityName: city.name }]);
+    after.currentPlayer = 1;
+    expect(getMapBadges(after, false)).toMatchObject([{ action: "training", cityName: city.name }]);
+    after.currentPlayer = 0;
+    after.players[0].visible = [];
+    expect(getMapBadges(after)).toEqual([]);
+    after.players[0].visible = game.players[0].visible;
+    const canceled = applyAction(after, { type: "CANCEL_TRAINING", cityId: city.id });
+    expect(canceled.ok).toBe(true);
+    expect(getMapBadges(canceled.state)).toEqual([]);
+  });
+
+  it("keeps the clock clear of both a city upgrade and an eligible veteran", () => {
+    const game = battlefield();
+    const city = game.cities[0];
+    city.training = { unitType: "archer", readyRound: game.round + 2 };
+    city.pendingRewardLevels = [2];
+    addUnit(game, 0, "warrior", city.x, city.y).kills = 3;
+    const [upgrade, promote, training] = getMapBadges(game);
+    expect([upgrade.action, promote.action, training.action]).toEqual(["upgrade", "promote", "training"]);
+    expect(training.position).toEqual(promote.position);
+    expect(training.column! - promote.column!).toBeGreaterThan(1.25);
+  });
+
   it("opens the city reward even when a garrison is on the same tile", () => {
     const game = battlefield();
     const capital = game.cities[0];

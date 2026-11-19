@@ -4,11 +4,12 @@ import { terrainInlay } from "../../src/scene/TerrainInlays";
 import { Mesh, MeshBasicMaterial, Raycaster, Vector3 } from "three";
 import { tileCap, tilePlinth } from "../../src/scene/BoardFrame";
 import { developedLandscape, grove, mountain, resourceModel, siteLandscape } from "../../src/scene/landscape";
-import { getTerrainAssets } from "../../src/nations/models";
+import { getTerrainAssets, representativeTerrain } from "../../src/nations/models";
 import { DEFAULT_TERRAIN_VARIANT, NATIONS } from "../../src/nations/registry";
 
 it("resolves each configured tile variant to a complete terrain asset pack", () => {
   const imperial = getTerrainAssets(DEFAULT_TERRAIN_VARIANT);
+  expect(representativeTerrain).toBe(imperial);
   expect(imperial.details.forest).toBe(grove);
   expect(imperial.details.mountain).toBe(mountain);
   expect(imperial.developed).toBe(developedLandscape);
@@ -53,19 +54,18 @@ describe("carved terrain tiles", () => {
   });
 
   it.each([["grove",grove], ["mountain",mountain]] as const)(
-    "keeps all %s silhouettes within the tile and the distant variant cheaper", (_, sculpt) => {
-      for (let variant = 0; variant < 6; variant++) {
-        const detailed = sculpt(variant,false), distant = sculpt(variant,true);
-        for (const model of [detailed, distant]) {
-          model.computeBoundingBox();
-          const { min, max } = model.boundingBox!;
-          expect(Math.max(-min.x, -min.z, max.x, max.z)).toBeLessThan(0.475);
-        }
-        expect(distant.index!.count).toBeLessThan(detailed.index!.count / 2);
-        expect(distant.boundingBox!.max.y).toBeCloseTo(detailed.boundingBox!.max.y, 1);
-        detailed.dispose();
-        distant.dispose();
+    "keeps the %s silhouette low and within the tile at both levels of detail", (kind, sculpt) => {
+      const detailed = sculpt(false), distant = sculpt(true);
+      for (const model of [detailed, distant]) {
+        model.computeBoundingBox();
+        const { min, max } = model.boundingBox!;
+        expect(Math.max(-min.x, -min.z, max.x, max.z)).toBeLessThan(0.475);
+        expect(max.y).toBeLessThan(kind === "grove" ? 0.53 : 0.61);
       }
+      expect(distant.index!.count).toBeLessThan(detailed.index!.count / 2);
+      expect(distant.boundingBox!.max.y).toBeCloseTo(detailed.boundingBox!.max.y, 1);
+      detailed.dispose();
+      distant.dispose();
     },
   );
 
@@ -79,7 +79,7 @@ describe("carved terrain tiles", () => {
     const ray = new Raycaster(new Vector3(0.07, 1, 0.18), new Vector3(0, -1, 0));
     for (const kind of ["forestEdge", "quarry", "ridge"] as const) {
       for (const simple of [false, true]) {
-        const mesh = new Mesh(developedLandscape(kind, 2, simple), new MeshBasicMaterial());
+        const mesh = new Mesh(developedLandscape(kind, simple), new MeshBasicMaterial());
         expect(ray.intersectObject(mesh, false)).toHaveLength(0);
         mesh.geometry.computeBoundingBox();
         expect(mesh.geometry.boundingBox!.min.z).toBeGreaterThan(-0.5);
@@ -89,21 +89,48 @@ describe("carved terrain tiles", () => {
       }
     }
   });
-  it("keeps the basic fruit tree smaller than crops and the navigation resource", () => {
+  it("keeps the fruit clusters clear of the tile center and smaller than wheat and starfish", () => {
     const models = (["fruit","crop","starfish"] as const).map(kind => resourceModel(kind));
     const widths = models.map(model => {
       model.computeBoundingBox();
       return model.boundingBox!.getSize(new Vector3()).x;
     });
-    expect(widths[0]).toBeLessThan(0.34);
+    expect(widths[0]).toBeLessThan(0.48);
     expect(widths[1]).toBeGreaterThan(widths[0]);
     expect(widths[2]).toBeGreaterThan(widths[1]);
+    const material = new MeshBasicMaterial();
+    const orchard = new Mesh(models[0], material);
+    const ray = new Raycaster(), down = new Vector3(0, -1, 0);
+    for (const x of [-0.075, 0, 0.075]) for (const z of [-0.075, 0, 0.075]) {
+      ray.set(new Vector3(x, 1, z), down);
+      expect(ray.intersectObject(orchard)).toHaveLength(0);
+    }
+    material.dispose();
     models.forEach(model => model.dispose());
   });
+
+  it.each([["fruit", 0.19], ["crop", 0.32], ["ore", 0.18], ["animal", 0.27], ["fish", 0.145], ["starfish", 0.09]] as const)(
+    "keeps the %s cluster in its low local footprint", (kind, height) => {
+      const geometry = resourceModel(kind);
+      geometry.computeBoundingBox();
+      const { min, max } = geometry.boundingBox!;
+      expect(max.y).toBeLessThan(height);
+      expect(Math.max(-min.x, -min.z, max.x, max.z)).toBeLessThan(0.475);
+      geometry.dispose();
+    },
+  );
 });
 
 
 describe("plain and sea ornament", () => {
+  it.each(["plain", "shallow", "deep"] as const)("keeps the same %s inlay across coordinates and terrain packs", terrain => {
+    const game = battlefield();
+    const tile = game.tiles.find(t => terrainInlay(game, t))!;
+    const clear = { ...tile, terrain };
+    expect(terrainInlay(game, clear)).toBeTruthy();
+    expect(terrainInlay(game, { ...clear, x: 6, y: 5, terrainVariant: "nosta" })).toEqual(terrainInlay(game, clear));
+  });
+
   it.each([["plain","crop","organization"], ["deep","starfish","fishing"]] as const)(
     "preserves the same %s marks over a resource until it can be seen", (terrain, resource, reveal) => {
       const game = battlefield();

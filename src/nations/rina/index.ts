@@ -7,6 +7,7 @@ export const nation = {
   english: "Rina",
   capital: "千华",
   color: "#4f9185",
+  boardColor: "#4be0af",
   lightColor: "#b4d6c6",
   description: "东方山海间的青绿文明。",
   images: { emblem },

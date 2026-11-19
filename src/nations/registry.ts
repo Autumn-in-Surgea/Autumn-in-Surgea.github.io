@@ -4,12 +4,14 @@ import { nation as determia } from "./determia";
 import { nation as nosta } from "./nosta";
 import { nation as ida } from "./ida";
 import { nation as rina } from "./rina";
-import { DEFAULT_TERRAIN_VARIANT, type NationPack } from "./types";
+import { DEFAULT_TERRAIN_VARIANT, type NationId, type NationPack } from "./types";
 
-const registered = [imperia, determia, nosta, ida, rina] as const;
-export type NationId = typeof registered[number]["id"];
-type RegisteredNation = NationPack & { id: NationId; terrainVariant: NationId };
-export const NATIONS: readonly RegisteredNation[] = registered;
+type RegisteredNation = NationPack & { terrainVariant: NationId };
+const registered = { imperia, determia, nosta, ida, rina } satisfies {
+  [N in NationId]: RegisteredNation & { id: N };
+};
+export type { NationId } from "./types";
+export const NATIONS: readonly RegisteredNation[] = Object.values(registered);
 
 export { NATIONS as CIVILIZATIONS };
 export { DEFAULT_TERRAIN_VARIANT };

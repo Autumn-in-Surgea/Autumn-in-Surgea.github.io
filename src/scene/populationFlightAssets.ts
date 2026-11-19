@@ -1,6 +1,6 @@
 import type { BufferGeometry } from "three";
-import type { PopulationSource, Resource, Tile } from "../game/types";
-import { getTerrainAssets } from "../nations/models";
+import type { PopulationSource, Resource } from "../game/types";
+import { representativeTerrain } from "../nations/models";
 import { mineOreSculpture } from "../nations/_shared/danubian/buildings";
 import { brass, copper, ink, ivory, masonry, terracotta } from "./architecturalPalette";
 import { Miniature } from "./miniature";
@@ -41,7 +41,7 @@ function token(kind: string) {
   return m.finish();
 }
 
-export function populationFlightAsset(source: PopulationSource, tile: Tile): BufferGeometry {
+export function populationFlightAsset(source: PopulationSource): BufferGeometry {
   let resource: Resource | undefined;
   let kind: string = source.kind;
   if (source.kind === "resource") resource = source.resource;
@@ -53,10 +53,10 @@ export function populationFlightAsset(source: PopulationSource, tile: Tile): Buf
     else if (timberWorks.has(source.building)) kind = "timber";
     else if (source.building === "port" || source.building === "market") kind = "cargo";
   }
-  const key = resource ? `${tile.terrainVariant}:${resource}` : kind;
+  const key = resource ?? kind;
   let sculpt = geometry.get(key);
   if (!sculpt) {
-    sculpt = resource ? getTerrainAssets(tile.terrainVariant).resource(resource)
+    sculpt = resource ? representativeTerrain.resource(resource)
       : kind === "mineOre" ? mineOreSculpture() : token(kind);
     sculpt.computeBoundingBox();
     geometry.set(key, sculpt);

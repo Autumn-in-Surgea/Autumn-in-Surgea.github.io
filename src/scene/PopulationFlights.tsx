@@ -35,7 +35,7 @@ function makeCue(
   const source = game.tiles[gain.source.tileId], city = game.tiles[gain.cityTileId];
   const level = game.cities.find(item => item.id === gain.cityId)?.level ?? 1;
   const { launch, flight, distance } = flightTiming(game, gain, index);
-  const geometry = populationFlightAsset(gain.source, source);
+  const geometry = populationFlightAsset(gain.source);
   const center = geometry.boundingBox!.getCenter(new Vector3());
   const from = new Vector3(
     source.x - offset + center.x,

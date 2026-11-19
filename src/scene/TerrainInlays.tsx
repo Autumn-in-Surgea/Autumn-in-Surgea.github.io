@@ -2,7 +2,7 @@ import { useLayoutEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import type { GameState, Tile } from "../game/types";
 import { getVisibleResource } from "../game/rules/engine";
-import { getTerrainAssets } from "../nations/models";
+import { representativeTerrain } from "../nations/models";
 import { terrainCapOffset, terrainHeight } from "./terrainElevation";
 import { foreignTerritoryBrightness, isForeignTerritory } from "./territoryMaterials";
 
@@ -14,16 +14,11 @@ const material = new THREE.MeshStandardMaterial({
 export function terrainInlay(game: GameState, tile: Tile) {
   if (!(tile.terrain === "plain" || tile.terrain === "shallow" || tile.terrain === "deep") ||
     tile.cityId || tile.building || tile.road || tile.lighthouse || tile.ruin || getVisibleResource(game, tile, 0)) return null;
-  // Coordinate-only selection keeps the cuts fixed through zoom, saves and research.
-  let hash = Math.imul(tile.x+1, 0x9e3779b1) ^ Math.imul(tile.y+1, 0x85ebca6b);
-  hash = Math.imul(hash ^ (hash >>> 16), 0x85ebca6b);
-  hash = (hash ^ (hash >>> 13)) >>> 0;
-  if (hash % 100 >= (tile.terrain === "plain" ? 40 : 32)) return null;
   return {
     terrain: tile.terrain,
-    x: (((hash >>> 8) & 255) / 255 - 0.5) * 0.43,
-    z: (((hash >>> 16) & 255) / 255 - 0.5) * 0.41,
-    turn: (tile.terrain === "plain" ? 0.3 : 0.72) + (((hash >>> 24) / 255) - 0.5) * 0.42,
+    x: -0.12,
+    z: tile.terrain === "plain" ? -0.14 : 0.055,
+    turn: tile.terrain === "plain" ? 0.3 : 0.72,
   };
 }
 
@@ -56,7 +51,7 @@ function InlayBatch({ geometry, placements, offset }: {
   return <instancedMesh name={name} ref={ref} args={[geometry, material, capacity]} raycast={ignoreRaycast} receiveShadow />;
 }
 
-/** One near-field mesh per distinct inlay geometry, even when nations share it. */
+/** One near-field mesh per distinct inlay geometry. */
 export function TerrainInlays({ game, tileIds, visible }: {
   game: GameState; tileIds: readonly number[]; visible: ReadonlySet<number>;
 }) {
@@ -66,7 +61,7 @@ export function TerrainInlays({ game, tileIds, visible }: {
       if (!visible.has(id)) continue;
       const tile = game.tiles[id], mark = terrainInlay(game, tile);
       if (!mark) continue;
-      const asset = getTerrainAssets(tile.terrainVariant).inlays[mark.terrain];
+      const asset = representativeTerrain.inlays[mark.terrain];
       if (!asset) continue;
       const placement = { ...mark, tile, color: asset.color };
       const list = byGeometry.get(asset.geometry);

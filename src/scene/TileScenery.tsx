@@ -3,9 +3,7 @@ import { useFrame } from "@react-three/fiber";
 import { Box3, Group, Vector3 } from "three";
 import type { City, GameState, Tile } from "../game/types";
 import { getVisibleResource, isTerritoryResourceAvailable } from "../game/rules/engine";
-import { factionForOwner } from "../nations/registry";
 import type { BuildingVisualTier } from "./buildingVisualTier";
-import { colorForOwner } from "./factionModels";
 import { BuildingModel, CityModel, LighthouseModel, Resources, RuinModel, TerrainDetails } from "./worldModels";
 import { siteLandscape } from "./landscape";
 import { RoadInlay } from "./RoadInlay";
@@ -14,7 +12,7 @@ import { BridgeSpan } from "./BridgeSpan";
 import { ForeignTerritory, isForeignTerritory, StructureClipHeight } from "./territoryMaterials";
 import { usePlaybackClock } from "./playbackClock";
 import { exposedHeight } from "./structureMotion";
-import { hasRoadModel, type ModelExchange, type StructureChange } from "../store/structurePlayback";
+import { hasRoadModel, roadPlaybackRate, type ModelExchange, type StructureChange } from "../store/structurePlayback";
 
 interface ModelProps {
   game: GameState;
@@ -28,12 +26,10 @@ interface ModelProps {
 }
 
 function Scenery({ game, tile, city, tier, simple, checkResourceAvailability, showResourceHints, knownTiles, includeLandscape = true }: ModelProps & { includeLandscape?: boolean }) {
-  const { modelSet } = factionForOwner(game.players, tile.owner);
   if (city) return <CityModel city={city} players={game.players} seed={game.options.seed} terrainVariant={tile.terrainVariant} />;
   if (tile.building) {
     const stage = tier as BuildingVisualTier;
-    const building = <BuildingModel type={tile.building} modelSet={modelSet} seed={game.options.seed} tile={tile}
-      tier={stage} color={colorForOwner(game.players, tile.owner)} />;
+    const building = <BuildingModel type={tile.building} tier={stage} />;
     if (tile.building === "bridge") return <BridgeSpan tile={tile} tiles={game.tiles}
       size={game.options.size} explored={knownTiles} tier={stage}>{building}</BridgeSpan>;
     if (tile.terrain === "shallow" || tile.terrain === "deep")
@@ -49,7 +45,7 @@ function Scenery({ game, tile, city, tier, simple, checkResourceAvailability, sh
     {resource && (!simple || available) && (
       <Resources tile={tile} highlight={available && showResourceHints} />
     )}
-    {tile.ruin && <RuinModel terrainVariant={tile.terrainVariant} />}
+    {tile.ruin && <RuinModel />}
   </>;
 }
 
@@ -57,17 +53,18 @@ interface ExchangeProps {
   phase: ModelExchange;
   issuedAt: number;
   surfaceY: number;
+  playbackRate?: number;
   previous: ReactNode;
   next: ReactNode;
 }
 
-function Exchange({ phase, issuedAt, surfaceY, previous, next }: ExchangeProps) {
+function Exchange({ phase, issuedAt, surfaceY, playbackRate = 1, previous, next }: ExchangeProps) {
   const oldModel = useRef<Group>(null), newModel = useRef<Group>(null);
   const heights = useRef({ previous: 0, next: 0 });
   const clock = usePlaybackClock();
 
   function place() {
-    const elapsed = (clock.time - issuedAt) / 1000;
+    const elapsed = (clock.time - issuedAt) * playbackRate / 1000;
     function setLayer(model: Group | null, incoming: boolean, height: number) {
       if (!model) return;
       const fraction = exposedHeight(phase, incoming, elapsed);
@@ -89,7 +86,7 @@ function Exchange({ phase, issuedAt, surfaceY, previous, next }: ExchangeProps) 
     }
     heights.current = { previous: measure(oldModel.current), next: measure(newModel.current) };
     place();
-  }, [phase, issuedAt, previous, next]);
+  }, [phase, issuedAt, playbackRate, previous, next]);
   useFrame(place, -1);
 
   return <StructureClipHeight.Provider value={surfaceY}>
@@ -109,20 +106,19 @@ export function TileScenery(props: ModelProps & {
   const road = hasRoadModel(tile) && <RoadInlay tile={tile} tiles={game.tiles}
     size={game.options.size} explored={knownTiles} tier={tier as BuildingVisualTier} />;
   const scene = <Scenery {...props} checkResourceAvailability={visible && props.checkResourceAvailability} />;
-  const lighthouse = tile.lighthouse && <LighthouseModel terrainVariant={tile.terrainVariant} />;
+  const lighthouse = tile.lighthouse && <LighthouseModel />;
   if (!change || reducedMotion) return <>{road}{scene}{lighthouse}</>;
 
   const { previousGame, previousTier, previousCity, previousExplored } = change;
   const oldTile = previousGame.tiles[tile.id];
   const site = siteLandscape(tile);
-  const fixedLandscape = !!change.scenery && !!site && site === siteLandscape(oldTile)
-    && tile.terrainVariant === oldTile.terrainVariant;
+  const fixedLandscape = !!change.scenery && !!site && site === siteLandscape(oldTile);
   const oldOwnership = isForeignTerritory(oldTile.owner);
   const start = issuedAt + change.delay * 1000;
   return <>
     {lighthouse}
     {fixedLandscape && <TerrainDetails tile={tile} simple={props.simple} />}
-    {change.road ? <Exchange phase={change.road} issuedAt={start} surfaceY={surfaceY}
+    {change.road ? <Exchange phase={change.road} issuedAt={start} surfaceY={surfaceY} playbackRate={roadPlaybackRate}
       previous={<ForeignTerritory.Provider value={oldOwnership}>
         <RoadInlay tile={oldTile} tiles={previousGame.tiles} size={game.options.size}
           explored={previousExplored} tier={previousTier} />

@@ -7,15 +7,17 @@ import { deserializeGame, serializeGame } from "../../src/store/save";
 import { addUnit, battlefield, newGame } from "./helpers";
 
 describe("owner-selected faction assets", () => {
-  it("resolves each story owner after selection and save restore, sharing this edition's sculptures", () => {
-    const currentWarrior = MODEL_SETS.danubian.unit("warrior");
+  it("restores each story owner and its own unit sculptures when loading a save", () => {
+    const warriors = new Set(CIVILIZATIONS.map(nation => MODEL_SETS[nation.modelSet].unit("warrior")));
+    expect(warriors.size).toBe(CIVILIZATIONS.length);
     for (const selected of CIVILIZATIONS) {
       const state = deserializeGame(serializeGame(newGame({ scenario: "story", civilization: selected.id })));
       expect(factionForOwner(state.players, 0)).toBe(selected);
       for (const unit of state.units) {
         const pack = factionForOwner(state.players, unit.owner);
         expect(pack.id).toBe(state.players[unit.owner].civilization);
-        expect(MODEL_SETS[pack.modelSet].unit("warrior")).toBe(currentWarrior);
+        const expected = CIVILIZATIONS.find(nation => nation.id === state.players[unit.owner].civilization)!;
+        expect(MODEL_SETS[pack.modelSet].unit(unit.type)).toBe(MODEL_SETS[expected.modelSet].unit(unit.type));
       }
     }
   });

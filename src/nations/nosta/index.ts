@@ -7,6 +7,7 @@ export const nation = {
   english: "Nosta",
   capital: "丰化",
   color: "#b99a48",
+  boardColor: "#f3d449",
   lightColor: "#e5d6a4",
   description: "北方枯金的自治国度。",
   images: { emblem },

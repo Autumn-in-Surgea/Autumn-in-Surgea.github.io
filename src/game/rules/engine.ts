@@ -1122,7 +1122,7 @@ export function validateAction(s: GameState, a: Action): string | null {
     if (a.type === "DISBAND")
       return hasTech(p, "freeSpirit") && !u.moved && !u.attacked
         ? null
-        : "需要自由精神科技与完整行动。";
+        : "需要军籍管理科技与完整行动。";
     if (a.type === "EXAMINE")
       return tileAt(s, u).ruin && !u.moved && !u.attacked
         ? null
@@ -1151,7 +1151,7 @@ export function validateAction(s: GameState, a: Action): string | null {
         distance(u, target) <= 1 &&
         isUnitVisible(s, target, u.owner)
         ? null
-        : "心灵术士需要完整行动与相邻可见敌军。";
+        : "战地军医需要完整行动与相邻可见敌军。";
     }
     if (a.type === "INFILTRATE") {
       const c = s.cities.find((c) => c.id === a.cityId);
@@ -1274,7 +1274,7 @@ export function validateAction(s: GameState, a: Action): string | null {
           t.building &&
           !BUILDINGS[t.building].monument
           ? null
-          : "需要骑士精神及可拆除建筑。";
+          : "需要重骑战术科技及可拆除建筑。";
       if (t.building || t.ruin) return "请先清理该地块的建筑或遗迹。";
       if (a.type === "CLEAR_FOREST")
         return t.terrain === "forest" && hasTech(p, "forestry")
@@ -1313,14 +1313,14 @@ export function validateAction(s: GameState, a: Action): string | null {
           (hasTech(p, "strategy") || p.peaceOffers.includes(other.id)) &&
           !other.peaceOffers.includes(p.id)
           ? null
-          : "需要战略科技，且不能重复提议。";
+          : "需要筑垒战术科技，且不能重复提议。";
       if (a.type === "BREAK_PEACE")
         return isAtPeace(s, p.id, other.id) ? null : "当前没有和平协议。";
       return hasTech(p, "diplomacy") &&
         !p.embassies.includes(other.id) &&
         s.cities.some((c) => c.owner === other.id && c.capitalOf === other.id)
         ? cashRestriction(s, p, getEmbassyCost(s, p.id))
-        : "大使馆需要外交，且每势力只能一处。";
+        : "大使馆需要外交情报科技，且每势力只能一处。";
     }
     case "SET_OVERSPEND":
       return s.options.quickMode === false && typeof a.enabled === "boolean" ? null : "此对局没有维护费预留。";

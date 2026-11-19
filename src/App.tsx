@@ -12,6 +12,7 @@ import {
 } from "./game";
 import type { Action } from "./game/types";
 import GameScene from "./scene/GameScene";
+import type { BadgeAction } from "./scene/ActionBadges";
 import { useGameStore } from "./store/gameStore";
 import { MainMenu, About } from "./ui/Menu";
 import { GameHUD } from "./ui/GameHUD";
@@ -129,11 +130,11 @@ export default function App() {
     : undefined;
   const openActionTile = useCallback((
     tileId: number,
-    kind: "upgrade" | "capture",
+    kind: BadgeAction,
     unitId?: string,
   ) => {
     if (busy) return;
-    select(tileId, kind === "capture" ? unitId : null);
+    select(tileId, kind === "upgrade" ? null : unitId);
     setAimedOrder(null);
     setSelectionRequest((request) => request + 1);
   }, [busy, select]);

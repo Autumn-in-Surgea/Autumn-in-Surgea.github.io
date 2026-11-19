@@ -1,29 +1,41 @@
 import { useRef } from "react";
 import type { RefObject } from "react";
 import { useFrame } from "@react-three/fiber";
-import { ChevronsUp, Flag } from "lucide-react";
+import { Award, ChevronsUp, Flag } from "lucide-react";
 import { Matrix4, Vector3 } from "three";
 import { validateAction } from "../game/rules/engine";
-import type { GameState } from "../game/types";
+import { UNITS } from "../game/data/config";
+import type { GameState, Unit } from "../game/types";
 import { terrainHeight } from "./models";
 import { factionForOwner } from "../nations/registry";
 import { MODEL_SETS } from "./factionModels";
 import "./actionBadges.css";
 
-export type BadgeAction = "upgrade" | "capture";
+export type BadgeAction = "upgrade" | "capture" | "promote";
 export type OpenBadge = (
   tileId: number,
   action: BadgeAction,
   unitId?: string,
 ) => void;
 
-export interface MapBadge {
-  action: BadgeAction;
+export type MapBadge = {
   tileId: number;
-  cityName: string;
-  unitId?: string;
   position: [number, number, number];
-}
+  column?: -1 | 1;
+} & (
+  | { action: "upgrade"; cityName: string; unitId?: undefined }
+  | { action: "capture"; cityName: string; unitId: string }
+  | { action: "promote"; unitName: string; unitId: string }
+);
+
+const badgeKey = ({ tileId, action }: MapBadge) => `${tileId}:${action}`;
+const compactZoom = 27;
+
+const badgeStyles = {
+  upgrade: { icon: ChevronsUp, title: "升级" },
+  capture: { icon: Flag, title: "占领" },
+  promote: { icon: Award, title: "晋升" },
+} as const;
 
 export function getMapBadges(game: GameState): MapBadge[] {
   if (
@@ -40,7 +52,22 @@ export function getMapBadges(game: GameState): MapBadge[] {
       .filter((unit) => unit.owner === 0)
       .map((unit) => [unit.y * size + unit.x, unit]),
   );
+  const cityBadges = new Map<number, MapBadge>();
   const badges: MapBadge[] = [];
+  const highRises = new Set<number>();
+
+  function unitPosition(tileId: number, unit: Unit): MapBadge["position"] {
+    const tile = game.tiles[tileId];
+    const garrisonShift = tile.cityId ? 0.24 : 0;
+    const { modelSet } = factionForOwner(game.players, unit.owner);
+    // Leave the health label clear, including when the unit stands in front of a city.
+    return [
+      unit.x - offset + garrisonShift,
+      terrainHeight(tile) + Math.max(MODEL_SETS[modelSet].labelHeight(unit.type) + 0.34, highRises.has(tileId) ? 1.69 : 0),
+      unit.y - offset + garrisonShift,
+    ];
+  }
+
   for (const city of game.cities) {
     const tileId = city.y * size + city.x;
     if (!visible.has(tileId)) continue;
@@ -49,8 +76,9 @@ export function getMapBadges(game: GameState): MapBadge[] {
     const z = city.y - offset;
     const unit = garrisons.get(tileId);
     const highRise = city.owner !== null && city.level >= 6;
+    if (highRise) highRises.add(tileId);
     if (city.owner === 0 && city.pendingRewardLevels.length > 0) {
-      badges.push({
+      cityBadges.set(tileId, {
         action: "upgrade",
         tileId,
         cityName: city.name,
@@ -61,27 +89,39 @@ export function getMapBadges(game: GameState): MapBadge[] {
       unit &&
       !validateAction(game, { type: "CAPTURE", unitId: unit.id })
     ) {
-      const { modelSet } = factionForOwner(game.players, unit.owner);
-      badges.push({
+      cityBadges.set(tileId, {
         action: "capture",
         tileId,
         cityName: city.name,
         unitId: unit.id,
-        // A garrison stands forward of the city. Leave its HP number visible below the flag.
-        position: [
-          x + 0.24,
-          floor + Math.max(MODEL_SETS[modelSet].labelHeight(unit.type) + 0.34, highRise ? 1.69 : 0),
-          z + 0.24,
-        ],
+        position: unitPosition(tileId, unit),
       });
     }
   }
-  return badges;
+  for (const [tileId, unit] of garrisons) {
+    if (unit.kills < 3 || unit.veteran || !visible.has(tileId) ||
+      validateAction(game, { type: "PROMOTE", unitId: unit.id })) continue;
+    const position = unitPosition(tileId, unit);
+    const cityBadge = cityBadges.get(tileId);
+    if (cityBadge) {
+      position[0] = cityBadge.position[0];
+      position[1] = Math.max(position[1], cityBadge.position[1]);
+      position[2] = cityBadge.position[2];
+      cityBadge.position = position;
+      cityBadge.column = -1;
+    }
+    badges.push({
+      action: "promote", tileId, unitId: unit.id,
+      unitName: UNITS[unit.type].name,
+      position, column: cityBadge ? 1 : undefined,
+    });
+  }
+  return [...cityBadges.values(), ...badges];
 }
 
 export interface MapBadgesProps {
   badges: MapBadge[];
-  badgeButtons: RefObject<Map<number, HTMLButtonElement>>;
+  badgeButtons: RefObject<Map<string, HTMLButtonElement>>;
 }
 
 export function MapBadgeButtons({
@@ -95,29 +135,29 @@ export function MapBadgeButtons({
       className="map-action-layer"
       data-reduced-motion={reducedMotion || undefined}
     >
-      {badges.map(({ tileId, action, unitId, cityName }) => {
-        const upgrade = action === "upgrade";
-        const Icon = upgrade ? ChevronsUp : Flag;
+      {badges.map((badge) => {
+        const { tileId, action, unitId } = badge;
+        const key = badgeKey(badge);
+        const { icon: Icon, title } = badgeStyles[action];
+        const label = badge.action === "upgrade" ? `选择${badge.cityName}的升级奖励`
+          : badge.action === "capture" ? `查看占领${badge.cityName}的单位`
+          : `查看可晋升老兵的${badge.unitName}`;
         return (
           <button
-            key={tileId}
+            key={key}
             type="button"
             className="map-action-badge"
             data-action={action}
-            aria-label={
-              upgrade
-                ? `选择${cityName}的升级奖励`
-                : `查看占领${cityName}的单位`
-            }
+            aria-label={label}
             ref={(button) => {
-              if (button) badgeButtons.current.set(tileId, button);
-              else badgeButtons.current.delete(tileId);
+              if (button) badgeButtons.current.set(key, button);
+              else badgeButtons.current.delete(key);
             }}
             onClick={() => onOpen(tileId, action, unitId)}
           >
             <span className="map-action-tag">
               <Icon aria-hidden="true" size={16} strokeWidth={2.5} />
-              <span>{upgrade ? "升级" : "占领"}</span>
+              <span>{title}</span>
             </span>
           </button>
         );
@@ -132,6 +172,7 @@ export function projectMapBadge(
   viewProjection: Matrix4,
   size: { width: number; height: number },
   screen: Vector3,
+  compact = false,
 ): boolean {
   if (!renderedIds.has(badge.tileId)) return false;
   screen.fromArray(badge.position).applyMatrix4(viewProjection);
@@ -141,7 +182,7 @@ export function projectMapBadge(
     Math.abs(screen.z) > 1
   )
     return false;
-  screen.x = ((screen.x + 1) * size.width) / 2;
+  screen.x = ((screen.x + 1) * size.width) / 2 + (badge.column ?? 0) * (compact ? 18 : 36);
   screen.y = ((1 - screen.y) * size.height) / 2;
   return true;
 }
@@ -185,8 +226,9 @@ export function MapBadgePositions({
       width: size.width,
       height: size.height,
     });
+    const compact = camera.zoom < compactZoom;
     for (const badge of badges) {
-      const button = badgeButtons.current.get(badge.tileId);
+      const button = badgeButtons.current.get(badgeKey(badge));
       if (!button) {
         view.badges = null;
         continue;
@@ -197,12 +239,13 @@ export function MapBadgePositions({
         matrix.current,
         size,
         point.current,
+        compact,
       );
       button.style.visibility = inView ? "visible" : "hidden";
       if (!inView) continue;
       button.style.left = `${point.current.x.toFixed(1)}px`;
       button.style.top = `${point.current.y.toFixed(1)}px`;
-      button.toggleAttribute("data-compact", camera.zoom < 27);
+      button.toggleAttribute("data-compact", compact);
     }
   });
   return null;

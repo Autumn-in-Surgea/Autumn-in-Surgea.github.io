@@ -225,6 +225,7 @@ export interface GameEvent {
     | "death"
     | "capture"
     | "upgrade"
+    | "promotion"
     | "research"
     | "turn"
     | "info";

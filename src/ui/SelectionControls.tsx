@@ -5,7 +5,8 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
-  BUILDINGS, NAVAL_UPGRADES, UNITS, canEditNavalUpgrade, canEditTraining, getCityIncome, getCityUnitCount, getMovement,
+  BUILDINGS, NAVAL_UPGRADES, UNITS, canCancelNavalUpgrade, canCancelTraining, canEditNavalUpgrade, canEditTraining,
+  getCityIncome, getCityUnitCount, getMovement,
   getNavalUpgradeOrderCost, getNavalUpgradeRefund, getTrainingOrderCost, getTrainingRefund,
   getTrainingRounds, getUnitTrainingRounds, getUnitUpkeep,
   getUpgradeRewards, getVisibleResource, hasTech, isTerritoryResourceHarvestable, isUnitVisible,
@@ -213,12 +214,12 @@ function orderTiming(rounds: number, cost: number) {
 
 function navalCommands(game: GameState, unit: Unit): Command[] {
   const pending = unit.navalTraining;
-  if (pending && !canEditNavalUpgrade(game, unit)) return [];
   const unitId = unit.id;
-  const commands: Command[] = pending ? [{
+  const commands: Command[] = pending && canCancelNavalUpgrade(game, unit) ? [{
     action: { type: "CANCEL_NAVAL_UPGRADE", unitId }, label: "取消改装", icon: RotateCcw,
-    secondaryText: `返还 ${getNavalUpgradeRefund(unit)} 星`,
+    secondaryText: `返还 ${getNavalUpgradeRefund(game, unit)} 星`,
   }] : [];
+  if (pending && !canEditNavalUpgrade(game, unit)) return commands;
   for (const unitType of NAVAL_UPGRADES) {
     const def = UNITS[unitType];
     if (pending?.unitType === unitType || (def.tech && !hasTech(game.players[0], def.tech))) continue;
@@ -244,8 +245,7 @@ function cityCommands(game: GameState, city: City) {
     variant: "accent",
   }));
   const training = city.training;
-  if (training) {
-    if (!canEditTraining(game, city)) return commands;
+  if (training && canCancelTraining(game, city)) {
     commands.push({
       action: { type: "CANCEL_TRAINING", cityId: city.id },
       label: "取消训练",
@@ -253,6 +253,7 @@ function cityCommands(game: GameState, city: City) {
       secondaryText: `返还 ${getTrainingRefund(game, city)} 星`,
     });
   }
+  if (training && !canEditTraining(game, city)) return commands;
   for (const def of Object.values(UNITS)) {
     if (def.id === training?.unitType || !def.trainable || (def.tech && !hasTech(player, def.tech))) continue;
     const rounds = getTrainingRounds(game, city, def.id);

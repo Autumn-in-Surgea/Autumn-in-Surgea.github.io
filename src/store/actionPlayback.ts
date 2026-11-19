@@ -3,12 +3,15 @@ import type { Action, GameEvent, GameState } from "../game/types";
 
 import type { StructureChange } from "./structurePlayback";
 
-export interface PlaybackStep {
+interface PlaybackStepBase {
   id: number;
-  focusTile: number | null;
   structures: ReadonlyMap<number, StructureChange>;
   structureDuration: number;
 }
+export type PlaybackStep = PlaybackStepBase & (
+  | { focusTile: null }
+  | { focusTile: number; previousGame: GameState }
+);
 
 /** Only observed positions can influence the camera or presentation time. */
 export function observedActionTile(

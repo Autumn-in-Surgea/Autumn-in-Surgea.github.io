@@ -85,11 +85,12 @@ function CameraRig({
   selectedTile,
   playbackStep,
   reducedMotion,
+  onReplayFocus,
   onDrag,
 }: Pick<
   GameSceneProps,
   "game" | "resetKey" | "preview" | "selectedTile" | "playbackStep" | "reducedMotion"
-> & { onDrag: () => void }) {
+> & { onReplayFocus: (id: number) => void; onDrag: () => void }) {
   const { camera, gl, size } = useThree();
   const cameraControls = useRef<OrbitControls | null>(null);
   const seed = game.options.seed;
@@ -101,8 +102,14 @@ function CameraRig({
     to: THREE.Vector3;
     elapsed: number;
     duration: number;
+    replayId?: number;
   } | null>(null);
   const panStep = useRef(new THREE.Vector3());
+  const finishPan = useCallback(() => {
+    const id = automaticPan.current?.replayId;
+    automaticPan.current = null;
+    if (id !== undefined) onReplayFocus(id);
+  }, [onReplayFocus]);
   useLayoutEffect(() => {
     // Binding in render leaks listeners when React discards a render.
     const controls = new OrbitControls(camera);
@@ -124,9 +131,6 @@ function CameraRig({
     controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN };
     controls.minZoom = Math.max(5, 180 / n);
     controls.maxZoom = 150;
-    const cancelAutomaticPan = () => {
-      automaticPan.current = null;
-    };
     const choosePanAction = (event: PointerEvent) => {
       if (event.pointerType === "touch") return;
       // OrbitControls swaps the rotate and pan bindings when a modifier is held.
@@ -138,16 +142,16 @@ function CameraRig({
     const canvas = gl.domElement;
     const disconnectGestures = bindBoardGestures(canvas, onDrag);
     canvas.addEventListener("pointerdown", choosePanAction, true);
-    controls.addEventListener("start", cancelAutomaticPan);
+    controls.addEventListener("start", finishPan);
     controls.connect(canvas);
     return () => {
       canvas.removeEventListener("pointerdown", choosePanAction, true);
       disconnectGestures();
-      controls.removeEventListener("start", cancelAutomaticPan);
+      controls.removeEventListener("start", finishPan);
       controls.dispose();
       cameraControls.current = null;
     };
-  }, [camera, gl, n, onDrag]);
+  }, [camera, gl, n, onDrag, finishPan]);
   useLayoutEffect(() => {
     const controls = cameraControls.current;
     if (!controls) return;
@@ -169,22 +173,35 @@ function CameraRig({
   useEffect(() => {
     camera.updateProjectionMatrix();
   }, [size, camera]);
+  const replayTile = playbackStep?.focusTile ?? null;
+  const replayId = playbackStep?.id;
   useLayoutEffect(() => {
-    const tileId = playbackStep?.focusTile;
+    if (replayTile === null || replayId === undefined) return;
+    automaticPan.current = null;
     const controls = cameraControls.current;
-    if (tileId == null || !controls) return;
+    if (!controls) {
+      onReplayFocus(replayId);
+      return;
+    }
     const offset = (n - 1) / 2;
-    const point = new THREE.Vector3(tileId % n - offset, 0, Math.floor(tileId / n) - offset);
+    const point = new THREE.Vector3(replayTile % n - offset, 0, Math.floor(replayTile / n) - offset);
     camera.updateMatrixWorld();
     const projected = panStep.current.copy(point).project(camera);
-    if (Math.abs(projected.x) <= 0.76 && Math.abs(projected.y) <= 0.72) return;
-    automaticPan.current = null;
-    camera.position.add(point).sub(controls.target);
-    controls.target.copy(point);
-    controls.update();
-    camera.updateMatrixWorld();
-  }, [camera, n, playbackStep]);
+    if (Math.abs(projected.x) <= 0.76 && Math.abs(projected.y) <= 0.72) {
+      onReplayFocus(replayId);
+      return;
+    }
+    const from = controls.target.clone();
+    automaticPan.current = {
+      from,
+      to: point,
+      elapsed: 0,
+      duration: Math.min(0.78, 0.32 + from.distanceTo(point) * 0.032),
+      replayId,
+    };
+  }, [camera, n, resetKey, replayTile, replayId, onReplayFocus]);
   useEffect(() => {
+    if (replayTile !== null) return;
     automaticPan.current = null;
     const controls = cameraControls.current;
     if (preview || selectedTile === null || !controls) return;
@@ -210,7 +227,7 @@ function CameraRig({
         duration: Math.min(0.55, 0.29 + from.distanceTo(point) * 0.035),
       };
     }
-  }, [selectedTile, preview, n, camera]);
+  }, [selectedTile, preview, n, camera, replayTile]);
   useFrame((_, delta) => {
     const controls = cameraControls.current;
     if (!controls) return;
@@ -222,7 +239,6 @@ function CameraRig({
       panStep.current.lerpVectors(pan.from, pan.to, easeInOut(progress));
       camera.position.add(panStep.current).sub(controls.target);
       controls.target.copy(panStep.current);
-      if (progress === 1) automaticPan.current = null;
     }
 
     const bound = n * 0.7;
@@ -236,7 +252,8 @@ function CameraRig({
     camera.position.z += z - controls.target.z;
     controls.target.set(x, controls.target.y + dy, z);
     camera.updateMatrixWorld();
-  });
+    if (pan && pan.elapsed === pan.duration) finishPan();
+  }, -1);
   return null;
 }
 
@@ -731,6 +748,9 @@ function tileFeedbackFor(old: Tile, tile: Tile): SceneEffect["feedback"] {
   if (old.resource && !tile.resource && !tile.building) return "harvest";
 }
 
+const feedbackDuration = (event: SceneEffect, reducedMotion: boolean) =>
+  reducedMotion ? 0.65 : event.strike ? hitFeedbackDuration : event.feedback ? 0.85 : 1.05;
+
 function EventEffect({
   event,
   offset,
@@ -754,9 +774,11 @@ function EventEffect({
   const accent =
     event.type === "attack"
       ? "#914c3e"
-      : event.type === "capture" || event.type === "upgrade"
-        ? "#b59a55"
-        : "#4d7162";
+      : event.type === "promotion"
+        ? "#75618e"
+        : event.type === "capture" || event.type === "upgrade"
+          ? "#b59a55"
+          : "#4d7162";
   const ringMaterial = useMemo(
     () =>
       new THREE.MeshBasicMaterial({
@@ -769,7 +791,7 @@ function EventEffect({
     [accent],
   );
   useEffect(() => () => ringMaterial.dispose(), [ringMaterial]);
-  const duration = reducedMotion ? 0.65 : event.strike ? hitFeedbackDuration : event.feedback ? 0.85 : 1.05;
+  const duration = feedbackDuration(event, reducedMotion);
   useFrame(({ camera, size }) => {
     const elapsed = event.strike && event.issuedAt !== undefined
       ? (playback.time - event.issuedAt) / 1000 - (reducedMotion ? 0 : event.strike.impact)
@@ -808,17 +830,19 @@ function EventEffect({
   const text =
     event.type === "attack"
       ? [(!event.strike?.from || reducedMotion) && projectileName(event.strike?.projectile ?? event.strike?.splashWeapon), `−${event.damage ?? ""}`].filter(Boolean).join(" ")
-      : event.type === "upgrade"
-        ? "城市升级 ↑"
-        : event.type === "capture"
-          ? "已占领"
-          : event.feedback === "build"
-            ? "建成"
-            : event.feedback === "harvest"
-              ? "已采集"
-              : event.feedback === "road"
-                ? "道路连通"
-                : "地形改变";
+      : event.type === "promotion"
+        ? "晋升老兵 ↑"
+        : event.type === "upgrade"
+          ? "城市升级 ↑"
+          : event.type === "capture"
+            ? "已占领"
+            : event.feedback === "build"
+              ? "建成"
+              : event.feedback === "harvest"
+                ? "已采集"
+                : event.feedback === "road"
+                  ? "道路连通"
+                  : "地形改变";
   return (
     <group position={[at.x - offset, height + 0.04, at.y - offset]}>
       <mesh
@@ -920,13 +944,16 @@ function Effects({
   visible,
   reducedMotion,
   combat,
+  onFeedbackEnds,
 }: {
   game: GameState;
   offset: number;
   visible: Set<number>;
   reducedMotion: boolean;
   combat: { strikes: Strike[]; issuedAt: number };
+  onFeedbackEnds: (time: number) => void;
 }) {
+  const playback = usePlaybackClock();
   const previous = useRef(game);
   const [active, setActive] = useState<SceneEffect[]>([]);
   const visualId = useRef(-1);
@@ -942,12 +969,12 @@ function Effects({
       setActive([]);
       return;
     }
-    const fresh: SceneEffect[] = getFreshEvents(before, game).filter(
-      (event) =>
-        event.at &&
-        visible.has(event.at.y * game.options.size + event.at.x) &&
-        ["upgrade", "capture"].includes(event.type),
-    );
+    const fresh: SceneEffect[] = getFreshEvents(before, game).filter((event) => {
+      if (!event.at || !visible.has(event.at.y * game.options.size + event.at.x)) return false;
+      if (event.type !== "promotion") return event.type === "upgrade" || event.type === "capture";
+      const unit = game.units.find((unit) => unit.id === event.unitId);
+      return !!unit && isUnitVisible(game, unit, 0);
+    });
     for (const strike of combat.strikes) {
       fresh.push({
         id: strike.id, type: "attack", at: strike.at, damage: strike.damage,
@@ -967,8 +994,14 @@ function Effects({
           feedback,
         });
     }
-    if (fresh.length) setActive((old) => [...old, ...fresh]);
-  }, [game, visible, combat]);
+    if (fresh.length) {
+      for (const event of fresh) {
+        if (!event.strike || reducedMotion)
+          onFeedbackEnds(playback.time + feedbackDuration(event, reducedMotion) * 1000);
+      }
+      setActive((old) => [...old, ...fresh]);
+    }
+  }, [game, visible, combat, reducedMotion, playback, onFeedbackEnds]);
   return (
     <>
       {active.map((event) => (
@@ -996,7 +1029,7 @@ function Effects({
 }
 
 function World({
-  game,
+  game: committedGame,
   selectedTile,
   selectedUnit,
   reachable,
@@ -1014,6 +1047,12 @@ function World({
   badges,
   badgeButtons,
 }: GameSceneProps & MapBadgesProps) {
+  const replay = playbackStep?.focusTile != null ? playbackStep : null;
+  const [focusedReplayId, setFocusedReplayId] = useState<number | null>(null);
+  const awaitingFocus = replay && !reducedMotion && focusedReplayId !== replay.id;
+  // The store has settled the action. Hold its old board until the camera is ready.
+  const game = awaitingFocus ? replay.previousGame : committedGame;
+  const playingStep = awaitingFocus ? null : playbackStep;
   const [hoveredTile, setHoveredTile] = useState<number | null>(null);
   const clearHover = useCallback(() => setHoveredTile(null), []);
   const offset = (game.options.size - 1) / 2;
@@ -1102,12 +1141,12 @@ function World({
         ...view.ids,
         ...reachable,
         ...targetTiles,
-        ...(playbackStep?.structures.keys() ?? []),
+        ...(playingStep?.structures.keys() ?? []),
         ...(selectedTile === null ? [] : [selectedTile]),
         ...(hoveredTile === null ? [] : [hoveredTile]),
         ...(playbackStep?.focusTile == null ? [] : [playbackStep.focusTile]),
       ]),
-    [view.ids, reachable, targetTiles, selectedTile, hoveredTile, playbackStep],
+    [view.ids, reachable, targetTiles, selectedTile, hoveredTile, playbackStep, playingStep],
   );
   const displayTiles = useMemo(
     () =>
@@ -1137,17 +1176,22 @@ function World({
     }
     return { ...encounter, issuedAt, appearanceDuration };
   }, [game, playback]);
-  const playbackDeadline = useRef<{ id: number; end: number } | null>(null);
+  const feedbackEnd = useRef({ game, time: 0 });
+  const onFeedbackEnds = useCallback((time: number) => {
+    if (feedbackEnd.current.game !== game || time > feedbackEnd.current.time)
+      feedbackEnd.current = { game, time };
+  }, [game]);
+  const playbackDeadline = useRef<{ id: number; end: number; pause: number } | null>(null);
   useLayoutEffect(() => {
-    if (!playbackStep) {
+    if (!playingStep) {
       playbackDeadline.current = null;
       return;
     }
-    const id = playbackStep.id;
+    const id = playingStep.id;
     if (playbackDeadline.current?.id === id && !reducedMotion) return;
     let seconds = 0;
     if (!reducedMotion) {
-      seconds = Math.max(playbackStep.structureDuration, combat.appearanceDuration);
+      seconds = Math.max(playingStep.structureDuration, combat.appearanceDuration);
       for (const strike of combat.strikes)
         seconds = Math.max(seconds, strike.impact + (strike.lethal ? collapseDuration : hitFeedbackDuration));
       for (const journey of combat.journeys.values()) {
@@ -1155,11 +1199,15 @@ function World({
         if (last) seconds = Math.max(seconds, last.start + last.duration);
       }
     }
-    playbackDeadline.current = { id, end: combat.issuedAt + seconds * 1000 };
-  }, [combat, playbackStep, reducedMotion]);
+    // A separate pause gives each replayed action a beat, even for an instant change.
+    playbackDeadline.current = { id, end: combat.issuedAt + seconds * 1000, pause: replay ? 140 : 0 };
+  }, [combat, playingStep, reducedMotion, replay]);
   useFrame(() => {
     const deadline = playbackDeadline.current;
-    if (!deadline || playback.time < deadline.end) return;
+    if (!deadline) return;
+    const end = deadline.pause && feedbackEnd.current.game === game
+      ? Math.max(deadline.end, feedbackEnd.current.time) : deadline.end;
+    if (playback.time < end + deadline.pause) return;
     playbackDeadline.current = null;
     onPlaybackDone?.(deadline.id);
   }, 0);
@@ -1173,10 +1221,10 @@ function World({
   }, [game, combat]);
   const resultAnnounced = useRef(false);
   useFrame(() => {
-    if (preview || game.status !== "finished" || resultAnnounced.current) return;
+    if (preview || game.status !== "finished" || resultAnnounced.current || playbackDeadline.current) return;
     const { strikes, issuedAt } = pendingCombat.current;
     const elapsed = (playback.time - issuedAt) / 1000;
-    if (!reducedMotion && (elapsed < (playbackStep?.structureDuration ?? 0) ||
+    if (!reducedMotion && (elapsed < (playingStep?.structureDuration ?? 0) ||
       strikes.some(strike => elapsed < strike.impact + collapseDuration))) return;
     resultAnnounced.current = true;
     onResultReady?.();
@@ -1202,6 +1250,7 @@ function World({
         selectedTile={selectedTile}
         playbackStep={playbackStep}
         reducedMotion={reducedMotion}
+        onReplayFocus={setFocusedReplayId}
       />
       <MapBadgePositions
         badges={badges}
@@ -1265,7 +1314,7 @@ function World({
             showResourceHints={showResourceHints}
             city={tile.cityId ? cityById.get(tile.cityId) : undefined}
             tier={buildingTiers[tile.id]}
-            change={playbackStep?.structures.get(tile.id)}
+            change={playingStep?.structures.get(tile.id)}
             issuedAt={combat.issuedAt}
             hovered={hoveredTile === tile.id}
             onHover={setHoveredTile}
@@ -1301,6 +1350,7 @@ function World({
             offset={offset}
             visible={visible}
             reducedMotion={reducedMotion}
+            onFeedbackEnds={onFeedbackEnds}
           />
         )}
       </group>
@@ -1398,10 +1448,10 @@ export default function GameScene(props: GameSceneProps) {
     return () => { active = false; };
   }, []);
   const badges = useMemo(
-    () => (props.preview ? [] : getMapBadges(props.game)),
-    [props.game, props.preview],
+    () => (props.preview || props.playbackStep?.focusTile != null ? [] : getMapBadges(props.game)),
+    [props.game, props.preview, props.playbackStep],
   );
-  const badgeButtons = useRef(new Map<number, HTMLButtonElement>());
+  const badgeButtons = useRef(new Map<string, HTMLButtonElement>());
   return (
     <div
       className={`game-scene${props.preview ? " game-scene-preview" : ""}`}

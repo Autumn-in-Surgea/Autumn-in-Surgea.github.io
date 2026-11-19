@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   applyAction,
+  canCancelNavalUpgrade,
+  canCancelTraining,
   canEditNavalUpgrade,
   canEditTraining,
   DEFAULT_OPTIONS,
   getCityUnitCount,
   getNavalUpgradeOrderCost,
+  getNavalUpgradeRefund,
   getReachableTiles,
   getTrainingOrderCost,
   getTrainingRefund,
@@ -84,13 +87,14 @@ describe("training speed rules", () => {
     const opponentTurn = apply(ordered, END);
     expect(opponentTurn.cities[0].training).toBeDefined();
     expect(canEditTraining(opponentTurn, opponentTurn.cities[0])).toBe(false);
+    expect(applyAction(opponentTurn, { type: "CANCEL_TRAINING", cityId: city.id }).ok).toBe(false);
     const saved = deserializeGame(serializeGame(opponentTurn));
     expect(saved).toEqual(opponentTurn);
     const firstOwnTurn = apply(saved, END);
     expect(firstOwnTurn.round).toBe(2);
     expect(firstOwnTurn.cities[0].training?.readyRound).toBe(3);
     expect(firstOwnTurn.units.some((u) => u.type === "archer")).toBe(false);
-    expect(applyAction(firstOwnTurn, { type: "CANCEL_TRAINING", cityId: city.id }).ok).toBe(false);
+    expect(canCancelTraining(firstOwnTurn, firstOwnTurn.cities[0])).toBe(true);
     expect(applyAction(firstOwnTurn, { type: "TRAIN", cityId: city.id, unitType: "rider" }).ok).toBe(false);
     const ownTurn = apply(apply(firstOwnTurn, END), END);
     expect(ownTurn.cities[0].training).toBeUndefined();
@@ -130,6 +134,24 @@ describe("training speed rules", () => {
     expect(Array.from({ length: 4 }).reduce<GameState>(state => apply(state, END), cancelled).units).toHaveLength(0);
   });
 
+  it("rounds remaining training refunds down and releases the city after cancellation", () => {
+    const game = battlefield();
+    game.options.quickMode = false;
+    const cityId = game.cities[0].id;
+    const ordered = apply(game, train(game, "swordsman"));
+    const roundTwo = apply(apply(ordered, END), END);
+    const roundThree = apply(apply(roundTwo, END), END);
+
+    for (const [state, refund] of [[roundTwo, 3], [roundThree, 1]] as const) {
+      expect(getTrainingRefund(state, state.cities[0])).toBe(refund);
+      const cancelled = apply(state, { type: "CANCEL_TRAINING", cityId });
+      expect(cancelled.players[0].resources).toBe(state.players[0].resources + refund);
+      expect(cancelled.cities[0].training).toBeUndefined();
+      expect(apply(cancelled, train(cancelled, "rider")).cities[0].training?.unitType).toBe("rider");
+      expect(Array.from({ length: 4 }).reduce<GameState>(s => apply(s, END), cancelled).units).toHaveLength(0);
+    }
+  });
+
   it("retains an imported one-round order's delivery but applies the new duration if replanned", () => {
     const game = battlefield();
     game.options.quickMode = false;
@@ -137,9 +159,21 @@ describe("training speed rules", () => {
     game.players[0].resources -= UNITS.warrior.cost;
     const restored = deserializeGame(serializeGame(game));
     expect(canEditTraining(restored, restored.cities[0])).toBe(true);
+    expect(getTrainingRefund(restored, restored.cities[0])).toBe(UNITS.warrior.cost);
     const replanned = apply(restored, train(restored));
     expect(replanned.cities[0].training?.readyRound).toBe(3);
     expect(apply(apply(restored, END), END).units[0]).toMatchObject({ owner: 0, type: "warrior" });
+  });
+
+  it("uses an imported order's original duration and price after balance changes", () => {
+    const game = battlefield();
+    game.options.quickMode = false;
+    game.round = 2;
+    const city = game.cities[0];
+    city.training = { unitType: "swordsman", orderedRound: 1, readyRound: 3, paidStars: 7 };
+    const restored = deserializeGame(serializeGame(game));
+    const cancelled = apply(restored, { type: "CANCEL_TRAINING", cityId: city.id });
+    expect(cancelled.players[0].resources).toBe(restored.players[0].resources + 3);
   });
 
   it("holds a completed order across turns until the city center is clear", () => {
@@ -152,6 +186,9 @@ describe("training speed rules", () => {
     expect(blocked.round).toBe(3);
     expect(blocked.cities[0].training?.readyRound).toBe(3);
     expect(blocked.units).toHaveLength(1);
+    const cancelled = apply(blocked, { type: "CANCEL_TRAINING", cityId: city.id });
+    expect(cancelled.players[0].resources).toBe(blocked.players[0].resources);
+    expect(cancelled.cities[0].training).toBeUndefined();
     const cleared = apply(blocked, { type: "MOVE", unitId: guard.id, to: blocked.options.size * 2 + 2 });
     expect(cleared.units).toHaveLength(1);
     const delivered = apply(apply(cleared, END), END);
@@ -253,10 +290,20 @@ describe("training speed rules", () => {
 
     const opponentTurn = deserializeGame(serializeGame(apply(ordered, END)));
     expect(previewCombat(opponentTurn, enemy.id, raft.id).canAttack).toBe(true);
+    expect(applyAction(opponentTurn, { type: "CANCEL_NAVAL_UPGRADE", unitId: raft.id }).ok).toBe(false);
     const pending = apply(opponentTurn, END);
     expect(pending.round).toBe(2);
     expect(canEditNavalUpgrade(pending, pending.units[0])).toBe(false);
-    expect(applyAction(pending, { type: "CANCEL_NAVAL_UPGRADE", unitId: raft.id }).ok).toBe(false);
+    expect(canCancelNavalUpgrade(pending, pending.units[0])).toBe(true);
+    expect(applyAction(pending, { ...order, unitType: "bomber" }).ok).toBe(false);
+
+    const refund = getNavalUpgradeRefund(pending, pending.units[0]);
+    expect(refund).toBe(2);
+    const cancelled = apply(pending, { type: "CANCEL_NAVAL_UPGRADE", unitId: raft.id });
+    expect(cancelled.players[0].resources).toBe(pending.players[0].resources + refund);
+    expect(cancelled.units[0]).toMatchObject({ id: raft.id, type: "raft", carried: raft.carried, hp: 7 });
+    expect(cancelled.units[0].navalTraining).toBeUndefined();
+    expect(getReachableTiles(cancelled, raft.id)).toContain(tileAt(game, { x: 2, y: 0 }).id);
 
     const finished = apply(apply(pending, END), END);
     expect(finished.units[0]).toMatchObject({
@@ -270,6 +317,8 @@ describe("training speed rules", () => {
     const game = battlefield();
     game.options.quickMode = false;
     const raft = addUnit(game, 0, "raft", 2, 1);
+    raft.moved = true;
+    raft.attacked = true;
     tileAt(game, raft).terrain = "shallow";
     const order: Action = { type: "UPGRADE_NAVAL", unitId: raft.id, unitType: "scout" };
     const ordered = apply(game, order);
@@ -282,6 +331,6 @@ describe("training speed rules", () => {
     const cancelled = apply(amended, { type: "CANCEL_NAVAL_UPGRADE", unitId: raft.id });
     expect(cancelled.players[0].resources).toBe(100);
     expect(cancelled.units[0].navalTraining).toBeUndefined();
-    expect(cancelled.units[0]).toMatchObject({ type: "raft", moved: false, attacked: false });
+    expect(cancelled.units[0]).toMatchObject({ type: "raft", moved: true, attacked: true });
   });
 });

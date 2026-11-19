@@ -79,17 +79,31 @@ export const getTrainingRounds = (
   type: UnitType,
 ): number => getUnitTrainingRounds(s, type);
 
+export function canCancelTraining(s: GameState, city: City): boolean {
+  return s.options.quickMode === false && s.status === "playing" && city.owner === s.currentPlayer &&
+    !!city.training;
+}
+
 export function canEditTraining(s: GameState, city: City): boolean {
   const order = city.training;
   // Legacy delayed orders took one round and did not store their placement round.
-  return s.options.quickMode === false && s.status === "playing" && city.owner === s.currentPlayer &&
-    !!order && (order.orderedRound ?? order.readyRound - 1) === s.round;
+  return !!order && canCancelTraining(s, city) && (order.orderedRound ?? order.readyRound - 1) === s.round;
+}
+
+function proratedTrainingRefund(
+  round: number,
+  order: { readyRound: number; orderedRound?: number },
+  paidStars: number,
+): number {
+  const duration = Math.max(1, order.readyRound - (order.orderedRound ?? order.readyRound - 1));
+  const remaining = Math.max(0, Math.min(duration, order.readyRound - round));
+  return Math.floor(paidStars * remaining / duration);
 }
 
 export function getTrainingRefund(s: GameState, city: City): number {
   const order = city.training;
   if (!order || city.owner === null) return 0;
-  return order.paidStars ?? getTrainingCost(s, city.owner, order.unitType);
+  return proratedTrainingRefund(s.round, order, order.paidStars ?? getTrainingCost(s, city.owner, order.unitType));
 }
 
 export function getTrainingOrderCost(s: GameState, city: City, type: UnitType): number {
@@ -97,17 +111,22 @@ export function getTrainingOrderCost(s: GameState, city: City, type: UnitType): 
   return getTrainingCost(s, city.owner ?? s.currentPlayer, type) - refund;
 }
 
-export function canEditNavalUpgrade(s: GameState, unit: Unit): boolean {
+export function canCancelNavalUpgrade(s: GameState, unit: Unit): boolean {
   return s.options.quickMode === false && s.status === "playing" && unit.owner === s.currentPlayer &&
-    unit.navalTraining?.orderedRound === s.round;
+    unit.type === "raft" && !unit.upkeep && !!unit.navalTraining;
 }
 
-export function getNavalUpgradeRefund(unit: Unit): number {
-  return unit.navalTraining?.paidStars ?? 0;
+export function canEditNavalUpgrade(s: GameState, unit: Unit): boolean {
+  return canCancelNavalUpgrade(s, unit) && unit.navalTraining?.orderedRound === s.round;
+}
+
+export function getNavalUpgradeRefund(s: GameState, unit: Unit): number {
+  const order = unit.navalTraining;
+  return order ? proratedTrainingRefund(s.round, order, order.paidStars) : 0;
 }
 
 export function getNavalUpgradeOrderCost(s: GameState, unit: Unit, type: NavalUpgradeType): number {
-  return UNITS[type].cost - (canEditNavalUpgrade(s, unit) ? getNavalUpgradeRefund(unit) : 0);
+  return UNITS[type].cost - (canEditNavalUpgrade(s, unit) ? getNavalUpgradeRefund(s, unit) : 0);
 }
 
 export function getUnitUpkeep(
@@ -1071,7 +1090,7 @@ export function validateAction(s: GameState, a: Action): string | null {
     }
     if (u.upkeep) return "单位因欠费已停用。";
     if (a.type === "CANCEL_NAVAL_UPGRADE")
-      return canEditNavalUpgrade(s, u) ? null : "只有本回合的改装计划可以取消。";
+      return canCancelNavalUpgrade(s, u) ? null : "此单位没有可取消的改装计划。";
     if (u.navalTraining && a.type !== "UPGRADE_NAVAL") return "舰船正在改装。";
     if (a.type === "MOVE")
       return Number.isInteger(a.to) &&
@@ -1190,7 +1209,7 @@ export function validateAction(s: GameState, a: Action): string | null {
     }
     case "CANCEL_TRAINING": {
       const city = s.cities.find((c) => c.id === a.cityId);
-      return city && canEditTraining(s, city) ? null : "只有本回合的训练计划可以取消。";
+      return city && canCancelTraining(s, city) ? null : "此城市没有可取消的训练计划。";
     }
     case "RESEARCH": {
       const t = TECHNOLOGIES.find((t) => t.id === a.techId);
@@ -1783,7 +1802,7 @@ export function applyAction(source: GameState, a: Action): ActionResult {
       u!.maxHp += 5;
       u!.hp = u!.maxHp;
       event(s, {
-        type: "upgrade",
+        type: "promotion",
         player: p.id,
         at: u!,
         unitId: u!.id,
@@ -1913,7 +1932,7 @@ export function applyAction(source: GameState, a: Action): ActionResult {
       break;
     }
     case "CANCEL_NAVAL_UPGRADE":
-      p.resources += getNavalUpgradeRefund(u!);
+      p.resources += getNavalUpgradeRefund(s, u!);
       delete u!.navalTraining;
       break;
     case "EXAMINE": {
@@ -2182,8 +2201,8 @@ function* unitSpecialActions(
     if (unit.upkeep === "reactivation") yield { type: "REACTIVATE", unitId };
     return;
   }
+  if (canCancelNavalUpgrade(s, unit)) yield { type: "CANCEL_NAVAL_UPGRADE", unitId };
   if (unit.type === "raft" && (!unit.navalTraining || canEditNavalUpgrade(s, unit))) {
-    if (unit.navalTraining) yield { type: "CANCEL_NAVAL_UPGRADE", unitId };
     for (const unitType of NAVAL_UPGRADES) yield { type: "UPGRADE_NAVAL", unitId, unitType };
   }
   if (unit.navalTraining) return;

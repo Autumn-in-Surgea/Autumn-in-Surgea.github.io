@@ -26,6 +26,11 @@ button.map-action-badge {
   --badge-fill: #e9f6e8;
   --badge-edge: #476f64;
 }
+.map-action-badge[data-action="promote"] {
+  --badge-ink: #41345f;
+  --badge-fill: #f1eaf9;
+  --badge-edge: #75618e;
+}
 .map-action-tag {
   position: relative;
   display: inline-flex;

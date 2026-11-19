@@ -4,6 +4,8 @@ import { getMapBadges, projectMapBadge } from "../../src/scene/ActionBadges";
 import { terrainHeight } from "../../src/scene/terrainElevation";
 import { MODEL_SETS } from "../../src/scene/factionModels";
 import { factionForOwner } from "../../src/nations/registry";
+import { applyAction } from "../../src/game";
+import { deserializeGame, serializeGame } from "../../src/store/save";
 import { addCity, addUnit, battlefield } from "./helpers";
 
 describe("map action badges", () => {
@@ -33,6 +35,59 @@ describe("map action badges", () => {
     ]);
     unit.attacked = true;
     expect(getMapBadges(game)).toEqual([]);
+  });
+
+  it("offers promotion on ordinary tiles only when the visible unit can promote", () => {
+    const game = battlefield();
+    const unit = addUnit(game, 0, "warrior", 3, 3);
+    addUnit(game, 1, "warrior", 5, 3).kills = 4;
+    addUnit(game, 0, "giant", 4, 3).kills = 4;
+    unit.kills = 2;
+    expect(getMapBadges(game)).toEqual([]);
+    unit.kills++;
+    unit.moved = unit.attacked = true;
+    const badges = getMapBadges(game);
+    expect(badges).toMatchObject([{ action: "promote", unitId: unit.id }]);
+    game.players[0].visible = game.players[0].visible.filter((id) => id !== badges[0].tileId);
+    expect(getMapBadges(game)).toEqual([]);
+    game.players[0].visible.push(badges[0].tileId);
+
+    const promoted = applyAction(game, { type: "PROMOTE", unitId: unit.id });
+    expect(promoted.ok).toBe(true);
+    expect(getMapBadges(promoted.state)).toEqual([]);
+    const restored = deserializeGame(serializeGame(promoted.state));
+    expect(restored.events.at(-1)).toMatchObject({ type: "promotion", unitId: unit.id });
+  });
+
+  it.each(["upgrade", "capture"] as const)("keeps %s and promotion side by side above a garrison", (cityAction) => {
+    const game = battlefield();
+    const city = cityAction === "upgrade" ? game.cities[0] : addCity(game, 3, 3);
+    if (cityAction === "upgrade") city.pendingRewardLevels = [2];
+    const unit = addUnit(game, 0, "warrior", city.x, city.y);
+    unit.kills = 3;
+    unit.capturedTurn = game.round - 1;
+
+    const badges = getMapBadges(game);
+    expect(badges).toMatchObject([
+      { action: cityAction, column: -1 },
+      { action: "promote", unitId: unit.id, column: 1 },
+    ]);
+    const [x, , z] = badges[0].position;
+    const camera = new OrthographicCamera(-330, 330, 210, -210, 0.1, 240);
+    camera.position.set(x + 13, 17, z + 13);
+    camera.lookAt(x, 0, z);
+    camera.updateMatrixWorld();
+    const matrix = new Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+    const rendered = new Set([badges[0].tileId]);
+    for (const compact of [false, true]) {
+      const coordinates = badges.map((badge) => {
+        const point = new Vector3();
+        expect(projectMapBadge(badge, rendered, matrix, { width: 660, height: 420 }, point, compact)).toBe(true);
+        return point;
+      });
+      expect(coordinates[0].y).toBe(coordinates[1].y);
+      expect(coordinates[1].x - coordinates[0].x).toBeGreaterThan(compact ? 32 : 66);
+    }
   });
 
   it.each(["warrior", "swordsman", "knight", "rider", "giant"] as const)(

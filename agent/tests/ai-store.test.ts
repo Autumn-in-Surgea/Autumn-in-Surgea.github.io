@@ -116,6 +116,8 @@ describe("worker and game session coordination", () => {
       await vi.waitFor(() => expect(get().playbackStep).not.toBeNull());
       const firstStep = get().playbackStep!;
       const stateAfterFirst = get().game;
+      expect(firstStep.focusTile).toBe(tileAt(game, first).id);
+      expect("previousGame" in firstStep && firstStep.previousGame.units.find((unit) => unit.id === first.id)?.x).toBe(4);
       expect(stateAfterFirst?.units.find((unit) => unit.id === first.id)?.x).toBe(5);
       expect(stateAfterFirst?.units.find((unit) => unit.id === second.id)?.x).toBe(6);
       expect(get().command({ type: "END_TURN" })).toBe(false);

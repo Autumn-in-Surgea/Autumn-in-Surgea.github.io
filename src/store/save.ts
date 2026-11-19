@@ -24,6 +24,7 @@ const eventTypes = [
   "death",
   "capture",
   "upgrade",
+  "promotion",
   "research",
   "turn",
   "info",

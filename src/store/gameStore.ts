@@ -146,8 +146,9 @@ export const useGameStore = create<Store>((set, get) => {
     const visible = focusTile !== null || notices.length !== count ||
       (before.currentPlayer === 0 && action.type !== "END_TURN") ||
       ("targetPlayer" in action && action.targetPlayer === 0);
-    const step = structurePlan && focusTile !== null
-      ? { id: ++sequence, focusTile: before.currentPlayer === 0 ? null : focusTile, ...structurePlan }
+    const step: PlaybackStep | null = structurePlan && focusTile !== null
+      ? { id: ++sequence, ...structurePlan, ...(before.currentPlayer === 0
+        ? { focusTile: null } : { focusTile, previousGame: before }) }
       : null;
     const finished = step
       ? new Promise<void>((resolve) => { pendingPlayback = { id: step.id, resolve }; })

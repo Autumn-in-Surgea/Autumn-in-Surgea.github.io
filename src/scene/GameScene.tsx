@@ -1421,6 +1421,7 @@ export default function GameScene(props: GameSceneProps) {
             gl={{
               antialias: true,
               alpha: true,
+              stencil: true,
               powerPreference: "high-performance",
             }}
             onCreated={({ gl }) => {

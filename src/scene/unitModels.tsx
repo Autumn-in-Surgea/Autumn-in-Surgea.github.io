@@ -7,10 +7,18 @@ import { foreignTerritoryBrightness } from "./territoryMaterials";
 
 const glazes = new Map<string, THREE.MeshStandardMaterial>();
 const spentBrightness = 0.40;
+const unitSilhouetteMask = 1;
 const foregroundMaterial = miniatureMaterial.clone();
 // Draw all pieces after board overlays, keeping depth testing between pieces.
 foregroundMaterial.transparent = true;
 foregroundMaterial.blending = THREE.NoBlending;
+// Both painted meshes of every unit make one shared screen-space occupancy mask.
+foregroundMaterial.stencilWrite = true;
+foregroundMaterial.stencilWriteMask = unitSilhouetteMask;
+foregroundMaterial.stencilRef = unitSilhouetteMask;
+foregroundMaterial.stencilFuncMask = unitSilhouetteMask;
+foregroundMaterial.stencilFunc = THREE.AlwaysStencilFunc;
+foregroundMaterial.stencilZPass = THREE.ReplaceStencilOp;
 
 const spentMaterial = foregroundMaterial.clone();
 const foreignMaterial = foregroundMaterial.clone();
@@ -26,7 +34,7 @@ const foregroundProps = {
     if (clearedFrame.get(renderer) === frame) return;
     // The board fog and water can leave depth writes disabled.
     renderer.state.buffers.depth.setMask(true);
-    renderer.clearDepth();
+    renderer.clear(false, true, true);
     clearedFrame.set(renderer, frame);
   },
 };
@@ -69,6 +77,12 @@ const outlineMaterial = new THREE.ShaderMaterial({
   side: THREE.BackSide,
   transparent: true,
   depthWrite: false,
+  // A shell can soften the outside edge only, including around adjacent pieces.
+  stencilWrite: true,
+  stencilWriteMask: 0,
+  stencilRef: unitSilhouetteMask,
+  stencilFuncMask: unitSilhouetteMask,
+  stencilFunc: THREE.NotEqualStencilFunc,
   toneMapped: false,
 });
 

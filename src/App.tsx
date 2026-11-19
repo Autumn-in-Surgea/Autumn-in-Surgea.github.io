@@ -26,7 +26,8 @@ import { playSound } from "./ui/sound";
 
 type Panel = "tech" | "diplomacy" | "settings" | "about" | null;
 type TargetOrder = {
-  action: Extract<Action, { type: "ATTACK" | "CONVERT" }>;
+  action: Extract<Action, { type: "ATTACK" | "CONVERT" | "MOVE" }>;
+  targetId: string;
   tileId: number;
 };
 
@@ -85,33 +86,43 @@ export default function App() {
   const targetOrders = useMemo<TargetOrder[]>(() => {
     if (screen !== "game" || game?.currentPlayer !== 0 || game.status !== "playing" || busy)
       return [];
-    const attacker = game.units.find((unit) => unit.id === selectedUnit);
-    if (!attacker || attacker.owner !== 0) return [];
-    const type = UNITS[attacker.type].skills.includes("convert") ? "CONVERT" : "ATTACK";
+    const actor = game.units.find((unit) => unit.id === selectedUnit);
+    if (!actor || actor.owner !== 0) return [];
+    const type = UNITS[actor.type].skills.includes("convert") ? "CONVERT" : "ATTACK";
     const targets = type === "CONVERT"
       ? game.units.filter((unit) =>
-          !validateAction(game, { type, unitId: attacker.id, targetId: unit.id }),
+          !validateAction(game, { type, unitId: actor.id, targetId: unit.id }),
         )
-      : getAttackTargets(game, attacker.id);
-    return targets.map((unit) => ({
-      action: { type, unitId: attacker.id, targetId: unit.id },
+      : getAttackTargets(game, actor.id);
+    const orders: TargetOrder[] = targets.map((unit) => ({
+      action: { type, unitId: actor.id, targetId: unit.id },
+      targetId: unit.id,
       tileId: unit.y * game.options.size + unit.x,
     }));
-  }, [game, screen, selectedUnit, busy]);
+    if (!reachable.length) return orders;
+    const legalMoves = new Set(reachable);
+    for (const ally of game.units) {
+      if (ally.owner !== actor.owner) continue;
+      const tileId = ally.y * game.options.size + ally.x;
+      if (!legalMoves.has(tileId)) continue;
+      orders.push({ action: { type: "MOVE", unitId: actor.id, to: tileId }, targetId: ally.id, tileId });
+    }
+    return orders;
+  }, [game, screen, selectedUnit, busy, reachable]);
   const attackTargets = useMemo(
-    () => targetOrders.map(({ action }) => action.targetId),
+    () => targetOrders.filter(({ action }) => action.type !== "MOVE").map(({ targetId }) => targetId),
     [targetOrders],
   );
-  const previewedOrder = aimedOrder && targetOrders.find(({ action, tileId }) =>
+  const previewedOrder = aimedOrder && targetOrders.find(({ action, tileId, targetId }) =>
     tileId === aimedOrder.tileId &&
     action.unitId === aimedOrder.action.unitId &&
-    action.targetId === aimedOrder.action.targetId &&
+    targetId === aimedOrder.targetId &&
     action.type === aimedOrder.action.type,
   );
   useEffect(() => {
     if (aimedOrder && !previewedOrder) setAimedOrder(null);
   }, [aimedOrder, previewedOrder]);
-  const target = previewedOrder?.action.targetId ?? null;
+  const target = previewedOrder?.targetId ?? null;
   const pendingUpgrade = game?.status === "playing" && game.currentPlayer === 0 && !busy
     ? getPendingUpgradeCity(game)
     : undefined;
@@ -177,7 +188,7 @@ export default function App() {
       selectedUnit &&
       reachable.includes(id) &&
       id !== selectedTile &&
-      (!unit || unit.owner === 0)
+      !unit
     ) {
       perform({ type: "MOVE", unitId: selectedUnit, to: id });
       setAimedOrder(null);

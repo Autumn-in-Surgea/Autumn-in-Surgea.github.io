@@ -67,13 +67,15 @@ describe("unit upkeep", () => {
     }
   });
 
-  it("pays affordable fees in unit order without partial payments or negative stars", () => {
+  it("pays affordable fees in numeric recruitment order regardless of roster order", () => {
     const game = upkeepBattlefield();
+    game.nextId = 8;
     const giant = addUnit(game, 0, "giant", 3, 3);
     const archer = addUnit(game, 0, "archer", 4, 4);
     const rider = addUnit(game, 0, "rider", 5, 5);
     const warrior = addUnit(game, 0, "warrior", 6, 6);
     const opponent = addUnit(game, 1, "bomber", 10, 10);
+    game.units.reverse();
     game.players[0].resources = 2;
     game.players[1].resources = 1;
     expect(getActiveUpkeep(game, 0)).toBe(6);
@@ -82,12 +84,28 @@ describe("unit upkeep", () => {
     expect(next.players[0].resources).toBe(0);
     expect(next.players[1].resources).toBe(1);
     expect(next.units.filter((unit) => unit.upkeep === "suspended").map((unit) => unit.id))
-      .toEqual([giant.id, rider.id]);
+      .toEqual([rider.id, giant.id]);
     for (const unit of [archer, warrior, opponent]) {
       expect(next.units.find((candidate) => candidate.id === unit.id)?.upkeep).toBeUndefined();
     }
     expect(getActiveUpkeep(next, 0)).toBe(2);
     expect(getActiveUpkeep(next, 1)).toBe(3);
+  });
+
+  it("keeps the original recruitment priority after a unit changes owner", () => {
+    const game = upkeepBattlefield();
+    const older = addUnit(game, 1, "rider", 4, 4);
+    const newer = addUnit(game, 0, "rider", 5, 5);
+    const converter = addUnit(game, 0, "mindBender", 4, 3);
+    game.units.reverse();
+    game.players[0].resources = 1;
+
+    const converted = apply(game, { type: "CONVERT", unitId: converter.id, targetId: older.id });
+    const settled = apply(deserializeGame(serializeGame(converted)), END);
+    expect(settled.units.find(unit => unit.id === older.id)).toMatchObject({ owner: 0 });
+    expect(settled.units.find(unit => unit.id === older.id)?.upkeep).toBeUndefined();
+    expect(settled.units.find(unit => unit.id === newer.id)?.upkeep).toBe("suspended");
+    expect(settled.players[0].resources).toBe(0);
   });
 
   it("blocks the next owning turn, then charges separately for reactivation and current upkeep", () => {

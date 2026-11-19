@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { makeCityTerritoryOutline } from "../../src/scene/CityTerritoryOutline";
 import { makeTerritoryBorders } from "../../src/scene/TerritoryBorders";
 import { knownTerrainHeight, terrainCapOffset, terrainHeight } from "../../src/scene/terrainElevation";
 import { battlefield } from "./helpers";
@@ -45,5 +46,33 @@ describe("board relief", () => {
     expect(initial.getAttribute("color").array).toEqual(next.getAttribute("color").array);
     initial.dispose();
     next.dispose();
+  });
+});
+
+describe("selected city outline", () => {
+  it("draws only exposed sides, at one shared height", () => {
+    const territory = [0, 1, 12, 13];
+    const shape = makeCityTerritoryOutline({ territory, explored: new Set(territory), size: 12 });
+    const positions = shape.getAttribute("position");
+    expect(positions.count).toBe(8 * 4);
+    expect(shape.index!.count).toBe(8 * 6);
+    const y = Array.from({ length: positions.count }, (_, i) => positions.getY(i));
+    expect(new Set(y).size).toBe(1);
+    for (let edge = 0; edge < positions.count; edge += 4) {
+      const x = (positions.getX(edge) + positions.getX(edge + 2)) / 2;
+      const z = (positions.getZ(edge) + positions.getZ(edge + 2)) / 2;
+      expect(Math.max(Math.abs(x + 5), Math.abs(z + 5))).toBeCloseTo(1);
+    }
+    shape.dispose();
+  });
+
+  it("clips explored cells before finding the perimeter", () => {
+    const explored = new Set([0, 1, 12]);
+    const known = makeCityTerritoryOutline({ territory: [0, 1, 12], explored, size: 12 });
+    const hidden = makeCityTerritoryOutline({ territory: [0, 1, 12, 13], explored, size: 12 });
+    expect(hidden.getAttribute("position").array).toEqual(known.getAttribute("position").array);
+    expect(hidden.index!.array).toEqual(known.index!.array);
+    known.dispose();
+    hidden.dispose();
   });
 });

@@ -41,7 +41,7 @@ export const DEFAULT_OPTIONS: GameOptions = {
   startingProfiles: [],
   mapSettings: DEFAULT_MAP_SETTINGS,
 };
-export const SLOW_TRAINING_ROUNDS = 1;
+export const SLOW_TRAINING_ROUNDS = 2;
 export const PLAYER_COLORS = [
   "#4f9185",
   "#b55d59",

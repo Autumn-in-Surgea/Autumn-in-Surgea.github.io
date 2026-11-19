@@ -51,6 +51,8 @@ export interface Strike {
   at: Position;
   // Omitted even for a visible shooter if the intervening trajectory crosses fog.
   from?: Position;
+  // Observed area impacts can guide a defender's stance without drawing a second attack.
+  areaOrigin?: Position;
   attackerId?: string;
   projectile?: Projectile;
   contact?: Contact;
@@ -232,6 +234,7 @@ export function planEncounter(
       id: event.id,
       at: { x: at.x, y: at.y },
       from,
+      areaOrigin: areaHit && safeOrigin ? { x: origin.x, y: origin.y } : undefined,
       attackerId: from ? sourceId : undefined,
       targetId: hit.targetId,
       projectile,

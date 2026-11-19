@@ -7,6 +7,7 @@ import { usePlaybackClock, type PlaybackClock } from "./playbackClock";
 import type { Strike, TravelLeg } from "./combatMotion";
 import { carryStrikes, collapseDuration, impactRecoil, sampleAttackPose, strikeMotionEndsAt, strikeReadyAt } from "./combatMotion";
 import { terrainHeight } from "./models";
+import { planUnitTurns, unitFacingAt, unitFacingYaw } from "./unitFacing";
 import {
   clampProgress,
   easeIn,
@@ -36,6 +37,19 @@ const idleCue = (serial = 0): UnitCue => ({
   trained: false,
   dying: false,
 });
+
+const advanceDelay = (cue: UnitCue) =>
+  cue.attackFirst && cue.attacks?.[0] ? strikeReadyAt(cue.attacks[0]) : 0;
+
+function presentUnit(unit: Unit, cue: UnitCue, previous?: PresentedUnit, reducedMotion = false): PresentedUnit {
+  const previousElapsed = previous && !reducedMotion
+    ? (cue.issuedAt - previous.cue.issuedAt) / 1000 : Infinity;
+  const initialFacing = previous
+    ? unitFacingAt(previous.turns, previousElapsed, previous.initialFacing)
+    : "right";
+  return { unit, cue, initialFacing, turns: planUnitTurns(cue, unit, advanceDelay(cue)) };
+}
+
 /** Presentation snapshots survive viewport changes and retain a dying model briefly.
  * Only visual data is retained: rule state and command timing are never delayed. */
 export function usePresentedUnits(
@@ -48,13 +62,14 @@ export function usePresentedUnits(
     hiddenJourneys: Set<string>;
   },
   playback: PlaybackClock,
+  reducedMotion: boolean,
 ) {
   const previous = useRef(game);
   const serial = useRef(0);
   const [presented, setPresented] = useState<PresentedUnit[]>(() =>
     game.units
       .filter((unit) => preview || isUnitVisible(game, unit, 0))
-      .map((unit) => ({ unit, cue: idleCue() })),
+      .map((unit) => presentUnit(unit, idleCue())),
   );
   useLayoutEffect(() => {
     const before = previous.current;
@@ -70,7 +85,7 @@ export function usePresentedUnits(
       setPresented(
         game.units
           .filter((unit) => preview || isUnitVisible(game, unit, 0))
-          .map((unit) => ({ unit, cue: idleCue(revision) })),
+          .map((unit) => presentUnit(unit, idleCue(revision))),
       );
       return;
     }
@@ -161,41 +176,39 @@ export function usePresentedUnits(
         const hit = impacts.has(unit.id) || (!!old && unit.hp < old.hp);
         const appeared = !record || !hadVisibility;
         if (!moved && !journey && !attack && !hit && !appeared) {
-          result.push({ unit, cue: record!.cue });
+          result.push({ ...record!, unit });
           continue;
         }
-        result.push({
-          unit,
-          cue: {
-            serial: revision,
-            issuedAt: combat.issuedAt,
-            initialHp: old?.hp,
-            attacks: [
-              ...carryStrikes(
-                record?.cue.attacks,
-                record?.cue.issuedAt ?? 0,
-                combat.issuedAt,
-              ),
-              ...(attacks.get(unit.id) ?? []),
-            ],
-            impacts: [
-              ...carryStrikes(
-                record?.cue.impacts,
-                record?.cue.issuedAt ?? 0,
-                combat.issuedAt,
-              ),
-              ...(impacts.get(unit.id) ?? []),
-            ],
-            journey: safePath ? journey : undefined,
-            path: safePath ? path : undefined,
-            from: moved && safePath ? { x: old!.x, y: old!.y } : undefined,
-            attackFirst,
-            hit,
-            appear: appeared || (moved && !safePath),
-            trained: !old,
-            dying: false,
-          },
-        });
+        const cue: UnitCue = {
+          serial: revision,
+          issuedAt: combat.issuedAt,
+          initialHp: old?.hp,
+          attacks: [
+            ...carryStrikes(
+              record?.cue.attacks,
+              record?.cue.issuedAt ?? 0,
+              combat.issuedAt,
+            ),
+            ...(attacks.get(unit.id) ?? []),
+          ],
+          impacts: [
+            ...carryStrikes(
+              record?.cue.impacts,
+              record?.cue.issuedAt ?? 0,
+              combat.issuedAt,
+            ),
+            ...(impacts.get(unit.id) ?? []),
+          ],
+          journey: safePath ? journey : undefined,
+          path: safePath ? path : undefined,
+          from: moved && safePath ? { x: old!.x, y: old!.y } : undefined,
+          attackFirst,
+          hit,
+          appear: appeared || (moved && !safePath),
+          trained: !old,
+          dying: false,
+        };
+        result.push(presentUnit(unit, cue, record, reducedMotion));
       }
       for (const record of current) {
         if (newIds.has(record.unit.id)) continue;
@@ -220,40 +233,38 @@ export function usePresentedUnits(
             !visibleNow.has(at.y * game.options.size + at.x))
         )
           continue;
-        result.push({
-          unit: { ...record.unit, x: at.x, y: at.y },
-          cue: {
-            ...idleCue(revision),
-            journey,
-            from: journey?.[0].from,
-            path: journey?.flatMap((leg) => leg.path),
-            issuedAt: combat.issuedAt,
-            attacks: [
-              ...carryStrikes(
-                record.cue.attacks,
-                record.cue.issuedAt,
-                combat.issuedAt,
-              ),
-              ...(attacks.get(record.unit.id) ?? []),
-            ],
-            impacts: [
-              ...carryStrikes(
-                record.cue.impacts,
-                record.cue.issuedAt,
-                combat.issuedAt,
-              ),
-              ...(hits ?? []),
-            ],
-            initialHp: record.unit.hp,
-            deathAt: lethal?.impact,
-            hit: true,
-            dying: true,
-          },
-        });
+        const cue: UnitCue = {
+          ...idleCue(revision),
+          journey,
+          from: journey?.[0].from,
+          path: journey?.flatMap((leg) => leg.path),
+          issuedAt: combat.issuedAt,
+          attacks: [
+            ...carryStrikes(
+              record.cue.attacks,
+              record.cue.issuedAt,
+              combat.issuedAt,
+            ),
+            ...(attacks.get(record.unit.id) ?? []),
+          ],
+          impacts: [
+            ...carryStrikes(
+              record.cue.impacts,
+              record.cue.issuedAt,
+              combat.issuedAt,
+            ),
+            ...(hits ?? []),
+          ],
+          initialHp: record.unit.hp,
+          deathAt: lethal?.impact,
+          hit: true,
+          dying: true,
+        };
+        result.push(presentUnit({ ...record.unit, x: at.x, y: at.y }, cue, record, reducedMotion));
       }
       return result;
     });
-  }, [game, preview, combat, playback]);
+  }, [game, preview, combat, playback, reducedMotion]);
   const finish = useCallback((unitId: string, cueSerial: number) => {
     setPresented((records) =>
       records.filter(
@@ -282,11 +293,6 @@ function positionOf(
     unit.y - offset + extra,
   ];
 }
-const DEFAULT_LAND_HEADING = -2.35;
-// With the board's orthographic camera this yaw shows the bow and one flank,
-// with the ship's length projected at about 45° to the screen edge.
-const DEFAULT_SHIP_HEADING = -1.76;
-
 interface Track {
   serial: number;
   started: number;
@@ -297,7 +303,6 @@ interface Track {
   legs: { path: MotionPath; start: number; duration: number; swap?: boolean }[];
   moveDuration: number;
   moveDelay: number;
-  moveYaw: number;
   hit: boolean;
   appear: boolean;
   trained: boolean;
@@ -322,10 +327,6 @@ export function useUnitMotion(
       : target,
   );
   const output = useRef<MotionVector>([...target]);
-  const initialHeading = UNITS[record.unit.type].skills.includes("water")
-    ? DEFAULT_SHIP_HEADING : DEFAULT_LAND_HEADING;
-  const heading = useRef(initialHeading);
-  const desiredHeading = useRef(initialHeading);
   const initialized = useRef(false);
   const track = useRef<Track>({
     serial: -1,
@@ -337,7 +338,6 @@ export function useUnitMotion(
     legs: [],
     moveDuration: 0,
     moveDelay: 0,
-    moveYaw: initialHeading,
     hit: false,
     appear: false,
     trained: false,
@@ -401,11 +401,7 @@ export function useUnitMotion(
         ),
       })),
       moveDuration: duration,
-      moveDelay: cue.attackFirst && cue.attacks?.[0] ? strikeReadyAt(cue.attacks[0]) : 0,
-      moveYaw:
-        distance > 0.015
-          ? Math.atan2(-(to[0] - from[0]), -(to[2] - from[2]))
-          : desiredHeading.current,
+      moveDelay: advanceDelay(cue),
       hit: cue.hit,
       appear: cue.appear,
       trained: cue.trained,
@@ -416,19 +412,16 @@ export function useUnitMotion(
     // Track changes are tied to snapshot cues, never to incidental UI rerenders.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [record.cue.serial, record.unit.id, offset]);
-  useFrame((_, delta) => {
+  useFrame(() => {
     if (!root.current || !model.current) return;
     const state = track.current;
     const elapsed = playback.time / 1000 - state.started;
+    const facing = unitFacingAt(record.turns, reducedMotion ? Infinity : elapsed, record.initialFacing);
+    const yaw = unitFacingYaw[facing];
     if (reducedMotion) {
       root.current.position.fromArray(state.to);
       model.current.position.set(0, 0, 0);
       label.current?.position.set(0, 0, 0);
-      const attack = record.cue.attacks?.at(-1);
-      const yaw = attack?.from && !record.cue.attackFirst
-        ? Math.atan2(attack.from.x - attack.at.x, attack.from.y - attack.at.y)
-        : state.moveYaw;
-      desiredHeading.current = heading.current = yaw;
       model.current.rotation.set(0, yaw, 0);
       model.current.scale.setScalar(1);
       if (state.dying && !state.finished) {
@@ -484,7 +477,6 @@ export function useUnitMotion(
       const length = Math.hypot(dx, dz) || 1;
       dx /= length;
       dz /= length;
-      desiredHeading.current = Math.atan2(-dx, -dz);
       const pose = sampleAttackPose(strike, elapsed);
       pitch = pose.pitch;
       attackX = dx * pose.travel;
@@ -496,8 +488,6 @@ export function useUnitMotion(
         const toHeight = terrainHeight(tiles[strike.at.y * size + strike.at.x]);
         attackY += (toHeight - fromHeight) * Math.max(0, pose.travel) / strike.contact.gap;
       }
-    } else if (contact && !moving) {
-      desiredHeading.current = Math.atan2(contact.x, contact.z);
     }
     const travel = moving ? easeInOut(moveProgress) * path.total : 0;
     const envelope = moving ? Math.sin(moveProgress * Math.PI) ** 2 : 0;
@@ -515,20 +505,6 @@ export function useUnitMotion(
       : 0;
     const topple = easeInOut((death - 0.035) / 0.59);
     const deathScale = 1 - easeIn((death - 0.48) / 0.52);
-    if (moving) {
-      const a = path.points[state.segment - 1],
-        b = path.points[state.segment];
-      if (a && b && Math.hypot(b[0] - a[0], b[2] - a[2]) > 0.01)
-        state.moveYaw = Math.atan2(-(b[0] - a[0]), -(b[2] - a[2]));
-    }
-    if (!strike && moving) desiredHeading.current = state.moveYaw;
-    const headingTarget = desiredHeading.current;
-    const yawDelta = Math.atan2(
-      Math.sin(headingTarget - heading.current),
-      Math.cos(headingTarget - heading.current),
-    );
-    const yaw = heading.current + yawDelta * (1 - Math.exp(-24 * delta));
-    heading.current = yaw;
     const fall = cue.impacts?.find((shot) => shot.lethal)?.contact;
     const knockback = contact && !impact?.lethal ? hit * 0.15 : 0;
     const fallSlide = fall ? easeOut(death) * 0.15 : 0;

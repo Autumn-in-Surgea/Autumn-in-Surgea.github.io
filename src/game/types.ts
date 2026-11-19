@@ -166,7 +166,12 @@ export interface City extends Position {
   borderExpanded: boolean;
   parks: number;
   infiltratedRound: number | null;
-  training?: { unitType: UnitType; readyRound: number };
+  training?: {
+    unitType: UnitType;
+    readyRound: number;
+    orderedRound?: number;
+    paidStars?: number;
+  };
 }
 export interface Unit extends Position {
   id: string;
@@ -261,6 +266,7 @@ export type Action =
       unitType: "scout" | "rammer" | "bomber";
     }
   | { type: "TRAIN"; cityId: string; unitType: UnitType }
+  | { type: "CANCEL_TRAINING"; cityId: string }
   | { type: "RESEARCH"; techId: string }
   | { type: "BUILD"; tileId: number; building: BuildingId }
   | {

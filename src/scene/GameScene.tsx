@@ -22,6 +22,7 @@ import { SceneQuality } from "./SceneQuality";
 import { knownTerrainHeight, terrainCapOffset } from "./terrainElevation";
 import { TerrainInlays } from "./TerrainInlays";
 import { TerritoryBorders } from "./TerritoryBorders";
+import { CityTerritoryOutline } from "./CityTerritoryOutline";
 import { ShippingLanes } from "./ShippingLanes";
 import { TileScenery } from "./TileScenery";
 import { buildTileTiers, type StructureChange } from "../store/structurePlayback";
@@ -690,7 +691,7 @@ function AnimatedUnit({
       }}
     >
       {(selected || targeted) && !cue.dying && (
-        <SelectionHalo kind={targeted ? "target" : "selection"} reducedMotion={reducedMotion} />
+        <SelectionHalo kind={targeted && unit.owner !== 0 ? "target" : "selection"} reducedMotion={reducedMotion} />
       )}
       <group ref={model}>
         <UnitModel
@@ -1039,6 +1040,9 @@ function World({
     () => new Map(game.cities.map((city) => [city.id, city])),
     [game.cities],
   );
+  const selectedCityId = !preview && selectedUnit === null && selectedTile !== null && explored.has(selectedTile)
+    ? game.tiles[selectedTile]?.cityId : null;
+  const selectedCity = selectedCityId ? cityById.get(selectedCityId) : undefined;
   const [view, setView] = useState<{ ids: number[]; simple: boolean }>({
     ids: [...explored].slice(0, 420),
     simple: false,
@@ -1176,7 +1180,7 @@ function World({
     resultAnnounced.current = true;
     onResultReady?.();
   });
-  const { presented, finish } = usePresentedUnits(game, preview, combat, playback);
+  const { presented, finish } = usePresentedUnits(game, preview, combat, playback, reducedMotion);
   const visibleUnits = presented.filter((record) => {
     const at = (point: { x: number; y: number }) =>
       renderedIds.has(point.y * game.options.size + point.x);
@@ -1239,6 +1243,7 @@ function World({
         {!view.simple && <TerrainInlays game={game} tileIds={view.ids} visible={visible} />}
         {!preview && <ShippingLanes game={game} explored={explored} />}
         <TerritoryBorders tiles={game.tiles} players={game.players} explored={explored} size={game.options.size} />
+        {selectedCity && <CityTerritoryOutline territory={selectedCity.territory} explored={explored} size={game.options.size} />}
         {displayTiles.map((tile) => (
           <TileView
             key={tile.id}

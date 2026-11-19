@@ -1,4 +1,5 @@
 import type { Strike, TravelLeg } from "./combatMotion";
+import type { UnitFacing, UnitTurn } from "./unitFacing";
 import type { GameEvent, GameState, Position, Unit } from "../game/types";
 
 export type MotionVector = [number, number, number];
@@ -70,6 +71,8 @@ export interface UnitCue {
 export interface PresentedUnit {
   unit: Unit;
   cue: UnitCue;
+  initialFacing: UnitFacing;
+  turns: readonly UnitTurn[];
 }
 export function getFreshEvents(
   previous: GameState,

@@ -1,11 +1,12 @@
 import type { CSSProperties, ReactNode } from "react";
 import {
-  Award, BrainCircuit, Compass, Crosshair, Eye, Flag, Hammer, Heart,
+  ArrowLeftRight, Award, BrainCircuit, Compass, Crosshair, Eye, Flag, Hammer, Heart,
   RotateCcw, Route, Shield, Sprout, Swords, Trash2, Trees, Users, Waves, Zap,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
-  BUILDINGS, UNITS, getCityIncome, getCityUnitCount, getMovement, getTrainingCost, getTrainingRounds, getUnitUpkeep,
+  BUILDINGS, UNITS, canEditTraining, getCityIncome, getCityUnitCount, getMovement, getTrainingOrderCost,
+  getTrainingRefund, getTrainingRounds, getUnitUpkeep,
   getUpgradeRewards, getVisibleResource, hasTech, isTerritoryResourceHarvestable, isUnitVisible,
   populationNeeded, previewCombat, validateAction,
 } from "../game";
@@ -225,17 +226,29 @@ function cityCommands(game: GameState, city: City) {
     secondaryText: rewards[reward].note,
     variant: "accent",
   }));
-  if (city.training) return commands;
+  const training = city.training;
+  if (training) {
+    if (!canEditTraining(game, city)) return commands;
+    commands.push({
+      action: { type: "CANCEL_TRAINING", cityId: city.id },
+      label: "取消训练",
+      icon: RotateCcw,
+      secondaryText: `返还 ${getTrainingRefund(game, city)} 星`,
+    });
+  }
   for (const def of Object.values(UNITS)) {
-    if (!def.trainable || (def.tech && !hasTech(player, def.tech))) continue;
+    if (def.id === training?.unitType || !def.trainable || (def.tech && !hasTech(player, def.tech))) continue;
     const rounds = getTrainingRounds(game, city, def.id);
+    const cost = getTrainingOrderCost(game, city, def.id);
     commands.push({
       action: { type: "TRAIN", cityId: city.id, unitType: def.id },
-      label: def.name,
+      label: training ? `改训${def.name}` : def.name,
       icon: unitIcons[def.id],
-      cost: getTrainingCost(game, 0, def.id),
+      cost: cost > 0 ? cost : undefined,
       note: def.description,
-      secondaryText: rounds ? `${rounds} 回合` : undefined,
+      secondaryText: training
+        ? cost < 0 ? `返还 ${-cost} 星` : cost === 0 ? "无需补差价" : undefined
+        : rounds ? `${rounds} 回合` : undefined,
     });
   }
   return commands;
@@ -345,11 +358,12 @@ export function SelectionControls({
   }
 
   const visibleTarget = canAct && unitVisible?.owner === 0 && target &&
-    isUnitVisible(game, target, 0) && target.owner !== 0 ? target : null;
+    isUnitVisible(game, target, 0) ? target : null;
+  const swapping = visibleTarget?.owner === 0;
   const preview = unitVisible && visibleTarget ? targetPreview(game, unitVisible, visibleTarget) : null;
   let commands: Command[] = [];
   if (unitVisible?.owner === 0) {
-    commands = unitCommands(game, unitVisible, tile, knownCity);
+    if (!swapping) commands = unitCommands(game, unitVisible, tile, knownCity);
   } else if (!unitVisible && knownCity?.owner === 0) {
     commands = cityCommands(game, knownCity);
   } else if (!unitVisible && !knownCity && explored && player.visible.includes(tileId)) {
@@ -363,16 +377,11 @@ export function SelectionControls({
     : unitVisible ? UNITS[unitVisible.type].name
     : knownCity?.name ?? terrainNames[tile.terrain];
   const details = preview ?? selectionDetails(game, tile, explored, unitVisible, knownCity, showCityStats);
-  const training = !unitVisible && knownCity?.owner === 0 ? knownCity.training : undefined;
-  const remaining = training ? training.readyRound - game.round : 0;
-  const trainingStatus = training
-    ? `${UNITS[training.unitType].name} · ${remaining > 0 ? `训练中 ${remaining} 回合` : "等待交付"}`
-    : undefined;
   const upkeepStatus = unitVisible?.owner === 0 && unitVisible.upkeep === "suspended"
     ? "欠费停用 · 下回合可激活"
     : unitVisible?.owner === 0 && unitVisible.upkeep === "reactivation"
       ? "本回合未激活将解散" : undefined;
-  const actionStatus = trainingStatus ?? upkeepStatus;
+  const actionStatus = swapping ? "再点友军确认换位" : upkeepStatus;
 
   return (
     <>
@@ -396,6 +405,14 @@ export function SelectionControls({
 }
 
 function targetPreview(game: GameState, unit: Unit, target: Unit) {
+  if (unit.owner === target.owner) {
+    return (
+      <div className="hud-convert-preview" role="status" aria-label="换位预览">
+        <ArrowLeftRight size={18} aria-hidden="true" />
+        <strong>{UNITS[unit.type].name}</strong><span>与</span><strong>{UNITS[target.type].name}</strong><span>换位</span>
+      </div>
+    );
+  }
   if (UNITS[unit.type].skills.includes("convert")) {
     if (validateAction(game, { type: "CONVERT", unitId: unit.id, targetId: target.id })) return null;
     return (
@@ -439,9 +456,15 @@ function selectionDetails(
   }
   if (city) {
     const owned = city.owner === 0;
+    const training = owned ? city.training : undefined;
+    const remaining = training ? training.readyRound - game.round : 0;
+    const trainingStatus = training && `${UNITS[training.unitType].name} · ${
+      canEditTraining(game, city) ? `计划 ${remaining} 回合` : remaining > 0 ? `剩余 ${remaining} 回合` : "等待交付"
+    }`;
     return (
       <>
         <Details rows={[
+          ...(trainingStatus ? [["训练", trainingStatus] as const] : []),
           ["等级", city.level],
           ...(showCityStats && owned ? [
             ["人口和单位", <CityMeter game={game} city={city} />] as const,

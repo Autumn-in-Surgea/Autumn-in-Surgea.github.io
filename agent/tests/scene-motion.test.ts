@@ -8,6 +8,8 @@ import {
   turnTowards,
 } from "../../src/scene/motion";
 import type { MotionVector } from "../../src/scene/motion";
+import type { Strike } from "../../src/scene/combatMotion";
+import { planUnitTurns, unitFacingAt, unitFacingYaw } from "../../src/scene/unitFacing";
 
 describe("unit presentation timing", () => {
   it("holds the starting square before a delayed melee advance", () => {
@@ -38,6 +40,40 @@ describe("unit presentation timing", () => {
   it("turns across the short arc at the angle wrap", () => {
     const result = turnTowards(Math.PI - 0.1, -Math.PI + 0.1, 0.5);
     expect(result).toBeCloseTo(Math.PI);
+  });
+});
+
+describe("two-sided unit silhouettes", () => {
+  const start = { x: 4, y: 4 };
+
+  it("chooses one 45-degree view for the whole leg, including when the route detours left", () => {
+    const goal = { x: 5, y: 4 };
+    const turns = planUnitTurns({
+      journey: [{
+        from: start, path: [start, { x: 3, y: 4 }, goal], start: 0.2, duration: 0.5,
+      }],
+    }, goal, 0);
+    expect(unitFacingYaw[unitFacingAt(turns, 0, "left")]).toBe(Math.PI);
+    expect(unitFacingYaw[unitFacingAt(turns, 0.25, "left")]).toBe(-Math.PI / 2);
+    expect(unitFacingAt(turns, 1, "left")).toBe("right");
+    expect(planUnitTurns({ from: goal }, start, 0)).toEqual([{ at: 0, facing: "left" }]);
+  });
+
+  it("keeps the stance when the destination is aligned vertically on screen", () => {
+    const turns = planUnitTurns({ from: start }, { x: 5, y: 5 }, 0);
+    expect(unitFacingAt(turns, Infinity, "left")).toBe("left");
+  });
+
+  it("faces the opponent on attack and at impact, and maintains the pose for a hidden origin", () => {
+    const hit: Strike = {
+      id: 1, from: { x: 2, y: 4 }, at: start, targetId: "defender", projectile: "arrow",
+      splash: false, lethal: false, damage: 3, start: 0.1, launch: 0.3, impact: 0.6,
+    };
+    expect(planUnitTurns({ attacks: [hit] }, hit.from!, 0)).toEqual([{ at: 0.1, facing: "right" }]);
+    const turns = planUnitTurns({ impacts: [hit] }, start, 0);
+    expect(unitFacingAt(turns, 0.5, "right")).toBe("right");
+    expect(unitFacingAt(turns, 0.6, "right")).toBe("left");
+    expect(planUnitTurns({ impacts: [{ ...hit, from: undefined }] }, start, 0)).toEqual([]);
   });
 });
 

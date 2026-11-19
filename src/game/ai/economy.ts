@@ -2,7 +2,7 @@ import { BUILDINGS, TECHNOLOGIES, UNITS } from "../data/config";
 import { distance, isWater, neighbors } from "../map/generate";
 import {
   canApplyAction, getActiveUpkeep, getBuildingLevel, getEmbassyCost, getIncome, getPendingUpgradeCity,
-  getTechCost, getTrainingCost, getUnitUpkeep, getUpgradeRewards, getVisibleResource,
+  getTechCost, getTrainingCost, getTrainingRounds, getUnitUpkeep, getUpgradeRewards, getVisibleResource,
 } from "../rules/engine";
 import type { Action, BuildingId, City, GameState, Resource, UnitType } from "../types";
 import { getArmyTarget, type AiProfile } from "./profiles";
@@ -104,6 +104,7 @@ export function chooseEconomic(s: GameState, k: Knowledge, threats: ThreatMap, p
         ? ["warrior", "rider", "defender", "archer", "swordsman", "catapult", "knight", "mindBender", "cloak"]
         : ["warrior", "rider", "archer", "swordsman", "defender"];
       for (const type of trainable) {
+        if (s.options.mode === "score" && s.round + getTrainingRounds(s, c, type) > s.options.maxRounds) continue;
         const cost = getTrainingCost(s, p.id, type);
         const upkeep = getUnitUpkeep(s, { type });
         if (upkeep > 0 && upkeep > recurringRoom) continue;

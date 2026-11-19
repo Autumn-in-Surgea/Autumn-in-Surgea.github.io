@@ -384,6 +384,12 @@ export function deserializeGame(raw: string): GameState {
           count(order.readyRound, 2),
         "城市训练",
       );
+      check(
+        (order.orderedRound === undefined && order.paidStars === undefined && order.readyRound <= round + 1) ||
+          (count(order.orderedRound, 1) && order.orderedRound <= round &&
+            order.readyRound > order.orderedRound && count(order.paidStars)),
+        "城市训练",
+      );
     }
     check(
       count(city.level, 1) &&

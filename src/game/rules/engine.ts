@@ -63,6 +63,25 @@ export const getTrainingRounds = (
   _city: City,
   _type: UnitType,
 ): number => s.options.quickMode === false ? SLOW_TRAINING_ROUNDS : 0;
+
+export function canEditTraining(s: GameState, city: City): boolean {
+  const order = city.training;
+  // Legacy delayed orders took one round and did not store their placement round.
+  return s.options.quickMode === false && s.status === "playing" && city.owner === s.currentPlayer &&
+    !!order && (order.orderedRound ?? order.readyRound - 1) === s.round;
+}
+
+export function getTrainingRefund(s: GameState, city: City): number {
+  const order = city.training;
+  if (!order || city.owner === null) return 0;
+  return order.paidStars ?? getTrainingCost(s, city.owner, order.unitType);
+}
+
+export function getTrainingOrderCost(s: GameState, city: City, type: UnitType): number {
+  const refund = canEditTraining(s, city) ? getTrainingRefund(s, city) : 0;
+  return getTrainingCost(s, city.owner ?? s.currentPlayer, type) - refund;
+}
+
 const techTiers = new Map(TECHNOLOGIES.map(({ id, tier }) => [id, tier]));
 
 export function getUnitUpkeep(
@@ -1106,15 +1125,22 @@ export function validateAction(s: GameState, a: Action): string | null {
       const c = s.cities.find((c) => c.id === a.cityId),
         d = UNITS[a.unitType];
       if (!c || c.owner !== p.id || !d?.trainable) return "无法训练该兵种。";
-      if (c.training) return "该城市已在训练单位。";
+      if (c.training) {
+        if (!canEditTraining(s, c)) return "训练已经开始。";
+        if (c.training.unitType === a.unitType) return "训练计划已包含该兵种。";
+      }
       if (d.tech && !hasTech(p, d.tech)) return "需要对应科技。";
-      if (p.resources < getTrainingCost(s, p.id, a.unitType)) return "星星不足。";
+      if (p.resources < getTrainingOrderCost(s, c, a.unitType)) return "星星不足。";
       const occupant = unitAt(s, c);
       if (occupant && (getTrainingRounds(s, c, a.unitType) === 0 || occupant.owner !== p.id))
         return "请先腾出城市中心。";
       return getCityUnitCount(s, c) < getCityCapacity(c)
         ? null
         : "城市单位容量已满。";
+    }
+    case "CANCEL_TRAINING": {
+      const city = s.cities.find((c) => c.id === a.cityId);
+      return city && canEditTraining(s, city) ? null : "只有本回合的训练计划可以取消。";
     }
     case "RESEARCH": {
       const t = TECHNOLOGIES.find((t) => t.id === a.techId);
@@ -1370,12 +1396,19 @@ function recover(s: GameState, u: Unit): void {
   u.hp = Math.min(u.maxHp, u.hp + (tileAt(s, u).owner === u.owner ? 4 : 2));
   exhaust(u);
 }
+function recruitmentSequence(unit: Unit): number {
+  const sequence = Number(/^unit-(\d+)$/.exec(unit.id)?.[1]);
+  // Legacy custom IDs stay in roster order, ahead of later generated units.
+  return Number.isSafeInteger(sequence) ? sequence : 0;
+}
 function finishTurn(s: GameState, player: Player): void {
+  const roster = s.units.filter((unit) => unit.owner === player.id);
+  const slow = s.options.quickMode === false;
+  if (slow) roster.sort((a, b) => recruitmentSequence(a) - recruitmentSequence(b));
   const disbanded = new Set<string>();
-  for (const unit of s.units) {
-    if (unit.owner !== player.id) continue;
+  for (const unit of roster) {
     if (canRecover(unit)) recover(s, unit);
-    if (s.options.quickMode !== false) continue;
+    if (!slow) continue;
     if (unit.upkeep === "reactivation") {
       disbanded.add(unit.id);
     } else if (unit.upkeep === "suspended") {
@@ -1793,12 +1826,21 @@ export function applyAction(source: GameState, a: Action): ActionResult {
     case "TRAIN": {
       const c = s.cities.find((c) => c.id === a.cityId)!,
         rounds = getTrainingRounds(s, c, a.unitType);
-      p.resources -= getTrainingCost(s, p.id, a.unitType);
+      p.resources -= getTrainingOrderCost(s, c, a.unitType);
       if (rounds > 0) {
-        c.training = { unitType: a.unitType, readyRound: s.round + rounds };
+        c.training = {
+          unitType: a.unitType, readyRound: s.round + rounds, orderedRound: s.round,
+          paidStars: getTrainingCost(s, p.id, a.unitType),
+        };
       } else {
         s.units.push(freshUnit(s, p.id, a.unitType, c, c.id));
       }
+      break;
+    }
+    case "CANCEL_TRAINING": {
+      const city = s.cities.find((c) => c.id === a.cityId)!;
+      p.resources += getTrainingRefund(s, city);
+      delete city.training;
       break;
     }
     case "UPGRADE_NAVAL":
@@ -2141,6 +2183,7 @@ export function getAvailableActions(
     for (const action of unitSpecialActions(s, u)) offer(action);
   }
   for (const c of s.cities.filter((c) => c.owner === id)) {
+    if (c.training) offer({ type: "CANCEL_TRAINING", cityId: c.id });
     for (const d of Object.values(UNITS).filter((d) => d.trainable))
       offer({ type: "TRAIN", cityId: c.id, unitType: d.id });
     for (const reward of getUpgradeRewards(c))

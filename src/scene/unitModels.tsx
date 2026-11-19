@@ -21,8 +21,8 @@ spentMaterial.color.multiplyScalar(spentBrightness);
 foreignMaterial.color.multiplyScalar(foreignTerritoryBrightness);
 
 export const BOARD_UNIT_RENDER_ORDER = 5;
-const landHealthAnchor: [number, number, number] = [0.018, 0.12, 0.018];
-const armoredCarHealthAnchor: [number, number, number] = [0.145, 0.09, 0.145];
+const landHealthAnchor: [number, number, number] = [-0.018, 0.12, 0.018];
+const armoredCarHealthAnchor: [number, number, number] = [-0.145, 0.09, 0.145];
 const navalHealthOffsets: Partial<Record<UnitType, number>> = {
   raft: 0.24, dinghy: 0.19, pirate: 0.20, scout: 0.20, rammer: 0.22,
   bomber: 0.24, juggernaut: 0.26,
@@ -32,7 +32,7 @@ export function unitHealthAnchor(type: UnitType): [number, number, number] {
   if (type === "giant") return armoredCarHealthAnchor;
   // Follow the near diagonal so the number stays centered for either ship heading.
   const offset = navalHealthOffsets[type];
-  return offset === undefined ? landHealthAnchor : [offset, 0, offset];
+  return offset === undefined ? landHealthAnchor : [-offset, 0, offset];
 }
 
 const clearedFrame = new WeakMap<THREE.WebGLRenderer, number>();

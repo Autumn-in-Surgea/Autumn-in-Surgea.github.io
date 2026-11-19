@@ -128,7 +128,8 @@ describe("bounded standard-rule AI", () => {
       expect(game.status).toBe("finished");
       expect(game.winner).not.toBeNull();
     },
-    30000,
+    // The 64×64 story case plays all 150 faction turns, including under CI contention.
+    60_000,
   );
   it("can advance all eleven participants on the maximum map without invalid player indices", () => {
     let game = newGame({ size: 64, aiCount: 10 });

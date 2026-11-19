@@ -1,7 +1,7 @@
 import { DEFAULT_TERRAIN_VARIANT } from "../../nations/registry";
 import type { CivilizationId, GameOptions, Position, Tile } from "../types";
 import { openingNations } from "./openingNations";
-import { hashSeed, seededRandom } from "./random";
+import { hashSeed, seededRandom, valueNoise } from "./random";
 import { createStoryMap } from "./story";
 import { assignTerrainVariants } from "./terrainVariants";
 
@@ -24,27 +24,9 @@ export function neighbors(tiles: Tile[], size: number, tile: Position): Tile[] {
 }
 const clamp = (n: number, min: number, max: number) =>
   Math.max(min, Math.min(max, n));
-const smooth = (n: number) => n * n * (3 - 2 * n);
 const resourceChanceScale = 0.9;
 const mountainOreChance = 0.7;
 const landRuinChance = 0.01;
-/** Continuous seeded value noise; four octaves produce broad coasts and smaller details. */
-export function valueNoise(x: number, y: number, seed: number): number {
-  const xi = Math.floor(x),
-    yi = Math.floor(y),
-    u = smooth(x - xi),
-    v = smooth(y - yi);
-  const corner = (a: number, b: number) => {
-    let h = Math.imul(a ^ seed, 374761393) ^ Math.imul(b + seed, 668265263);
-    h = Math.imul(h ^ (h >>> 13), 1274126177);
-    return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
-  };
-  const a = corner(xi, yi),
-    b = corner(xi + 1, yi),
-    c = corner(xi, yi + 1),
-    d = corner(xi + 1, yi + 1);
-  return (a + (b - a) * u) * (1 - v) + (c + (d - c) * u) * v;
-}
 function fractalNoise(x: number, y: number, seed: number) {
   let result = 0,
     weight = 0,

@@ -80,14 +80,14 @@ describe("two-sided unit silhouettes", () => {
         from: start, path: [start, { x: 3, y: 4 }, goal], start: 0.2, duration: 0.5,
       }],
     }, goal, 0);
-    expect(unitFacingYaw[unitFacingAt(turns, 0, "left")]).toBe(Math.PI);
-    expect(unitFacingYaw[unitFacingAt(turns, 0.25, "left")]).toBe(-Math.PI / 2);
+    expect(unitFacingYaw[unitFacingAt(turns, 0, "left")]).toBe(Math.PI / 2);
+    expect(unitFacingYaw[unitFacingAt(turns, 0.25, "left")]).toBe(Math.PI);
     expect(unitFacingAt(turns, 1, "left")).toBe("right");
     expect(planUnitTurns({ from: goal }, start, 0)).toEqual([{ at: 0, facing: "left" }]);
   });
 
   it("keeps the stance when the destination is aligned vertically on screen", () => {
-    const turns = planUnitTurns({ from: start }, { x: 5, y: 5 }, 0);
+    const turns = planUnitTurns({ from: start }, { x: 5, y: 3 }, 0);
     expect(unitFacingAt(turns, Infinity, "left")).toBe("left");
   });
 

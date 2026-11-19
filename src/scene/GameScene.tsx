@@ -11,7 +11,7 @@ import {
   useRef,
   useState,
 } from "react";
-import type { ReactNode, Ref } from "react";
+import type { ReactNode, Ref, RefObject } from "react";
 import { Canvas, events, useFrame, useThree } from "@react-three/fiber";
 import type { ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
@@ -34,6 +34,7 @@ import { buildTileTiers, type StructureChange } from "../store/structurePlayback
 import { BoardFrame, tileCap, tilePlinth } from "./BoardFrame";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { bindBoardGestures, canHoverBoard, takeBoardTap } from "./boardGestures";
+import type { BoardEditorMode, BoardEditorPointer } from "./boardGestures";
 import type { City, GameEvent, GameState, Tile } from "../game/types";
 import { getCityCapacity, getCityIncome, getCityUnitCount, getUnitsWithAvailableActions, getVisibleResource, isUnitVisible } from "../game";
 import { PlaybackContext, useBoardClock, usePlaybackClock } from "./playbackClock";
@@ -83,11 +84,17 @@ export interface GameSceneProps {
   showCityDetails?: boolean;
   showResourceHints?: boolean;
   preview?: boolean;
+  editor?: { mode: BoardEditorMode; onPointer: BoardEditorPointer };
 }
 
-const mapCameraOffset = new THREE.Vector3(13, 17, 13);
+const mapCameraOffset = new THREE.Vector3(-13, 17, 13);
 const mapViewAngles = new THREE.Spherical().setFromVector3(mapCameraOffset);
+const mapCameraDirection = mapCameraOffset.clone().normalize();
 const panCoastSeconds = 0.21;
+
+function boardFitZoom(width: number, height: number, side: number) {
+  return Math.min(width / (side * 1.5), height / (side * 1.13));
+}
 
 function CameraRig({
   game,
@@ -96,12 +103,14 @@ function CameraRig({
   selectedTile,
   playbackStep,
   reducedMotion,
+  editor,
+  boardShells,
   onReplayFocus,
   onDrag,
 }: Pick<
   GameSceneProps,
-  "game" | "resetKey" | "preview" | "selectedTile" | "playbackStep" | "reducedMotion"
-> & { onReplayFocus: (id: number) => void; onDrag: () => void }) {
+  "game" | "resetKey" | "preview" | "selectedTile" | "playbackStep" | "reducedMotion" | "editor"
+> & { boardShells: RefObject<THREE.Group | null>; onReplayFocus: (id: number) => void; onDrag: () => void }) {
   const { camera, gl, size } = useThree();
   const cameraControls = useRef<OrbitControls | null>(null);
   const seed = game.options.seed;
@@ -117,6 +126,12 @@ function CameraRig({
   } | null>(null);
   const panStep = useRef(new THREE.Vector3());
   const coastVelocity = useRef(new THREE.Vector3());
+  const editorInput = useRef(editor);
+  const isEditor = editor !== undefined;
+  useLayoutEffect(() => {
+    editorInput.current = editor;
+    gl.domElement.style.cursor = editor?.mode === "paint" ? "crosshair" : editor?.mode === "city" ? "move" : "grab";
+  }, [editor, gl]);
   const finishPan = useCallback(() => {
     const id = automaticPan.current?.replayId;
     automaticPan.current = null;
@@ -137,14 +152,17 @@ function CameraRig({
     controls.zoomToCursor = true;
     controls.mouseButtons = {
       LEFT: THREE.MOUSE.PAN,
-      MIDDLE: THREE.MOUSE.DOLLY,
+      MIDDLE: isEditor ? THREE.MOUSE.PAN : THREE.MOUSE.DOLLY,
       RIGHT: THREE.MOUSE.PAN,
     };
     controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN };
-    controls.minZoom = Math.max(5, 180 / n);
     controls.maxZoom = 150;
     const choosePanAction = (event: PointerEvent) => {
-      if (event.pointerType === "touch") return;
+      if (event.pointerType === "touch") {
+        const mode = editorInput.current?.mode;
+        controls.touches.ONE = mode && mode !== "pan" ? null : THREE.TOUCH.PAN;
+        return;
+      }
       // OrbitControls swaps the rotate and pan bindings when a modifier is held.
       const action = event.ctrlKey || event.metaKey || event.shiftKey
         ? THREE.MOUSE.ROTATE
@@ -153,6 +171,22 @@ function CameraRig({
     };
     const canvas = gl.domElement;
     const right = new THREE.Vector3(), up = new THREE.Vector3();
+    const pointer = new THREE.Vector2(), raycaster = new THREE.Raycaster();
+    const hits: THREE.Intersection[] = [];
+    function pickTile(event: PointerEvent) {
+      const shells = boardShells.current;
+      const { left, top, right, bottom, width, height } = canvas.getBoundingClientRect();
+      if (!shells || event.clientX < left || event.clientX >= right || event.clientY < top || event.clientY >= bottom) return null;
+      pointer.set((event.clientX - left) / width * 2 - 1, 1 - (event.clientY - top) / height * 2);
+      camera.updateMatrixWorld();
+      raycaster.setFromCamera(pointer, camera);
+      hits.length = 0;
+      raycaster.intersectObject(shells, true, hits);
+      const hit = hits[0];
+      if (hit?.instanceId === undefined) return null;
+      const tiles = hit.object.userData.boardTiles as Tile[];
+      return tiles[hit.instanceId]?.id ?? null;
+    }
     const disconnectGestures = bindBoardGestures(canvas, onDrag, (vx, vy) => {
       if (!(camera instanceof THREE.OrthographicCamera) || !canvas.clientWidth || !canvas.clientHeight) return;
       const speedScale = Math.min(1, 1050 / Math.hypot(vx, vy));
@@ -161,7 +195,14 @@ function CameraRig({
       right.setFromMatrixColumn(camera.matrix, 0);
       up.setFromMatrixColumn(camera.matrix, 1);
       coastVelocity.current.copy(right).multiplyScalar(-dx).addScaledVector(up, dy);
-    });
+    }, isEditor ? {
+      mode: () => editorInput.current?.mode ?? "pan",
+      pick: pickTile,
+      onPointer: (phase, tile) => {
+        coastVelocity.current.set(0, 0, 0);
+        editorInput.current?.onPointer(phase, tile);
+      },
+    } : undefined);
     const startCameraInput = () => {
       coastVelocity.current.set(0, 0, 0);
       finishPan();
@@ -176,29 +217,38 @@ function CameraRig({
       controls.dispose();
       cameraControls.current = null;
     };
-  }, [camera, gl, n, onDrag, finishPan]);
+  }, [camera, gl, n, onDrag, finishPan, isEditor, boardShells]);
   useLayoutEffect(() => {
     const controls = cameraControls.current;
     if (!controls) return;
     const offset = (n - 1) / 2;
-    const x = preview ? 0 : (focus?.x ?? offset) - offset;
-    const z = preview ? 0 : (focus?.y ?? offset) - offset;
+    const overview = preview || isEditor;
+    const x = overview ? 0 : (focus?.x ?? offset) - offset;
+    const z = overview ? 0 : (focus?.y ?? offset) - offset;
     automaticPan.current = null;
     coastVelocity.current.set(0, 0, 0);
     controls.target.set(x, 0, z);
-    camera.position.copy(controls.target).add(mapCameraOffset);
-    camera.zoom = preview
-      ? Math.min(size.width / (n * 1.5), size.height / (n * 1.13))
+    // Keep the front corner of large boards inside the near plane even when panned.
+    const distance = n > 48 ? 1.3 * n + 4 : mapViewAngles.radius;
+    camera.position.copy(controls.target).addScaledVector(mapCameraDirection, distance);
+    camera.zoom = overview
+      ? boardFitZoom(size.width, size.height, n)
       : Math.max(31, Math.min(size.width / 13, size.height / 9));
     camera.updateProjectionMatrix();
     controls.update();
     camera.updateMatrixWorld();
     // A new seed or explicit reset reframes the map; actions preserve the user's camera.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [seed, n, resetKey, preview, camera, gl]);
-  useEffect(() => {
+  }, [seed, n, resetKey, preview, isEditor, camera, gl]);
+  useLayoutEffect(() => {
+    const controls = cameraControls.current;
+    if (controls) {
+      const minimum = Math.max(5, 180 / n);
+      const fit = boardFitZoom(size.width, size.height, n);
+      controls.minZoom = (n > 48 || isEditor) && fit > 0 ? Math.min(minimum, fit) : minimum;
+    }
     camera.updateProjectionMatrix();
-  }, [size, camera]);
+  }, [camera, gl, n, size, onDrag, finishPan, isEditor]);
   const replayTile = playbackStep?.focusTile ?? null;
   const replayId = playbackStep?.id;
   useLayoutEffect(() => {
@@ -231,7 +281,7 @@ function CameraRig({
     if (replayTile !== null) return;
     automaticPan.current = null;
     const controls = cameraControls.current;
-    if (preview || selectedTile === null || !controls) return;
+    if (preview || isEditor || selectedTile === null || !controls) return;
     const offset = (n - 1) / 2;
     const point = new THREE.Vector3(
       (selectedTile % n) - offset,
@@ -254,7 +304,7 @@ function CameraRig({
         duration: Math.min(0.55, 0.29 + from.distanceTo(point) * 0.035),
       };
     }
-  }, [selectedTile, preview, n, camera, replayTile]);
+  }, [selectedTile, preview, isEditor, n, camera, replayTile]);
   useFrame((_, delta) => {
     const controls = cameraControls.current;
     if (!controls) return;
@@ -374,6 +424,7 @@ function Label({
   cityDetails,
   cityBackgroundOpacity,
   reducedMotion = false,
+  minimumTextPixels,
 }: {
   text: string;
   color: string;
@@ -384,6 +435,7 @@ function Label({
   cityDetails?: CityNameplateDetails;
   cityBackgroundOpacity?: number;
   reducedMotion?: boolean;
+  minimumTextPixels?: number;
 }) {
   const style = useContext(MapLabelStyle);
   const showDetails = !!cityDetails;
@@ -432,7 +484,12 @@ function Label({
       sprite.current.material.opacity = opacity;
     }
   }, [texture, style, text, color, kind, showDetails, population, units, capacity, income, reducedMotion, clock, originY, opacity, cityBackgroundOpacity]);
-  useFrame(() => {
+  useFrame(({ camera, size }) => {
+    if (minimumTextPixels && sprite.current && camera instanceof THREE.OrthographicCamera && size.height > 0 && camera.zoom > 0) {
+      const worldPerPixel = (camera.top - camera.bottom) / (camera.zoom * size.height);
+      const scale = Math.max(1 / pixelsPerUnit, worldPerPixel * minimumTextPixels / labelFontSize.city);
+      sprite.current.scale.set(texture.image.width * scale, texture.image.height * scale, 1);
+    }
     const active = motion.current;
     if (!active || !sprite.current) return;
     const progress = clampProgress((clock.time - active.since) / (active.city ? cityMeterMotionMs : labelBounceMs));
@@ -580,11 +637,13 @@ function BoardPatch({ tiles, cap, plinth, explored, visible, offset, onClick, on
     if (e.instanceId !== undefined) onHover(tiles[e.instanceId].id);
     glCursor("pointer");
   };
+  const pickData = { boardTiles: tiles };
   return (
     <>
       <instancedMesh
         ref={baseRef}
         args={[plinth, material("#ffffff"), tiles.length]}
+        userData={pickData}
         receiveShadow
         onClick={click}
         onPointerMove={hover}
@@ -593,6 +652,7 @@ function BoardPatch({ tiles, cap, plinth, explored, visible, offset, onClick, on
       <instancedMesh
         ref={topRef}
         args={[cap, material("#ffffff"), tiles.length]}
+        userData={pickData}
         receiveShadow
         onClick={click}
         onPointerMove={hover}
@@ -619,6 +679,7 @@ const TileView = memo(function TileView({
   reducedMotion,
   showCityNames,
   showCityDetails,
+  editor,
   checkResourceAvailability,
   showResourceHints,
   city,
@@ -642,6 +703,7 @@ const TileView = memo(function TileView({
   reducedMotion: boolean;
   showCityNames: boolean;
   showCityDetails: boolean;
+  editor: boolean;
   checkResourceAvailability: boolean;
   showResourceHints: boolean;
   city?: City;
@@ -722,8 +784,9 @@ const TileView = memo(function TileView({
               cityBackgroundOpacity={visible ? 0.28 : 0.224}
               cityDetails={cityDetails}
               reducedMotion={reducedMotion}
+              minimumTextPixels={editor ? 8 : undefined}
               // Keep the plate centered just in front of the city.
-              position={[cityLabelOffset, 0.04, cityLabelOffset]}
+              position={[-cityLabelOffset, 0.04, cityLabelOffset]}
             />
           )}
         </group>
@@ -844,7 +907,7 @@ function AnimatedUnit({
       {!cue.dying && unit.owner === 0 && !actionsSpent && (
         <Piece
           shape="sphere"
-          position={[0.24, 0.06, 0.12]}
+          position={[-0.12, 0.06, 0.24]}
           scale={[0.035, 0.035, 0.035]}
           color="#fff4c6"
         />
@@ -1167,10 +1230,13 @@ function World({
   reducedMotion = false,
   showCityDetails = false,
   showResourceHints = true,
-  preview = false,
+  preview: previewMode = false,
+  editor,
   badges,
   badgeElements,
 }: GameSceneProps & MapBadgesProps) {
+  const preview = previewMode || !!editor;
+  const boardShells = useRef<THREE.Group>(null);
   const replay = playbackStep?.focusTile != null ? playbackStep : null;
   const [focusedReplayId, setFocusedReplayId] = useState<number | null>(null);
   const awaitingFocus = replay && !reducedMotion && focusedReplayId !== replay.id;
@@ -1269,6 +1335,7 @@ function World({
     () =>
       new Set([
         ...view.ids,
+        ...(editor ? game.cities.map(city => city.y * game.options.size + city.x) : []),
         ...movable,
         ...targetTiles,
         ...(playingStep?.structures.keys() ?? []),
@@ -1277,7 +1344,8 @@ function World({
         ...(previewingSwap || hoveredTile === null ? [] : [hoveredTile]),
         ...(playbackStep?.focusTile == null ? [] : [playbackStep.focusTile]),
       ]),
-    [view.ids, movable, targetTiles, selectedTile, swapTargetTile, previewingSwap, hoveredTile, playbackStep, playingStep],
+    [view.ids, editor, game.cities, game.options.size, movable, targetTiles, selectedTile, swapTargetTile,
+      previewingSwap, hoveredTile, playbackStep, playingStep],
   );
   const displayTiles = useMemo(
     () =>
@@ -1387,6 +1455,8 @@ function World({
         resetKey={resetKey}
         onDrag={clearHover}
         preview={preview}
+        editor={editor}
+        boardShells={boardShells}
         selectedTile={selectedTile}
         playbackStep={playbackStep}
         reducedMotion={reducedMotion}
@@ -1422,14 +1492,16 @@ function World({
       />
       <group>
         <BoardFrame size={game.options.size} />
-        <BoardTiles
-          game={game}
-          explored={explored}
-          visible={visible}
-          offset={offset}
-          onClick={onTileClick}
-          onHover={setHoveredTile}
-        />
+        <group ref={boardShells} name="board-shells">
+          <BoardTiles
+            game={game}
+            explored={explored}
+            visible={visible}
+            offset={offset}
+            onClick={onTileClick}
+            onHover={setHoveredTile}
+          />
+        </group>
         {!view.simple && <TerrainInlays game={game} tileIds={view.ids} visible={visible} />}
         {!preview && <ShippingLanes game={game} explored={explored} />}
         <TerritoryBorders tiles={game.tiles} players={game.players} explored={explored} size={game.options.size} />
@@ -1448,8 +1520,9 @@ function World({
             offset={offset}
             simple={view.simple}
             reducedMotion={reducedMotion}
-            showCityNames={!preview}
+            showCityNames={!preview || !!editor}
             showCityDetails={showCityDetails}
+            editor={!!editor}
             checkResourceAvailability={!preview && game.status === "playing" && game.currentPlayer === 0}
             showResourceHints={showResourceHints}
             city={tile.cityId ? cityById.get(tile.cityId) : undefined}
@@ -1568,6 +1641,8 @@ const sceneEvents: typeof events = (store) => {
   };
 };
 
+const editorEvents: typeof events = store => ({ ...events(store), enabled: false });
+
 export default function GameScene(props: GameSceneProps) {
   const [unavailable, setUnavailable] = useState(false);
   useLayoutEffect(() => props.preview ? undefined : props.attachPlayback?.(), [props.preview, props.attachPlayback]);
@@ -1609,9 +1684,9 @@ export default function GameScene(props: GameSceneProps) {
           <Canvas
             orthographic
             shadows
-            events={sceneEvents}
+            events={props.editor ? editorEvents : sceneEvents}
             dpr={[1, 1.6]}
-            camera={{ position: [13, 17, 13], zoom: 60, near: 0.1, far: 240 }}
+            camera={{ position: [-13, 17, 13], zoom: 60, near: 0.1, far: 240 }}
             gl={{
               antialias: true,
               alpha: true,

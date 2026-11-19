@@ -57,8 +57,8 @@ export function makeTerritoryBorders(tiles: Tile[], players: Player[], explored:
   for (const { x, z, low, high, owner } of corners.values()) {
     if (low === high) continue;
     // Keep the corner stroke facing the fixed isometric camera as it climbs the step.
-    section(x, low, z, Math.SQRT1_2, -Math.SQRT1_2, inks[owner], false);
-    section(x, high, z, Math.SQRT1_2, -Math.SQRT1_2, inks[owner], true);
+    section(x, low, z, Math.SQRT1_2, Math.SQRT1_2, inks[owner], false);
+    section(x, high, z, Math.SQRT1_2, Math.SQRT1_2, inks[owner], true);
   }
   const shape = new THREE.BufferGeometry();
   shape.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));

@@ -94,7 +94,9 @@ export function serializeGame(game: GameState, pendingNotices: readonly EventNot
 
 export function validateGameOptions(value: unknown): asserts value is GameOptions {
   const options = record(value, "开局设置");
-  check(count(options.size, 12) && options.size <= 64, "地图大小");
+  // Existing story snapshots include the 80-square atlas. Read their saved board as-is.
+  const maxSize = options.scenario === "story" ? 80 : 64;
+  check(count(options.size, 12) && options.size <= maxSize, "地图大小");
   const size = options.size;
   check(count(options.aiCount, 1) && options.aiCount <= 10, "对手数量");
   check(

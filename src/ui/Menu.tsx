@@ -4,6 +4,7 @@ import {
   ArrowRight,
   Play,
   History,
+  MapPinned,
   Settings2,
   Info,
   Shuffle,
@@ -43,10 +44,12 @@ const randomSeed = () => Math.random().toString(36).slice(2, 10);
 
 export function MainMenu({
   onHistory,
+  onEditor,
   onSettings,
   onAbout,
 }: {
   onHistory: () => void;
+  onEditor: () => void;
   onSettings: () => void;
   onAbout: () => void;
 }) {
@@ -78,6 +81,10 @@ export function MainMenu({
             <button onClick={onHistory}>
               <History aria-hidden="true" size={21} />
               <span>对局历史</span>
+            </button>
+            <button onClick={onEditor}>
+              <MapPinned aria-hidden="true" size={21} />
+              <span>地图编辑器</span>
             </button>
             <button onClick={onSettings}>
               <Settings2 aria-hidden="true" size={21} />
@@ -155,7 +162,11 @@ function NewGame({ onClose }: { onClose: () => void }) {
     if (displayedOptions.scenario === "fair") return null;
     try {
       const map = generateMap(displayedOptions);
-      return { tiles: map.tiles, starts: map.starts.map(id => map.tiles[id]) };
+      return {
+        tiles: map.tiles,
+        starts: map.starts.map(id => map.tiles[id]),
+        cities: map.storyCities,
+      };
     } catch {
       return null;
     }
@@ -591,12 +602,14 @@ function NewGame({ onClose }: { onClose: () => void }) {
                     tiles={preview.tiles}
                     size={displayedOptions.size}
                     starts={manualSpawns && previewIsCurrent ? options.mapSettings.customSpawns : preview.starts}
+                    cities={preview.cities}
                     editable={manualSpawns && previewIsCurrent}
                     onSelect={setSpawn}
                   />
                   <span className="setup-map-label">
                     {displayedOptions.scenario === "story" ? "固定地图" : mapLabels[displayedOptions.mapType]} ·{" "}
                     <AnimatedNumber value={displayedOptions.size} /> × <AnimatedNumber value={displayedOptions.size} />
+                    {preview.cities && <> · {preview.cities.length} 座城市 · 全图视野</>}
                   </span>
                 </div>
               )}
@@ -612,12 +625,14 @@ function MapPreview({
   tiles,
   size,
   starts,
+  cities,
   editable,
   onSelect,
 }: {
   tiles: Tile[];
   size: number;
   starts: { x: number; y: number }[];
+  cities?: { tileId: number; name: string; capitalOfCivilization?: CivilizationId }[];
   editable: boolean;
   onSelect: (x: number, y: number) => void;
 }) {
@@ -631,8 +646,48 @@ function MapPreview({
       ctx.fillStyle = representativeTerrain.shells[t.terrain].color;
       ctx.fillRect(t.x * w, t.y * w, Math.ceil(w), Math.ceil(w));
     }
+    if (cities) {
+      for (const city of cities) {
+        if (city.capitalOfCivilization) continue;
+        const tile = tiles[city.tileId];
+        ctx.fillStyle = "#f9ebbd";
+        ctx.strokeStyle = "#35443e";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc((tile.x + 0.5) * w, (tile.y + 0.5) * w, 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
+    }
     starts.forEach((p, i) => {
       if (!p) return;
+      if (cities) {
+        const capital = cities.find(city => city.tileId === p.y * size + p.x);
+        if (!capital) return;
+        const x = (p.x + 0.5) * w, y = (p.y + 0.5) * w;
+        ctx.fillStyle = i === 0 ? "#f8df93" : "#273d53";
+        ctx.strokeStyle = "#fff0c7";
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.moveTo(x, y - 4.5);
+        ctx.lineTo(x + 4.5, y);
+        ctx.lineTo(x, y + 4.5);
+        ctx.lineTo(x - 4.5, y);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.font = '700 12px "Resource Han Rounded", sans-serif';
+        ctx.textBaseline = "middle";
+        ctx.textAlign = x > 440 ? "right" : "left";
+        const textX = x + (x > 440 ? -7 : 7);
+        ctx.strokeStyle = "#243047";
+        ctx.lineWidth = 2.4;
+        ctx.lineJoin = "round";
+        ctx.strokeText(capital.name, textX, y);
+        ctx.fillStyle = "#fff4d8";
+        ctx.fillText(capital.name, textX, y);
+        return;
+      }
       ctx.fillStyle = i === 0 ? "#f7f0ce" : "#343b37";
       ctx.beginPath();
       ctx.arc(
@@ -649,7 +704,7 @@ function MapPreview({
       ctx.font = "bold 11px sans-serif";
       ctx.fillText(String(i + 1), (p.x + 0.5) * w, (p.y + 0.5) * w);
     });
-  }, [tiles, size, starts]);
+  }, [tiles, size, starts, cities]);
   return (
     <canvas
       className={`setup-map ${editable ? "editable" : ""}`}

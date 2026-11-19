@@ -168,7 +168,7 @@ describe("map action badges", () => {
       const screen = new Vector3();
       const matrix = new Matrix4();
       const [x, , z] = badge.position;
-      camera.position.set(x + 13, 17, z + 13);
+      camera.position.set(x - 13, 17, z + 13);
       camera.lookAt(x, 0, z);
       camera.updateMatrixWorld();
       for (const zoom of [20, 70, 150]) {

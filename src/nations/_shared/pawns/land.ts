@@ -9,6 +9,7 @@ import { boardPawn } from "./boardPawn";
 type Support = Parameters<typeof groundSupport>[0];
 const mountingPlane = .118;
 const coatHem = .132;
+const headScale = .85;
 const horseKits = new Map<boolean, THREE.BufferGeometry>();
 const fieldKits = new Map<UnitType, ReturnType<typeof additionalKit>>();
 
@@ -28,6 +29,12 @@ function chassis(kind: Support) {
 
 function fittedPawn(nation: NationId, type: UnitType) {
   const pawn = boardPawn(nation,type);
+  const head = pawn.getObjectByName("Blank carved square head")!;
+  const hat = pawn.getObjectByName("Hat socket")!;
+  // Keep the chin fitted to the collar and move the hat with the carved head.
+  head.scale.multiplyScalar(headScale);
+  hat.position.lerp(head.position, 1 - headScale);
+  hat.scale.multiplyScalar(headScale);
   if (!fieldKits.has(type)) fieldKits.set(type, additionalKit(type));
   const kit = fieldKits.get(type);
   if (kit) pawn.add(mesh("Field equipment", kit));

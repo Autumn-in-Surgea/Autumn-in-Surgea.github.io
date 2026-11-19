@@ -367,6 +367,11 @@ function reveal(
 }
 export function updateVisibility(s: GameState): void {
   for (const p of s.players) {
+    // Explored tiles stay visible, so a surveyed board cannot reveal more.
+    if (p.explored.length === s.tiles.length && p.visible.length === s.tiles.length) {
+      p.stats.explored = s.tiles.length;
+      continue;
+    }
     const visible = new Set<number>(),
       explored = new Set(p.explored);
     for (const c of s.cities)
@@ -397,8 +402,9 @@ function discover(s: GameState, before: GameState, award = populationAward(s)): 
     const capital = s.cities.find(
       (c) => c.owner === p.id && c.capitalOf === p.id,
     );
-    if (capital) {
-      const previous = new Set(before.players[p.id]?.explored ?? []);
+    const previouslyExplored = before.players[p.id]?.explored ?? [];
+    if (capital && p.explored.length > previouslyExplored.length) {
+      const previous = new Set(previouslyExplored);
       for (const id of p.explored)
         if (s.tiles[id].lighthouse && !previous.has(id))
           award(capital, 1, { kind: "lighthouse", tileId: id });
@@ -645,17 +651,27 @@ export function createGame(input: GameOptions): GameState {
       null,
     );
   });
-  updateVisibility(s);
-  for (const p of players) {
-    p.explored = p.explored.filter((id) => !s.tiles[id].lighthouse);
-    p.visible = p.visible.filter((id) => !s.tiles[id].lighthouse);
-    p.stats.explored = p.explored.length;
+  if (options.scenario === "story") {
+    // The factions start with a survey and know each other. This is opening
+    // information, so it does not count as a fresh lighthouse or contact.
+    const survey = s.tiles.map(tile => tile.id);
+    for (const player of players) {
+      player.explored = [...survey];
+      player.visible = [...survey];
+      player.stats.explored = survey.length;
+      player.metPlayers = players.filter(other => other.id !== player.id).map(other => other.id);
+    }
+  } else {
+    updateVisibility(s);
+    for (const p of players) {
+      p.explored = p.explored.filter((id) => !s.tiles[id].lighthouse);
+      p.visible = p.visible.filter((id) => !s.tiles[id].lighthouse);
+      p.stats.explored = p.explored.length;
+    }
+    const before = structuredClone(s);
+    for (const player of before.players) player.explored = [];
+    discover(s, before);
   }
-  const before = structuredClone(s);
-  before.players.forEach((p) => {
-    p.explored = [];
-  });
-  discover(s, before);
   players.forEach((p) => {
     p.score = getScore(s, p.id);
   });

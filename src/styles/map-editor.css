@@ -1,0 +1,212 @@
+.app.is-editor {
+  min-height: 0;
+  background: #090e1b;
+}
+
+.map-editor {
+  --editor-pane: light-dark(#f5edd9, #1b3048);
+  --editor-ink: light-dark(#23364b, #f5ecd9);
+  --editor-muted: light-dark(#576373, #c4d1dc);
+  --editor-rule: light-dark(#a68b59, #a78b57);
+  --editor-key: light-dark(#fdf5e3, #304d69);
+  --editor-key-edge: light-dark(#aa9368, #75868f);
+  --editor-selected: light-dark(#e9cf91, #785d32);
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
+  color: var(--editor-ink);
+}
+
+.map-editor-header,
+.map-editor-footer {
+  min-width: 0;
+  background: var(--editor-pane);
+  padding-inline: max(10px, env(safe-area-inset-left, 0px))
+    max(10px, env(safe-area-inset-right, 0px));
+}
+
+.map-editor-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  border-bottom: 1px solid var(--editor-rule);
+  padding-block: calc(6px + env(safe-area-inset-top, 0px)) 6px;
+}
+
+.map-editor-heading,
+.map-editor-files,
+.map-editor-toolbar,
+.map-editor-history,
+.map-editor-palette,
+.map-editor-cities,
+.map-editor-size {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.map-editor-heading h1 {
+  font-size: var(--font-size-large);
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.map-editor-count,
+.map-editor-feedback {
+  color: var(--editor-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.map-editor-count {
+  margin-inline-start: 8px;
+  white-space: nowrap;
+}
+
+.map-editor :where(button, select, input:not([type="file"])) {
+  border: 1px solid var(--editor-key-edge);
+  border-radius: 5px;
+  background-color: var(--editor-key);
+  color: inherit;
+  min-height: 40px;
+  padding-inline: 10px;
+}
+
+.map-editor button {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  white-space: nowrap;
+  flex: none;
+}
+
+.map-editor button[aria-pressed="true"] {
+  border-color: var(--editor-rule);
+  background-color: var(--editor-selected);
+}
+
+.map-editor button:hover:not(:disabled) {
+  border-color: var(--editor-rule);
+  box-shadow: inset 0 0 0 1px var(--editor-rule);
+}
+
+.map-editor .map-editor-back,
+.map-editor-history button {
+  padding-inline: 0;
+  min-width: 40px;
+}
+
+.map-editor-board {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  background: #090e1b url("../assets/board-night-sky.jpg") center / cover no-repeat;
+}
+
+.map-editor-board[data-tool="paint"] canvas { cursor: crosshair; }
+.map-editor-board[data-tool="city"] canvas { cursor: move; }
+.map-editor-board[data-tool="pan"] canvas { cursor: grab; }
+.map-editor-board[data-tool="pan"] canvas:active { cursor: grabbing; }
+
+.map-editor-footer {
+  border-top: 1px solid var(--editor-rule);
+  padding-block: 6px calc(6px + env(safe-area-inset-bottom, 0px));
+}
+
+.map-editor-toolbar,
+.map-editor-options {
+  width: min(100%, 46rem);
+  min-width: 0;
+  margin-inline: auto;
+}
+
+.map-editor-toolbar,
+.map-editor-palette {
+  overflow: auto;
+  scrollbar-width: thin;
+  padding-block: 4px;
+}
+
+.map-editor-history {
+  margin-inline-start: auto;
+  padding-inline-start: 8px;
+  border-inline-start: 1px solid var(--editor-rule);
+}
+
+.map-editor-options {
+  min-height: 72px;
+  display: flex;
+  flex-direction: column;
+  justify-content: end;
+}
+
+.map-editor-palette i {
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--editor-key-edge);
+  border-radius: 3px;
+}
+
+.map-editor-size {
+  padding-inline-start: 8px;
+  align-self: stretch;
+  white-space: nowrap;
+}
+
+.map-editor-cities {
+  padding-block: 4px;
+}
+
+.map-editor-cities select {
+  flex: 0 1 140px;
+}
+
+.map-editor-cities input {
+  flex: 1 1 100px;
+  max-width: 240px;
+  font-size: max(16px, var(--font-size-small));
+}
+
+.map-editor-feedback {
+  min-height: 24px;
+  padding-inline: 3px;
+}
+
+@media (max-width: 560px) {
+  .map-editor-header {
+    flex-wrap: nowrap;
+  }
+
+  .map-editor-files button {
+    padding-inline: 0;
+    min-width: 38px;
+  }
+
+  .map-editor-files span { display: none; }
+  .map-editor-heading { gap: 5px; min-width: 0; }
+  .map-editor-count { margin-inline-start: 3px; }
+  .map-editor-toolbar,
+  .map-editor-history {
+    gap: 4px;
+  }
+
+  .map-editor-toolbar > button {
+    padding-inline: 6px;
+    gap: 4px;
+  }
+
+  .map-editor-toolbar > button svg { width: 17px; }
+  .map-editor-history { padding-inline-start: 5px; }
+  .map-editor-history button { min-width: 36px; }
+  .map-editor-palette > button {
+    padding-inline: 8px;
+  }
+}
+
+@media (max-width: 350px) {
+  .map-editor-count { display: none; }
+}

@@ -16,6 +16,7 @@ import GameScene from "./scene/GameScene";
 import type { BadgeAction } from "./scene/ActionBadges";
 import { useGameStore } from "./store/gameStore";
 import { MainMenu, About } from "./ui/Menu";
+import { MapEditor } from "./ui/MapEditor";
 import { MatchHistoryPanel } from "./ui/MatchHistoryPanel";
 import { GameHUD } from "./ui/GameHUD";
 import { NumberMotionDisabled } from "./ui/AnimatedNumber";
@@ -80,6 +81,7 @@ export default function App() {
     [aimedOrder, setAimedOrder] = useState<TargetOrder | null>(null),
     [dismissedResult, setDismissedResult] = useState<string | null>(null);
   const [presentedResult, setPresentedResult] = useState<string | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
   const [selectionRequest, setSelectionRequest] = useState(0);
   const [systemReducedMotion, setSystemReducedMotion] = useState(
     () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
@@ -256,7 +258,7 @@ export default function App() {
   const onResultReady = useCallback(() => setPresentedResult(resultKey), [resultKey]);
   const content = (
     <div
-      className={`app ${screen === "menu" ? "is-menu" : "is-playing"} ${reducedMotion ? "reduce-motion" : ""}`}
+      className={`app ${screen === "menu" ? (editorOpen ? "is-editor" : "is-menu") : "is-playing"} ${reducedMotion ? "reduce-motion" : ""}`}
       data-menu-theme={settings.menuTheme}
       onContextMenu={suppressTouchContextMenu}
       onClickCapture={playInterfaceClick}
@@ -286,8 +288,9 @@ export default function App() {
         </div>
       )}
       {screen === "menu" ? (
-        <MainMenu
+        editorOpen ? <MapEditor onClose={() => setEditorOpen(false)} /> : <MainMenu
           onHistory={() => setPanel("history")}
+          onEditor={() => setEditorOpen(true)}
           onSettings={() => setPanel("settings")}
           onAbout={() => setPanel("about")}
         />
@@ -346,7 +349,7 @@ export default function App() {
           onAcknowledge={acknowledgeEvent}
         />
       )}
-      {screen === "menu" && panel !== "history" && notice && (
+      {screen === "menu" && !editorOpen && panel !== "history" && notice && (
         <div className="toast" role="status">
           <span>{notice}</span>
           <button onClick={() => setNotice("")} aria-label="关闭通知">

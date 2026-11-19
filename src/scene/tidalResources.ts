@@ -24,16 +24,16 @@ function trout(m: Miniature, x: number, z: number, size: number, heading: number
     [a, mid - h * 0.26, -w], [a, mid + h * 0.36, -w * 0.95],
   ]);
   const flank = golden
-    ? ["#71be6c", "#efce64", "#fae0ae", "#fae0ae", "#e7cb72", "#4aab8c"]
-    : ["#198d7c", "#90e4c9", "#d4eda8", "#d4eda8", "#6ad4c9", "#29898f"];
+    ? ["#687562", "#ae996e", "#c9baa0", "#c9baa0", "#a28f64", "#5e786f"]
+    : ["#405e62", "#8aa5a3", "#bdc3b8", "#bdc3b8", "#769493", "#4e6e74"];
   for (let i = 1; i < rings.length; i++) {
     for (let j = 0; j < flank.length; j++) {
       const next = (j + 1) % flank.length;
       face(flank[j], rings[i-1][j], rings[i-1][next], rings[i][next], rings[i][j]);
     }
   }
-  face("#55bd9e", ...rings[0].slice().reverse());
-  face("#b4dea5", ...rings[rings.length - 1]);
+  face("#6a8b82", ...rings[0].slice().reverse());
+  face("#a0ae99", ...rings[rings.length - 1]);
 
   // The two copper lobes have separate tips and meet at the caudal wrist.
   const wrist: Point = [-0.109, 0.082, 0];
@@ -43,16 +43,16 @@ function trout(m: Miniature, x: number, z: number, size: number, heading: number
     const top: Point = [-0.198, 0.145, 0];
     const bottom: Point = [-0.195, 0.031, 0];
     const tailFaces: Point[][] = [[root, top, wrist], [root, notch, top], [root, bottom, notch], [root, wrist, bottom]];
-    for (const corners of tailFaces) face(golden ? "#ed8e49" : "#e3714b", ...(side === 1 ? corners : corners.reverse()));
+    for (const corners of tailFaces) face(golden ? "#aa7d5f" : "#936551", ...(side === 1 ? corners : corners.reverse()));
     const eye = point([0.125, 0.09, side * 0.037]);
-    m.part("gem", "#305856", ...eye, 0.02*size, 0.021*size, 0.008*size, 0, heading);
+    m.part("gem", "#314842", ...eye, 0.02*size, 0.021*size, 0.008*size, 0, heading);
   }
   // A narrow gill plate follows the sloping cheek on both sides of the head.
   for (const side of [-1, 1]) {
     const gill: Point[] = [[0.09,0.128,side*0.004],[0.085,0.102,side*0.039],
       [0.094,0.093,side*0.047],[0.097,0.116,side*0.018]];
-    face("#f0cf84", ...gill);
-    face("#f0cf84", ...gill.reverse());
+    face("#c1ac83", ...gill);
+    face("#c1ac83", ...gill.reverse());
   }
 
   // A folded enamel fin has a raised spine, a swept tip and two distinct
@@ -63,15 +63,15 @@ function trout(m: Miniature, x: number, z: number, size: number, heading: number
     const ridge: Point = [-0.023, 0.138, side*0.008];
     const fan = [[finRoot, back, ridge], [back, peak, ridge], [peak, finFront, ridge], [finRoot, ridge, finFront]];
     for (const [i, corners] of fan.entries()) {
-      face(i === 2 ? "#f5ba72" : "#d8985f", ...(side < 0 ? corners.reverse() : corners));
+      face(i === 2 ? "#b69372" : "#947257", ...(side < 0 ? corners.reverse() : corners));
     }
     const shoulder: Point = [0.067, 0.083, side*0.047];
     const tip: Point = [0.013, 0.055, side*0.091], root: Point = [0.088, 0.077, side*0.04];
     const fold: Point = [0.051, 0.079, side*0.066];
     for (const [i, corners] of [[shoulder, tip, fold], [fold, tip, root]].entries()) {
       const exterior = side < 0 ? corners.reverse() : corners;
-      face(i ? "#da9860" : "#f1c284", ...exterior);
-      face("#d19662", ...exterior.slice().reverse());
+      face(i ? "#9b775b" : "#bba080", ...exterior);
+      face("#92705b", ...exterior.slice().reverse());
     }
   }
 }
@@ -91,8 +91,8 @@ function star(m: Miniature, x: number, z: number, size: number, heading: number,
     return [x + size * (a * cos + b * sin), y * size, z + size * (-a * sin + b * cos)];
   }
   const [side, dark, base, light, tip, dots] = coral
-    ? ["#da4e45", "#eb7563", "#f47d5f", "#f89671", "#fbb087", "#fbd7ac"]
-    : ["#c44370", "#cb5c7e", "#dc5e82", "#e98396", "#f6a4b6", "#f7d1c7"];
+    ? ["#764539", "#93584b", "#a86953", "#ba7b62", "#c4896d", "#dac09a"]
+    : ["#6e4851", "#85535d", "#995f6b", "#ac7480", "#ba8890", "#cfadaf"];
   const hub = place([0, 0.103, 0]);
   const lengths = [0.35, 0.315, 0.34, 0.327, 0.36];
   const angles = [0.16, 1.38, 2.67, 3.93, 5.16];

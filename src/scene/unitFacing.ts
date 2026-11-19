@@ -1,8 +1,8 @@
 import type { Position } from "../game/types";
 import type { UnitCue } from "./motion";
 
-// The fixed camera looks from +X/+Z. Models are fronted along local -Z.
-export const unitFacingYaw = { left: Math.PI, right: -Math.PI / 2 };
+// The fixed camera looks from -X/+Z. Models are fronted along local -Z.
+export const unitFacingYaw = { left: Math.PI / 2, right: Math.PI };
 export type UnitFacing = keyof typeof unitFacingYaw;
 export interface UnitTurn {
   at: number;
@@ -16,8 +16,8 @@ export function planUnitTurns(
 ): UnitTurn[] {
   const turns: UnitTurn[] = [];
   const turnToward = (at: number, from: Position, to: Position) => {
-    // Screen right is +X/-Z, so positions aligned in this projection keep their side.
-    const horizontal = (to.x - from.x) - (to.y - from.y);
+    // Screen right is +X/+Z, so positions aligned vertically keep their side.
+    const horizontal = (to.x - from.x) + (to.y - from.y);
     if (horizontal) turns.push({ at, facing: horizontal < 0 ? "left" : "right" });
   };
   if (cue.journey?.length) {

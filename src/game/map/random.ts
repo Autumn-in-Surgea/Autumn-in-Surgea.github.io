@@ -12,3 +12,22 @@ export function seededRandom(seed: string): () => number {
     return ((n ^ (n >>> 14)) >>> 0) / 4294967296;
   };
 }
+
+const smooth = (n: number) => n * n * (3 - 2 * n);
+/** Continuous seeded value noise for fixed maps and procedural geography. */
+export function valueNoise(x: number, y: number, seed: number): number {
+  const xi = Math.floor(x),
+    yi = Math.floor(y),
+    u = smooth(x - xi),
+    v = smooth(y - yi);
+  const corner = (a: number, b: number) => {
+    let h = Math.imul(a ^ seed, 374761393) ^ Math.imul(b + seed, 668265263);
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
+  };
+  const a = corner(xi, yi),
+    b = corner(xi + 1, yi),
+    c = corner(xi, yi + 1),
+    d = corner(xi + 1, yi + 1);
+  return (a + (b - a) * u) * (1 - v) + (c + (d - c) * u) * v;
+}

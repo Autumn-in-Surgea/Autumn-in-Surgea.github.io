@@ -1,20 +1,26 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyAction,
   CIVILIZATIONS,
   DEFAULT_OPTIONS,
   distance,
   generateMap,
   getCityIncome,
   getReachableTiles,
+  isSettlementTerrain,
+  isWater,
   MAP_SIZE_CHOICES,
+  neighbors,
   opponentLimit,
   OPENING_PROFILES,
   type Resource,
   type Terrain,
 } from "../../src/game";
+import { STORY_RIVER_CHANNELS } from "../../src/game/map/story";
+import { STORY_CITIES } from "../../src/game/map/storyGeography";
 import { assignTerrainVariants } from "../../src/game/map/terrainVariants";
 import { DEFAULT_TERRAIN_VARIANT, getFactionPack, getNation } from "../../src/nations/registry";
-import { deserializeGame, serializeGame } from "../../src/store/save";
+import { deserializeGame, serializeGame, validateGameOptions } from "../../src/store/save";
 import { newGame } from "./helpers";
 
 const storyNames = ["中京", "大台", "春州", "长守", "漠海", "丰化", "千华"];
@@ -41,7 +47,7 @@ describe("three distinct world modes", () => {
       civilization: "rina",
       seed: "two",
     });
-    expect(first.options.size).toBe(32);
+    expect(first.options.size).toBe(64);
     expect(first.players).toHaveLength(5);
     expect(shape(first)).toEqual(shape(second));
     for (const name of storyNames)
@@ -49,6 +55,219 @@ describe("three distinct world modes", () => {
     expect(first.players[0].civilization).toBe("imperia");
     expect(second.players[0].civilization).toBe("rina");
   });
+  it("places the story cities in close corridors and deliberately sparse regions", () => {
+    const game = newGame({ scenario: "story", civilization: "rina" });
+    const size = game.options.size;
+    expect(game.cities).toHaveLength(45);
+    expect(new Set(game.cities.map(city => city.name)).size).toBe(game.cities.length);
+    const nearest = game.cities.map(city => {
+      expect(game.tiles[city.y * size + city.x].terrain, city.name).toBe("plain");
+      return Math.min(...game.cities.filter(other => other !== city).map(other => distance(city, other)));
+    });
+    expect(Math.min(...nearest)).toBeGreaterThanOrEqual(3);
+    expect(nearest.filter(gap => gap === 3).length).toBeGreaterThanOrEqual(8);
+    const landLinks = (radius: number) => {
+      const outskirts = game.cities.map(city =>
+        game.tiles.filter(tile => !isWater(tile) && distance(tile, city) <= radius),
+      );
+      return outskirts.map((tiles, index) => outskirts.flatMap((other, neighbor) =>
+        index !== neighbor && tiles.some(one => other.some(two =>
+          Math.abs(one.x - two.x) + Math.abs(one.y - two.y) === 1,
+        )) ? [neighbor] : [],
+      ));
+    };
+    expect(landLinks(1).flat().length / 2).toBeGreaterThanOrEqual(10);
+    const expanded = landLinks(2);
+    for (const [mainCity, minimum] of [["中京", 30], ["千华", 4]] as const) {
+      const connected = new Set([game.cities.findIndex(city => city.name === mainCity)]);
+      for (const city of connected) for (const neighbor of expanded[city]) connected.add(neighbor);
+      expect(connected.size).toBeGreaterThanOrEqual(minimum);
+    }
+    expect(STORY_CITIES.filter(city => city.region === "帝国中原").length).toBeGreaterThanOrEqual(13);
+    for (const region of ["北部草原", "西部高原"]) {
+      expect(STORY_CITIES.filter(city => city.region === region)).toHaveLength(1);
+    }
+    const steppe = STORY_CITIES.find(city => city.region === "北部草原")!;
+    const mohai = STORY_CITIES.find(city => city.name === "漠海")!;
+    expect(mohai.region).toBe("帝国中原");
+    expect(mohai.x).toBeLessThan(steppe.x);
+    expect(mohai.y).toBeGreaterThan(steppe.y);
+    expect(game.cities.find(city => city.name === "漠海")).toMatchObject({ x: 15, y: 20 });
+    expect(game.cities.find(city => city.name === "望川")).toMatchObject({ x: 25, y: 27 });
+    expect(game.cities.find(city => city.name === "柳梁")).toMatchObject({ x: 20, y: 32 });
+    expect(nearest.some(gap => gap >= 9)).toBe(true);
+    const home = game.cities.find(city => city.capitalOf === 0)!;
+    expect(home.territory.some(id => game.tiles[id].resource === "fish")).toBe(true);
+  });
+
+  it("keeps scattered shallow steppe pools separate from rivers and the sea", () => {
+    const { tiles, cities } = newGame({ scenario: "story" });
+    const size = Math.sqrt(tiles.length);
+    const steppe = cities.find(city => city.name === "怀远")!;
+    const visited = new Set<number>();
+    const poolSizes: number[] = [];
+    for (const tile of tiles) {
+      if (!isWater(tile) || distance(tile, steppe) > 8 || tile.x < steppe.x - 4 ||
+        tile.x > steppe.x + 6 ||
+        visited.has(tile.id)) continue;
+      const basin = [tile];
+      visited.add(tile.id);
+      for (const cell of basin) {
+        for (const next of neighbors(tiles, size, cell)) {
+          if (Math.abs(next.x - cell.x) + Math.abs(next.y - cell.y) !== 1 ||
+            !isWater(next) || visited.has(next.id)) continue;
+          visited.add(next.id);
+          basin.push(next);
+        }
+      }
+      if (basin.some(cell => Math.min(cell.x, cell.y, size - cell.x - 1, size - cell.y - 1) === 0)) continue;
+      expect(basin.every(cell => cell.terrain === "shallow")).toBe(true);
+      poolSizes.push(basin.length);
+    }
+    expect(poolSizes.sort((left, right) => left - right)).toEqual([1, 2]);
+    for (const [x, y] of [[28, 16], [26, 18]]) {
+      const pond = tiles[y * size + x];
+      expect(pond.terrain).toBe("shallow");
+      expect(neighbors(tiles, size, pond).filter(tile =>
+        Math.abs(tile.x - x) + Math.abs(tile.y - y) === 1,
+      ).every(tile => !isWater(tile))).toBe(true);
+    }
+  });
+
+  it("gives each story capital a nearby neutral settlement on ordinary land", () => {
+    const game = newGame({ scenario: "story" });
+    const size = game.options.size;
+    const neutral = new Set(game.cities.filter(city => city.owner === null).map(city => city.y * size + city.x));
+    for (const capital of game.cities.filter(city => city.capitalOf !== null)) {
+      const frontier = [{ id: capital.y * size + capital.x, steps: 0 }];
+      const visited = new Set([frontier[0].id]);
+      for (const { id, steps } of frontier) {
+        if (steps >= 8) continue;
+        for (const tile of neighbors(game.tiles, size, game.tiles[id])) {
+          if (visited.has(tile.id) || !isSettlementTerrain(tile)) continue;
+          visited.add(tile.id);
+          frontier.push({ id: tile.id, steps: steps + 1 });
+        }
+      }
+      expect(frontier.some(({ id }) => neutral.has(id)), capital.name).toBe(true);
+    }
+  });
+
+  it("preserves a wide deep-water corridor between the continent and eastern islands", () => {
+    const { tiles, cities, options: { size } } = newGame({ scenario: "story" });
+    const datai = cities.find(city => city.name === "大台")!;
+    const qianhua = cities.find(city => city.name === "千华")!;
+    let openRows = 0;
+    for (let y = datai.y - 6; y <= datai.y + 6; y++) {
+      let consecutive = 0;
+      for (const tile of tiles.filter(tile => tile.y === y && tile.x > datai.x && tile.x < qianhua.x)) {
+        consecutive = tile.terrain === "deep" ? consecutive + 1 : 0;
+        if (consecutive < 7) continue;
+        openRows++;
+        break;
+      }
+    }
+    expect(openRows).toBeGreaterThanOrEqual(8);
+    const easternMargin = tiles.filter(tile => tile.x >= size - 5 && tile.y >= 2 && tile.y < size - 2);
+    expect(easternMargin.every(tile => tile.terrain === "deep")).toBe(true);
+  });
+
+  it("joins the central corridor through actual city expansion rewards", () => {
+    const game = newGame({ scenario: "story", civilization: "imperia" });
+    const capital = game.cities.find(city => city.capitalOf === 0)!;
+    const next = game.cities.find(city => city.name === "砾都")!;
+    const unit = game.units.find(piece => piece.owner === 0)!;
+    Object.assign(unit, { x: next.x, y: next.y, moved: false, attacked: false, capturedTurn: 0 });
+    const capture = applyAction(game, { type: "CAPTURE", unitId: unit.id });
+    expect(capture.ok).toBe(true);
+    function touches(state: typeof game) {
+      const a = state.cities.find(city => city.id === capital.id)!;
+      const b = state.cities.find(city => city.id === next.id)!;
+      return a.territory.some(aId => b.territory.some(bId => {
+        const one = state.tiles[aId], two = state.tiles[bId];
+        return !isWater(one) && !isWater(two) &&
+          Math.abs(one.x - two.x) + Math.abs(one.y - two.y) === 1;
+      }));
+    }
+    let state = capture.state;
+    expect(touches(state)).toBe(false);
+    for (const id of [capital.id, next.id]) {
+      const city = state.cities.find(candidate => candidate.id === id)!;
+      Object.assign(city, { level: 4, pendingRewards: 1, pendingRewardLevels: [4] });
+      const expansion = applyAction(state, { type: "CITY_REWARD", cityId: id, reward: "territory" });
+      expect(expansion.ok).toBe(true);
+      state = expansion.state;
+    }
+    expect(touches(state)).toBe(true);
+  });
+
+  it("restores the story atlas with the surveyed board and accepts older story dimensions", () => {
+    const atlas = newGame({ scenario: "story", civilization: "imperia" });
+    expect(deserializeGame(serializeGame(atlas))).toEqual(atlas);
+    for (const size of [32, 48]) {
+      const formerBoard = newGame({ scenario: "fair", civilization: "imperia", aiCount: 4, size });
+      formerBoard.options.scenario = "story";
+      expect(deserializeGame(serializeGame(formerBoard))).toEqual(formerBoard);
+    }
+    expect(() => validateGameOptions({ ...atlas.options, size: 80 })).not.toThrow();
+    expect(() => validateGameOptions({ ...atlas.options, scenario: "fair", size: 80 })).toThrow("地图大小");
+  });
+
+  it("opens a surveyed story map without triggering discovery rewards or popups", () => {
+    const game = newGame({ scenario: "story", civilization: "imperia" });
+    const survey = game.tiles.map(tile => tile.id);
+    for (const player of game.players) {
+      expect(player.visible).toEqual(survey);
+      expect(player.explored).toEqual(survey);
+      expect(player.stats.explored).toBe(survey.length);
+      expect(player.metPlayers).toEqual(game.players.filter(other => other.id !== player.id).map(other => other.id));
+    }
+    expect(game.events.filter(event => event.notice)).toEqual([]);
+    expect(game.cities.every(city => city.pendingRewards === 0 && city.population === 0)).toBe(true);
+    const end = applyAction(game, { type: "END_TURN" });
+    expect(end.ok).toBe(true);
+    expect(end.state.players.every(player => player.visible.length === survey.length)).toBe(true);
+    expect(end.state.events.filter(event => event.notice)).toEqual([]);
+    const random = newGame({ scenario: "fair" });
+    expect(random.players.every(player => player.explored.length < random.tiles.length)).toBe(true);
+  });
+
+  it("keeps every named story river edge-connected all the way into the open sea", () => {
+    const { tiles, cities } = newGame({ scenario: "story" });
+    const size = Math.sqrt(tiles.length);
+    const cardinal = (id: number) => {
+      const { x, y } = tiles[id];
+      return [[x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1]]
+        .filter(([nx, ny]) => nx >= 0 && ny >= 0 && nx < size && ny < size)
+        .map(([nx, ny]) => ny * size + nx);
+    };
+    // Only bodies of water connected to the frame count as the sea.
+    const coast = tiles.filter(tile => isWater(tile) &&
+      (tile.x === 0 || tile.y === 0 || tile.x === size - 1 || tile.y === size - 1)).map(tile => tile.id);
+    const sea = new Set(coast);
+    for (let i = 0; i < coast.length; i++) {
+      for (const id of cardinal(coast[i])) if (isWater(tiles[id]) && !sea.has(id)) {
+        sea.add(id);
+        coast.push(id);
+      }
+    }
+    for (const channel of STORY_RIVER_CHANNELS) {
+      expect(channel.length).toBeGreaterThan(1);
+      expect(channel.every(id => isWater(tiles[id]))).toBe(true);
+      expect(channel.every((id, i) => i === 0 || cardinal(channel[i - 1]).includes(id))).toBe(true);
+      expect(sea.has(channel.at(-1)!)).toBe(true);
+    }
+    const [central] = STORY_RIVER_CHANNELS;
+    for (const [x, y] of [[16, 32], [23, 33], [27, 31], [31, 29]]) {
+      expect(isWater(tiles[y * size + x])).toBe(false);
+    }
+    const datai = cities.find(city => city.name === "大台")!;
+    expect(central).toContain((datai.y - 1) * size + datai.x);
+    const mouth = tiles[central.at(-1)!];
+    expect(mouth.y).toBeLessThan(datai.y);
+    expect(distance(datai, mouth)).toBeLessThanOrEqual(4);
+  });
+
   it.each(CIVILIZATIONS.map((civ) => civ.id))(
     "selects %s in story without adding a different ruleset",
     (civilization) => {

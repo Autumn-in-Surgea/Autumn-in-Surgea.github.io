@@ -4,7 +4,7 @@ import type { Tile } from "../game/types";
 import { terrainHeight } from "./terrainElevation";
 import { useTerritoryMaterial } from "./territoryMaterials";
 import { Miniature } from "./miniature";
-import { bridgeDeckHeight, roadSurfaceHeight, type BuildingVisualTier } from "./buildingVisualTier";
+import { bridgeDeckHeight, bridgePierOffset, roadSurfaceHeight, type BuildingVisualTier } from "./buildingVisualTier";
 
 interface SpanProps {
   tile: Tile;
@@ -44,7 +44,7 @@ export function BridgeSpan({ children, tier, ...props }: SpanProps & { children:
   const slope = farDeck - nearDeck;
   const center = (nearDeck + farDeck) / 2 - bridgeDeckHeight;
   const alignment = useMemo(() => new Matrix4().set(1, 0, 0, 0, 0, 1, slope, center, 0, 0, 1, 0, 0, 0, 0, 1), [slope, center]);
-  const edge = (0.245 + 0.038 * tier) / 2 + 0.006;
+  const edge = bridgePierOffset(tier);
   return (
     <group rotation={[0, rotation, 0]}>
       <group matrix={alignment} matrixAutoUpdate={false}>

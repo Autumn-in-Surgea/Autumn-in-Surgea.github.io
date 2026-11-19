@@ -18,6 +18,7 @@ export interface TerrainAssets {
   details: Readonly<Partial<Record<Terrain, TerrainDetail>>>;
   developed: typeof developedLandscape;
   resource: (kind: Resource) => BufferGeometry;
+  mineSeams: (section: "remaining" | "extracted") => BufferGeometry;
   ruin: () => BufferGeometry;
   lighthouse: () => BufferGeometry;
   inlays: Readonly<Record<"plain" | "shallow" | "deep", TerrainInlay | null>>;

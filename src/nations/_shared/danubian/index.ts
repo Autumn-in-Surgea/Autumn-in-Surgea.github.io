@@ -1,5 +1,4 @@
-import type { BuildingId, UnitType } from "../../../game/types";
-import type { BuildingVisualTier } from "../../../scene/buildingVisualTier";
+import type { UnitType } from "../../../game/types";
 import { danubianBuilding } from "./buildings";
 import { danubianCity } from "./cities";
 import { danubianUnit, fieldGunMuzzle, rifleMuzzle } from "./units";
@@ -19,6 +18,6 @@ export const danubianModels = {
   unit: danubianUnit,
   weaponMuzzles,
   city: (color: string, level: number, capital: boolean, walls: boolean) => danubianCity(color, level, capital, walls),
-  building: (type: BuildingId, color: string, tier: BuildingVisualTier) => danubianBuilding(type, color, tier),
+  building: danubianBuilding,
   labelHeight: (type: UnitType) => tallPieceLabels[type] ?? 0.84,
 };

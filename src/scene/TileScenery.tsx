@@ -4,7 +4,7 @@ import { Box3, Group, Vector3 } from "three";
 import type { City, GameState, Tile } from "../game/types";
 import { getVisibleResource, isTerritoryResourceAvailable } from "../game/rules/engine";
 import type { BuildingVisualTier } from "./buildingVisualTier";
-import { BuildingModel, CityModel, LighthouseModel, Resources, RuinModel, TerrainDetails } from "./worldModels";
+import { BuildingModel, CityModel, LighthouseModel, Resources, RuinModel, TerrainDetails, WorksiteTerrain, NativeStock } from "./worldModels";
 import { siteLandscape } from "./landscape";
 import { RoadInlay } from "./RoadInlay";
 import { Waterfront } from "./Waterfront";
@@ -25,26 +25,26 @@ interface ModelProps {
   knownTiles: ReadonlySet<number>;
 }
 
-function Scenery({ game, tile, city, tier, simple, checkResourceAvailability, showResourceHints, knownTiles, includeLandscape = true }: ModelProps & { includeLandscape?: boolean }) {
+function Scenery({ game, tile, city, tier, simple, checkResourceAvailability, showResourceHints, knownTiles, landscape, standingStock }: ModelProps & { landscape?: ReactNode; standingStock?: "crop" | "ore" }) {
   if (city) return <CityModel city={city} players={game.players} seed={game.options.seed} terrainVariant={tile.terrainVariant} />;
+  const ground = landscape === undefined ? <TerrainDetails tile={tile} simple={simple} /> : landscape;
   if (tile.building) {
     const stage = tier as BuildingVisualTier;
-    const building = <BuildingModel type={tile.building} tier={stage} />;
+    const building = <BuildingModel type={tile.building} tier={stage} includeNativeStock={!standingStock} />;
     if (tile.building === "bridge") return <BridgeSpan tile={tile} tiles={game.tiles}
       size={game.options.size} explored={knownTiles} tier={stage}>{building}</BridgeSpan>;
     if (tile.terrain === "shallow" || tile.terrain === "deep")
       return <Waterfront tile={tile} tiles={game.tiles} size={game.options.size} explored={knownTiles} tier={stage}>
         {building}
       </Waterfront>;
-    return <>{includeLandscape && <TerrainDetails tile={tile} simple={simple} />}{building}</>;
+    return <>{ground}{building}</>;
   }
   const resource = getVisibleResource(game, tile, 0);
   const available = checkResourceAvailability && !!resource && isTerritoryResourceAvailable(game, tile, 0);
   return <>
-    <TerrainDetails tile={tile} simple={simple} />
-    {resource && (!simple || available) && (
-      <Resources tile={tile} highlight={available && showResourceHints} />
-    )}
+    {ground}
+    {standingStock ? <NativeStock tile={tile} kind={standingStock} section="extracted" /> :
+      resource && (!simple || available) && <Resources tile={tile} highlight={available && showResourceHints} />}
     {tile.ruin && <RuinModel />}
   </>;
 }
@@ -112,12 +112,28 @@ export function TileScenery(props: ModelProps & {
   const { previousGame, previousTier, previousCity, previousExplored } = change;
   const oldTile = previousGame.tiles[tile.id];
   const site = siteLandscape(tile);
-  const fixedLandscape = !!change.scenery && !!site && site === siteLandscape(oldTile);
+  const previousSite = siteLandscape(oldTile);
+  const sameGround = !!change.scenery && previousExplored.has(tile.id) && oldTile.terrain === tile.terrain &&
+    oldTile.terrainVariant === tile.terrainVariant && !oldTile.cityId && !tile.cityId && !oldTile.lighthouse && !tile.lighthouse;
+  const fixedLandscape = sameGround && !!site && site === previousSite;
+  // The trees and strata present on both sides of a conversion stand still.
+  // Only felled trunks, the cut into the rock and the working structures move.
+  const conversion = sameGround && (!!site !== !!previousSite) ? (site ?? previousSite) : null;
+  function changingGround(developed: boolean) {
+    if (fixedLandscape) return null;
+    if (!conversion) return undefined;
+    return <WorksiteTerrain tile={tile} site={conversion} part={developed ? "worked" : "removed"} simple={props.simple} />;
+  }
+  const commodity = tile.building === "farm" ? "crop" : tile.building === "mine" ? "ore" : undefined;
+  const continuingStock = sameGround && commodity && (oldTile.building === tile.building ||
+    (!oldTile.building && getVisibleResource(previousGame, oldTile, 0) === commodity)) ? commodity : undefined;
   const oldOwnership = isForeignTerritory(oldTile.owner);
   const start = issuedAt + change.delay * 1000;
   return <>
     {lighthouse}
     {fixedLandscape && <TerrainDetails tile={tile} simple={props.simple} />}
+    {continuingStock && <NativeStock tile={tile} kind={continuingStock} section="remaining" />}
+    {conversion && <WorksiteTerrain tile={tile} site={conversion} part="standing" simple={props.simple} />}
     {change.road ? <Exchange phase={change.road} issuedAt={start} surfaceY={surfaceY} playbackRate={roadPlaybackRate}
       previous={<ForeignTerritory.Provider value={oldOwnership}>
         <RoadInlay tile={oldTile} tiles={previousGame.tiles} size={game.options.size}
@@ -127,8 +143,8 @@ export function TileScenery(props: ModelProps & {
       previous={<ForeignTerritory.Provider value={oldOwnership}>
         <Scenery game={previousGame} tile={oldTile} city={previousCity} tier={previousTier}
           simple={props.simple} checkResourceAvailability={false} showResourceHints={false}
-          includeLandscape={!fixedLandscape} knownTiles={previousExplored} />
+          landscape={changingGround(!!previousSite)} standingStock={continuingStock} knownTiles={previousExplored} />
       </ForeignTerritory.Provider>}
-      next={<Scenery {...props} checkResourceAvailability={false} includeLandscape={!fixedLandscape} />} /> : scene}
+      next={<Scenery {...props} checkResourceAvailability={false} landscape={changingGround(!!site)} standingStock={continuingStock} />} /> : scene}
   </>;
 }

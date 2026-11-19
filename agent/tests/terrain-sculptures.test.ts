@@ -1,9 +1,10 @@
+import { MODEL_SETS } from "../../src/nations/models";
 import { describe, expect, it } from "vitest";
 import { battlefield } from "./helpers";
 import { terrainInlay } from "../../src/scene/TerrainInlays";
 import { Mesh, MeshBasicMaterial, Raycaster, Vector3 } from "three";
 import { tileCap, tilePlinth } from "../../src/scene/BoardFrame";
-import { developedLandscape, grove, mountain, resourceModel, siteLandscape } from "../../src/scene/landscape";
+import { developedLandscape, grove, mineSeams, mountain, resourceModel, siteLandscape } from "../../src/scene/landscape";
 import { getTerrainAssets, representativeTerrain } from "../../src/nations/models";
 import { DEFAULT_TERRAIN_VARIANT, NATIONS } from "../../src/nations/registry";
 
@@ -89,6 +90,39 @@ describe("carved terrain tiles", () => {
       }
     }
   });
+  it("retains the original painted trees, peaks, ripe wheat and ore in place after development", () => {
+    // Matching both position and paint rejects replacement terrain with a vaguely similar outline.
+    const painted = (geometry: ReturnType<typeof grove>) => {
+      const points = geometry.getAttribute("position"), colors = geometry.getAttribute("color");
+      const vertices = new Set<string>();
+      for (let i = 0; i < points.count; i++) {
+        vertices.add([points.getX(i), points.getY(i), points.getZ(i), colors.getX(i), colors.getY(i), colors.getZ(i)].join("/"));
+      }
+      geometry.dispose();
+      return vertices;
+    };
+    const retained = (original: Set<string>, after: Set<string>) =>
+      Array.from(original).filter(vertex => after.has(vertex)).length / original.size;
+
+    for (const simple of [true, false]) {
+      const woods = painted(grove(simple)), rock = painted(mountain(simple));
+      for (const site of ["forestEdge", "forestShrine", "quarry", "ridge"] as const) {
+        const native = site.startsWith("forest") ? woods : rock;
+        const worked = painted(developedLandscape(site, simple));
+        const stable = painted(developedLandscape(site, simple, "standing"));
+        expect(retained(native, worked), site).toBeGreaterThan(.54);
+        expect(retained(stable, worked), site).toBe(1);
+      }
+    }
+    const wheat = painted(resourceModel("crop")), ore = painted(resourceModel("ore"));
+    const seams = painted(mineSeams("remaining")), extracted = painted(mineSeams("extracted"));
+    expect(new Set([...seams, ...extracted])).toEqual(ore);
+    for (const tier of [1, 2, 3] as const) {
+      expect(retained(wheat, painted(MODEL_SETS.imperia.building("farm", "#94735b", tier)))).toBe(1);
+      expect(retained(seams, painted(MODEL_SETS.imperia.building("mine", "#94735b", tier)))).toBe(1);
+    }
+  });
+
   it("keeps the fruit clusters clear of the tile center and smaller than wheat and starfish", () => {
     const models = (["fruit","crop","starfish"] as const).map(kind => resourceModel(kind));
     const widths = models.map(model => {
@@ -144,11 +178,16 @@ describe("plain and sea ornament", () => {
       expect(terrainInlay(game, tile)).toBeNull();
     },
   );
-  it("keeps city lots, roads, ruins and facilities clear", () => {
+  it("keeps city lots, roads and ruins clear and moves the original inlay to the edge of developed lots", () => {
     const game = battlefield();
     const tile = game.tiles.find(t => terrainInlay(game,t))!;
-    for (const patch of [{ road:true }, { cityId:"capital" }, { ruin:true }, { lighthouse:true }, { building:"farm" as const }]) {
+    for (const patch of [{ road:true }, { cityId:"capital" }, { ruin:true }, { lighthouse:true }]) {
       expect(terrainInlay(game,{ ...tile, ...patch })).toBeNull();
+    }
+    for (const [terrain, building] of [["plain","farm"], ["shallow","port"]] as const) {
+      const worked = terrainInlay(game, { ...tile, terrain, building });
+      expect(worked?.terrain).toBe(terrain);
+      expect(worked!.z).toBeGreaterThan(.29);
     }
   });
 });

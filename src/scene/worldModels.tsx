@@ -2,10 +2,10 @@ import { createContext, memo, useContext, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import type { BufferGeometry, MeshStandardMaterial } from "three";
 import type { BuildingId, City, Player, Tile } from "../game/types";
-import { siteLandscape } from "./landscape";
+import { siteLandscape, type developedLandscape } from "./landscape";
 import type { BuildingVisualTier } from "./buildingVisualTier";
 import { nation as imperia } from "../nations/imperia";
-import { representativeTerrain, structureVariant, type NationModels } from "../nations/models";
+import { getTerrainAssets, representativeTerrain, structureVariant, type NationModels } from "../nations/models";
 import { cityAppearance, MODEL_SETS } from "./factionModels";
 import { useTerritoryMaterial } from "./territoryMaterials";
 import { makeGlowGeometry, resourceSilhouetteMask, silhouetteGlowProps, writeSilhouette } from "./silhouetteGlow";
@@ -46,6 +46,7 @@ function Sculpture({ modelKey, build, highlight = false }: {
     geometry = build();
     models.set(modelKey, geometry);
   }
+  if (geometry.getAttribute("position").count === 0) return null;
   let glow: BufferGeometry | undefined;
   if (highlight) {
     const key = `glow:${modelKey}`;
@@ -64,15 +65,23 @@ function Sculpture({ modelKey, build, highlight = false }: {
   );
 }
 
+export function WorksiteTerrain({ tile, site, part = "developed", simple }: {
+  tile: Tile; site: NonNullable<ReturnType<typeof siteLandscape>>;
+  part?: Parameters<typeof developedLandscape>[2]; simple: boolean;
+}) {
+  const terrain = getTerrainAssets(tile.terrainVariant);
+  return <Sculpture modelKey={`site:${tile.terrainVariant}:${site}:${part}:${simple}`}
+    build={() => terrain.developed(site, simple, part)} />;
+}
+
 export const TerrainDetails = memo(function TerrainDetails({ tile, simple = false }: { tile: Tile; simple?: boolean }) {
   if (tile.cityId || tile.lighthouse) return null;
   if (tile.building) {
     const site = siteLandscape(tile);
-    return site && <Sculpture modelKey={`site:${site}:${simple}`}
-      build={() => representativeTerrain.developed(site, simple)} />;
+    return site && <WorksiteTerrain tile={tile} site={site} simple={simple} />;
   }
-  const build = representativeTerrain.details[tile.terrain];
-  return build ? <Sculpture modelKey={`terrain:${tile.terrain}:${simple}`}
+  const build = getTerrainAssets(tile.terrainVariant).details[tile.terrain];
+  return build ? <Sculpture modelKey={`terrain:${tile.terrainVariant}:${tile.terrain}:${simple}`}
     build={() => build(simple)} /> : null;
 });
 
@@ -82,9 +91,18 @@ export const Resources = memo(function Resources({ tile, highlight }: {
 }) {
   const kind = tile.resource;
   if (!kind || tile.cityId || tile.building) return null;
-  return <Sculpture modelKey={`resource:${kind}`}
-    build={() => representativeTerrain.resource(kind)} highlight={highlight} />;
+  return <Sculpture modelKey={`resource:${tile.terrainVariant}:${kind}`}
+    build={() => getTerrainAssets(tile.terrainVariant).resource(kind)} highlight={highlight} />;
 });
+
+export function NativeStock({ tile, kind, section }: {
+  tile: Tile; kind: "crop" | "ore"; section: "remaining" | "extracted";
+}) {
+  if (kind === "crop" && section === "extracted") return null;
+  const terrain = getTerrainAssets(tile.terrainVariant);
+  return <Sculpture modelKey={`stock:${tile.terrainVariant}:${kind}:${section}`}
+    build={() => kind === "crop" ? terrain.resource("crop") : terrain.mineSeams(section)} />;
+}
 
 export const CityModel = memo(function CityModel({ city, players, seed, terrainVariant }: {
   city: City; players: readonly Player[]; seed: string; terrainVariant: Tile["terrainVariant"];
@@ -96,11 +114,11 @@ export const CityModel = memo(function CityModel({ city, players, seed, terrainV
     build={() => models.city(color, level, capital, walls, variant)} />;
 });
 
-export const BuildingModel = memo(function BuildingModel({ type, tier }: {
-  type: BuildingId; tier: BuildingVisualTier;
+export const BuildingModel = memo(function BuildingModel({ type, tier, includeNativeStock = true }: {
+  type: BuildingId; tier: BuildingVisualTier; includeNativeStock?: boolean;
 }) {
-  return <Sculpture modelKey={`building:${type}:${tier}`}
-    build={() => MODEL_SETS.imperia.building(type, imperia.color, tier)} />;
+  return <Sculpture modelKey={`building:${type}:${tier}:${includeNativeStock}`}
+    build={() => MODEL_SETS.imperia.building(type, imperia.color, tier, includeNativeStock)} />;
 });
 
 export const RuinModel = () => <Sculpture modelKey="ruin" build={representativeTerrain.ruin} />;

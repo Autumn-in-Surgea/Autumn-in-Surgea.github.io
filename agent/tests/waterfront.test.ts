@@ -68,9 +68,26 @@ describe("waterfront fittings", () => {
     expect(outlines.size).toBe(types.length);
   });
 
-  it("supports the park's trees and pavilion but leaves water between the monumental gate piers", () => {
+  it("grounds the outlying wings and paths of each third-stage waterfront monument", () => {
+    const landings: Record<MonumentId, [number, number][]> = {
+      altarOfPeace: [[-.235,-.215],[.235,-.215]],
+      emperorTomb: [[-.221,-.313],[.163,.284]],
+      eyeOfGod: [[-.314,-.261],[.188,.106]],
+      gateOfPower: [[-.327,-.135],[.329,-.135]],
+      grandBazaar: [[.232,-.348],[-.333,.130]],
+      parkOfFortune: [[-.218,-.303],[.184,-.303]],
+      towerOfWisdom: [[-.313,-.234],[.238,-.176]],
+    };
+    for (const [type, points] of Object.entries(landings)) {
+      const bed = waterMonument(type as MonumentId, 3);
+      for (const [x,z] of points) expect(topAt(bed,x,z), type).toBeGreaterThan(.02);
+      bed.dispose();
+    }
+  });
+
+  it("supports the park's trees, bench and fountain but leaves water between the monumental gate piers", () => {
     const park = waterMonument("parkOfFortune",3);
-    for (const [x,z] of [[-.082,-.063],[.156,-.158],[-.251,.211],[-.102,.049]])
+    for (const [x,z] of [[-.080,-.074],[.117,-.097],[-.145,.099],[.053,.072]])
       expect(topAt(park,x,z)).toBeCloseTo(.031);
     const gate = waterMonument("gateOfPower",3);
     expect(topAt(gate,0,0)).toBeUndefined();

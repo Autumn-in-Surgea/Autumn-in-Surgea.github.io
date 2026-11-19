@@ -8,15 +8,14 @@ import type { NationId } from "./registry";
 import type { TerrainAssets } from "./terrainAssets";
 import { DEFAULT_TERRAIN_VARIANT } from "./types";
 import { seededRandom } from "../game/map/random";
-import type { BuildingId, Position } from "../game/types";
-import type { BuildingVisualTier } from "../scene/buildingVisualTier";
+import type { Position } from "../game/types";
 
 export interface NationModels {
   unit: typeof danubianModels.unit;
   weaponMuzzles?: typeof danubianModels.weaponMuzzles;
   labelHeight: typeof danubianModels.labelHeight;
   city: (color: string, level: number, capital: boolean, walls: boolean, variant?: number) => ReturnType<typeof danubianModels.city>;
-  building: (type: BuildingId, color: string, tier: BuildingVisualTier) => ReturnType<typeof danubianModels.building>;
+  building: typeof danubianModels.building;
   structureVariantCount?: number;
 }
 export const MODEL_SETS = {

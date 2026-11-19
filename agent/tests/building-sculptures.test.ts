@@ -21,7 +21,8 @@ describe("city improvement sculptures", () => {
       mesh.computeBoundingBox();
       const { min, max } = mesh.boundingBox!;
       expect(Math.max(-min.x, -min.z, max.x, max.z)).toBeLessThanOrEqual(0.5);
-      expect(min.y).toBeGreaterThanOrEqual(-0.002);
+      // The natural iron outcrops keep their original slightly buried rock feet.
+      expect(min.y).toBeGreaterThanOrEqual(type === "mine" ? -.005 : -.002);
       expect(max.y).toBeGreaterThan(previousHeight + 0.009);
       const vertices = mesh.getAttribute("position").count;
       expect(vertices).toBeGreaterThan(previousVertexCount);
@@ -34,6 +35,21 @@ describe("city improvement sculptures", () => {
       previousHeight = max.y;
       previousVertexCount = vertices;
       mesh.dispose();
+    }
+  });
+
+  it("keeps the full-size suburban facilities below the skyline of the city they serve", () => {
+    for (const tier of [1, 2, 3] as const) {
+      const city = MODEL_SETS.imperia.city("#94735b", 2 * tier - 1, false, false, 0);
+      city.computeBoundingBox();
+      const skyline = city.boundingBox!.max.y;
+      for (const { id } of Object.values(BUILDINGS)) {
+        const site = MODEL_SETS.imperia.building(id, "#94735b", tier);
+        site.computeBoundingBox();
+        expect(site.boundingBox!.max.y, id).toBeLessThan(skyline);
+        site.dispose();
+      }
+      city.dispose();
     }
   });
 

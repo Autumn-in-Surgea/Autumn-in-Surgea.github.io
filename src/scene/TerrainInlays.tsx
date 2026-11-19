@@ -2,7 +2,7 @@ import { useLayoutEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import type { GameState, Tile } from "../game/types";
 import { getVisibleResource } from "../game/rules/engine";
-import { representativeTerrain } from "../nations/models";
+import { getTerrainAssets } from "../nations/models";
 import { terrainCapOffset, terrainHeight } from "./terrainElevation";
 import { foreignTerritoryBrightness, isForeignTerritory } from "./territoryMaterials";
 
@@ -13,7 +13,12 @@ const material = new THREE.MeshStandardMaterial({
 
 export function terrainInlay(game: GameState, tile: Tile) {
   if (!(tile.terrain === "plain" || tile.terrain === "shallow" || tile.terrain === "deep") ||
-    tile.cityId || tile.building || tile.road || tile.lighthouse || tile.ruin || getVisibleResource(game, tile, 0)) return null;
+    tile.cityId || tile.road || tile.lighthouse || tile.ruin || getVisibleResource(game, tile, 0)) return null;
+  if (tile.building) {
+    // The ground still shows outside the production footprint. Keep the same
+    // native grass/ripple sculpture along an unbuilt corner of the square.
+    return { terrain: tile.terrain, x: .296, z: .335, turn: tile.terrain === "plain" ? .3 : .72 };
+  }
   return {
     terrain: tile.terrain,
     x: -0.12,
@@ -61,7 +66,7 @@ export function TerrainInlays({ game, tileIds, visible }: {
       if (!visible.has(id)) continue;
       const tile = game.tiles[id], mark = terrainInlay(game, tile);
       if (!mark) continue;
-      const asset = representativeTerrain.inlays[mark.terrain];
+      const asset = getTerrainAssets(tile.terrainVariant).inlays[mark.terrain];
       if (!asset) continue;
       const placement = { ...mark, tile, color: asset.color };
       const list = byGeometry.get(asset.geometry);

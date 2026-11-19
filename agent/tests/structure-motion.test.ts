@@ -36,6 +36,26 @@ describe("city and improvement exchanges", () => {
     expect(structureDuration).toBe(exchangeDuration("replace"));
   });
 
+  it("replaces the same tile's road and facility together only at city levels three and five", () => {
+    const game = battlefield();
+    const city = game.cities[0];
+    const id = city.territory.find(i => !game.tiles[i].cityId)!;
+    game.tiles[id].building = "lumberHut";
+    game.tiles[id].terrain = "forest";
+    game.tiles[id].road = true;
+    for (let level = 2; level <= 7; level++) {
+      city.level = level - 1;
+      const after = structuredClone(game);
+      after.cities[0].level = level;
+      const change = planStructurePlayback(game, after).structures.get(id);
+      if (level === 3 || level === 5) {
+        expect(change).toMatchObject({ scenery: "replace", road: "replace", previousTier: level === 3 ? 1 : 2 });
+      } else {
+        expect(change).toBeUndefined();
+      }
+    }
+  });
+
   it("animates an empty plot, demolition, and a road laid without disturbing a forest", () => {
     const game = battlefield();
     const [id, road] = game.cities[0].territory.filter(i => !game.tiles[i].cityId);

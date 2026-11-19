@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { lighthouseModel, ruinModel } from "../../scene/architecture";
 import { tileCap, tilePlinth } from "../../scene/BoardFrame";
-import { developedLandscape, grove, mountain, resourceModel } from "../../scene/landscape";
+import { developedLandscape, grove, mineSeams, mountain, resourceModel } from "../../scene/landscape";
 import type { TerrainAssets } from "../terrainAssets";
 
 type Point = [number, number, number];
@@ -64,6 +64,7 @@ export const imperialTerrain = {
   details: { forest: grove, mountain },
   developed: developedLandscape,
   resource: resourceModel,
+  mineSeams,
   ruin: ruinModel,
   lighthouse: lighthouseModel,
   inlays: {

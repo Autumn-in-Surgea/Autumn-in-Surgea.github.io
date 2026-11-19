@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import type { BufferGeometry } from "three";
 import { BUILDINGS } from "../game/data/config";
 import type { MonumentId, Tile } from "../game/types";
-import type { BuildingVisualTier } from "./buildingVisualTier";
+import { facilityLayoutTier, mooringDeck, type BuildingVisualTier } from "./buildingVisualTier";
 import { Miniature } from "./miniature";
 import { terrainHeight } from "./terrainElevation";
 import { useTerritoryMaterial } from "./territoryMaterials";
@@ -17,7 +17,6 @@ interface ShoreProps {
 const timber = "#877052", iron = "#58645f", stone = "#adad91", footing = "#777e70";
 const sand = "#ae9a73", turf = "#92a26c", gravel = "#c2b89b";
 const tide = -0.009;
-const mooringDeck = 0.141;
 const cardinal = [[0,-1],[-1,0],[0,1],[1,0]] as const;
 
 // Face the back of the existing pier (-Z) toward a known bank. Prefer the
@@ -38,7 +37,8 @@ export function portShore({ tile, tiles, size, explored }: ShoreProps) {
   return bank;
 }
 
-export function portGangway(rise: number, tier: BuildingVisualTier) {
+export function portGangway(rise: number, stage: BuildingVisualTier) {
+  const tier = facilityLayoutTier(stage);
   const m = new Miniature();
   // The landing enters the strip between the warehouse and the crane. Its
   // walking surface meets the pier at one end and the tile seam at the other.
@@ -64,6 +64,11 @@ export function portGangway(rise: number, tier: BuildingVisualTier) {
       [x-w/2,y(t0),z(t0)], [x+w/2,y(t0),z(t0)],
       [x+w/2,y(t1),z(t1)], [x-w/2,y(t1),z(t1)],
     ]);
+  }
+  if (stage === 3) {
+    // Rails are flush with the walking deck and meet the quay freight line.
+    for (const gauge of [-.031,.031])
+      m.beam(iron, [x+gauge,y(0)+.003,z(0)], [x+gauge,y(1)+.003,z(1)+.006], .007);
   }
   return m.finish();
 }
@@ -101,29 +106,73 @@ const monumentDeck: Record<MonumentId,number> = {
   grandBazaar: 0.076, parkOfFortune: 0.031, towerOfWisdom: 0.046,
 };
 
-export function waterMonument(type: MonumentId, tier: BuildingVisualTier) {
+export function waterMonument(type: MonumentId, stage: BuildingVisualTier) {
+  const tier = facilityLayoutTier(stage);
   const m = new Miniature(), y = monumentDeck[type];
+  if (stage === 3) {
+    // Follow the actual outer walls, planted walks and landing piles. One
+    // continuous land cap avoids coincident surfaces in the older foundations.
+    switch (type) {
+      case "altarOfPeace":
+        islet(m, [[-.275,-.265],[-.283,.022],[-.209,.115],[-.079,.182],[.093,.182],
+          [.259,.078],[.280,-.187],[.232,-.273]], y, gravel, footing);
+        break;
+      case "emperorTomb":
+        islet(m, [[-.274,-.345],[-.312,-.093],[-.280,.210],[-.175,.327],
+          [.145,.323],[.278,.227],[.297,-.069],[.229,-.348]], y, "#aba890", footing);
+        m.part("crown",footing,-.251,.014,.218,.113,.054,.090,0,.35);
+        break;
+      case "eyeOfGod":
+        islet(m, [[-.362,-.326],[-.362,-.031],[-.211,.027],[-.118,.105],
+          [.123,.120],[.155,.165],[.258,.163],[.260,.026],[.118,-.050],
+          [.105,-.116],[.010,-.141],[-.037,-.323]], y, stone, footing);
+        break;
+      case "gateOfPower":
+        for (const side of [-1,1]) {
+          const landing: [number,number][] = [[.091,-.175],[.095,.033],[.163,.169],
+            [.249,.126],[.279,.025],[.393,.014],[.394,-.186],[.290,-.217],[.162,-.206]];
+          const contour = side === 1 ? landing : landing.map(([x,z]): [number,number] => [-x,z]).reverse();
+          islet(m,contour,y,gravel,footing);
+        }
+        break;
+      case "grandBazaar":
+        // Edge-to-edge landings share one walking level without overlapping planks.
+        jetty(m,-.045,-.256,.700,.266,y);
+        jetty(m,.025,-.051,.560,.144,y);
+        jetty(m,-.325,.047,.140,.340,y);
+        jetty(m,-.015,.142,.480,.150,y);
+        jetty(m,.050,.044,.067,.046,y);
+        break;
+      case "parkOfFortune":
+        islet(m, [[-.265,-.344],[-.312,-.113],[-.307,.147],[-.221,.253],
+          [-.042,.281],[.223,.253],[.303,.174],[.273,-.131],[.216,-.344]],y,turf,sand);
+        break;
+      case "towerOfWisdom":
+        islet(m, [[-.361,-.293],[-.366,-.079],[-.235,-.048],[-.149,.089],
+          [-.053,.135],[.134,.130],[.170,.017],[.285,-.005],[.290,-.232],
+          [.108,-.235],[-.053,-.271]],y,gravel,footing);
+        break;
+    }
+    return m.finish();
+  }
   switch (type) {
-    case "altarOfPeace":
-      roundFoot(m,0,0,0.34+tier*0.045,0.34+tier*0.045,y,gravel);
-      if (tier>=2) for (const s of [-1,1]) {
-        roundFoot(m,s*0.212,-0.161,0.183,0.243,y,turf);
-      }
-      for (const s of [-1,1]) roundFoot(m,s*0.081,0.20,0.093,0.085,y*0.55,gravel);
+    case "altarOfPeace": {
+      // A single landing carries the bird, its path, and the bench added at tier three.
+      const west = tier === 3 ? -.224 : -.111;
+      const front = tier >= 2 ? .171 : .096;
+      islet(m, [[west,-.110],[west,.029],[-.077,front],[.087,front],
+        [.121,.033],[.090,-.121]], y, gravel, footing);
       break;
+    }
     case "emperorTomb": {
-      const r = 0.215 + tier*0.027;
+      const r = 0.190 + tier*0.014;
       islet(m,[[-r,-r*0.63],[-r*1.11,r*0.19],[-r*0.79,r*0.84],[r*0.21,r*0.97],
         [r*0.93,r*0.70],[r*1.06,-r*0.20],[r*0.83,-r*0.87],[-r*0.46,-r*0.93]],y,"#aba890",footing);
       m.part("crown",footing,-r*0.87,0.016,r*0.69,0.122,0.052,0.091,0,0.38);
       break;
     }
     case "eyeOfGod":
-      roundFoot(m,0,0,0.212+tier*0.016,0.212+tier*0.016,y,stone);
-      for (const s of [-1,1]) {
-        roundFoot(m,s*0.214,0,tier===3 ? 0.156 : 0.055,tier===3 ? 0.184 : 0.063,y,footing);
-        m.beam(iron,[0,y-0.016,0],[s*0.214,y-0.024,0],0.028);
-      }
+      roundFoot(m, 0, 0, .218 + tier * .023, .171 + tier * .012, y, stone);
       break;
     case "gateOfPower":
       for (const s of [-1,1]) {
@@ -132,26 +181,22 @@ export function waterMonument(type: MonumentId, tier: BuildingVisualTier) {
       }
       break;
     case "grandBazaar": {
-      const width=0.28+tier*0.046;
-      jetty(m,0,-0.106,width+(tier>=2 ? 0.164 : 0),tier===3 ? 0.314 : 0.200,y);
-      jetty(m,0,0.140,width+(tier===3 ? 0.211 : 0),0.137,y);
-      for (const s of [-1,1]) jetty(m,s*width*0.41,0.054,0.047,0.076,y);
+      const backWidth = .325 + .086 * tier;
+      jetty(m, -.035, -.099, backWidth, .245, y);
+      jetty(m, tier === 3 ? -.015 : .073, .141, tier === 3 ? .444 : .222, .145, y);
+      jetty(m, .050, .027, .066, .102, y);
       break;
     }
     case "parkOfFortune": {
-      const east = tier>=2 ? 0.236 : 0.18, west = tier===3 ? -0.297 : -0.195;
-      islet(m,[[west,-0.102],[west-0.013,0.114],[west+0.026,0.231],[-0.114,0.259],
-        [-0.009,0.192],[0.128,0.226],[0.251,0.127],[0.223,-0.009],
-        [east,-0.153],[east-0.073,-0.231],[0.024,-0.184],[-0.133,-0.182]],y,turf,sand);
-      m.part("crown",stone,west,0.009,0.126,0.059,0.035,0.091);
+      // Follow the planting and fountain at the front of the island; leave open water around it.
+      const west = tier >= 2 ? -.188 : -.148;
+      const east = tier === 3 ? .189 : .154;
+      islet(m, [[west,-.098],[west,.118],[-.115,.152],[.024,.185],[.138,.157],
+        [east,.078],[east,-.127],[.064,-.161],[-.114,-.146]], y, turf, sand);
       break;
     }
     case "towerOfWisdom":
-      roundFoot(m,0,0,0.252+tier*0.053,0.252+tier*0.053,y,gravel);
-      for (const s of [-1,1]) {
-        m.part("hip",footing,s*0.142,0.015,-0.177,0.075,0.054,0.132,0,s*0.61);
-        if (tier===3) roundFoot(m,s*0.203,-0.077,0.143,0.296,y,stone);
-      }
+      roundFoot(m, tier === 3 ? .021 : 0, 0, .218 + tier * .032, .189 + tier * .017, y, gravel);
       break;
   }
   return m.finish();

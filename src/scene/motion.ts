@@ -12,7 +12,7 @@ export const easeIn = (value: number) => clampProgress(value) ** 3;
 export const easeOut = (value: number) => 1 - (1 - clampProgress(value)) ** 3;
 /** A bounded, deterministic duration keeps a one-tile move legible at any FPS. */
 export const movementDuration = (distance: number) =>
-  Math.min(0.52, 0.29 + Math.max(0, distance - 1) * 0.055);
+  Math.min(0.78, 0.5 + Math.max(0, distance - 1) * 0.08);
 export function sampleMovement(
   from: MotionVector,
   to: MotionVector,
@@ -147,4 +147,22 @@ export function sampleMotionPath(
     out[2] += (leave?.[1] ?? 0) * (1 - blend) + (arrive?.[1] ?? 0) * blend;
   }
   return segment;
+}
+
+export function sampleCarriedPath(
+  path: MotionPath, elapsed: number, duration: number, out: MotionVector, swap = false,
+): number {
+  // Leave room to lift off before the glide and to land after reaching the target.
+  return sampleMotionPath(path, elapsed - duration * 0.15, duration * 0.65, out, swap);
+}
+
+export function carryHeight(progress: number, distance: number, naval: boolean): number {
+  const height = (naval ? 0.27 : 0.35) + Math.min(0.09, Math.max(0, distance - 1) * 0.035);
+  const lift = easeInOut(progress / 0.19);
+  const descent = easeInOut((0.89 - progress) / 0.23);
+  const carryArc = 1 - easeInOut(Math.abs(progress - 0.42) / 0.23);
+  const settle = 1 - clampProgress((1 - progress) / 0.11);
+  const rebound = 4 * settle * (1 - settle);
+  return height * lift * descent + (naval ? 0.015 : 0.026) * carryArc +
+    (naval ? 0.01 : 0.016) * rebound ** 2;
 }

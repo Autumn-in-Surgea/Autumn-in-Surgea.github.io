@@ -4,10 +4,12 @@ import type { UnitType } from "../../src/game/types";
 import { observeMoves } from "../../src/workers/visibleMove";
 import {
   carryStrikes,
+  impactRecoil,
   incomingOffset,
   planCombat,
   planEncounter,
   sampleAttackPose,
+  strikeAdvanceAt,
   strikeMotionEndsAt,
 } from "../../src/scene/combatMotion";
 import { rememberCombatEvents } from "../../src/workers/combatEvents";
@@ -37,11 +39,33 @@ describe("visible combat choreography", () => {
     expect(strike.contact).toBeDefined();
     const contact = strike.contact!;
     expect(sampleAttackPose(strike, strike.launch).travel).toBeCloseTo(-0.16);
+    expect(sampleAttackPose(strike, strike.start).lift).toBeCloseTo(0);
+    expect(sampleAttackPose(strike, strike.launch).lift).toBeGreaterThan(0.28);
     expect(contact.gap - sampleAttackPose(strike, strike.impact).travel).toBeCloseTo(0.505);
+    expect(sampleAttackPose(strike, strike.impact).lift).toBeLessThan(0.06);
     expect(sampleAttackPose(strike, strike.impact + 0.02).travel).toBeCloseTo(contact.travel);
+    const rebound = sampleAttackPose(strike, strikeAdvanceAt(strike));
+    expect(rebound.travel).toBeGreaterThan(contact.travel * 0.25);
+    expect(rebound.travel).toBeLessThan(contact.travel);
+    expect(rebound.lift).toBeGreaterThan(sampleAttackPose(strike, strike.impact).lift);
     expect(sampleAttackPose(strike, strikeMotionEndsAt(strike)).travel).toBeCloseTo(0);
+    expect(sampleAttackPose(strike, strikeMotionEndsAt(strike)).lift).toBeCloseTo(0);
     expect(counter.start).toBeGreaterThanOrEqual(strikeMotionEndsAt(strike));
     expect(counter.contact?.x).toBeCloseTo(-contact.x);
+  });
+
+  it("lifts the ranged piece for release and seats it while the projectile flies", () => {
+    const { before, command } = shoot("archer");
+    const after = applyAction(before, command).state;
+    const [strike] = planCombat(before, after);
+    expect(strike.projectile).toBe("arrow");
+    expect(sampleAttackPose(strike, strike.launch).lift).toBeGreaterThan(0.2);
+    const kick = strike.launch + 0.075;
+    const arrow = sampleAttackPose(strike, kick);
+    expect(arrow.travel).toBeLessThan(sampleAttackPose(strike, strike.launch).travel);
+    expect(sampleAttackPose({ ...strike, projectile: "shell" }, kick).travel).toBeLessThan(arrow.travel - 0.05);
+    expect(strikeMotionEndsAt(strike)).toBeLessThan(strike.impact);
+    expect(sampleAttackPose(strike, strikeMotionEndsAt(strike)).lift).toBeCloseTo(0);
   });
 
   it.each([
@@ -79,6 +103,9 @@ describe("visible combat choreography", () => {
     expect(one.from).toEqual({ x: 5, y: 5 });
     expect(two.from).toEqual(one.at);
     expect(two.start).toBeGreaterThan(one.impact);
+    expect(impactRecoil(0)).toBe(0);
+    expect(impactRecoil(0.075)).toBeCloseTo(1);
+    expect(impactRecoil(two.start - one.impact)).toBeCloseTo(0);
     expect(two.projectile).toBe("arrow");
     expect(two.impact).toBeGreaterThan(two.launch);
   });
@@ -200,11 +227,36 @@ describe("visible AI journeys", () => {
     expect(journey[0].start + journey[0].duration).toBeLessThanOrEqual(
       strikes[0].start,
     );
-    expect(journey[1].start).toBeGreaterThan(strikes[0].impact);
+    expect(journey[1]).toMatchObject({ advanceAfter: strikes[0].id, start: strikeAdvanceAt(strikes[0]) });
+    expect(journey[1].start).toBeLessThan(strikeMotionEndsAt(strikes[0]));
+    const anchor = sampleAttackPose(strikes[0], journey[1].start);
+    expect(anchor.travel).toBeCloseTo(strikes[0].contact!.travel * 0.45);
+    expect(anchor.lift).toBeCloseTo(0.09);
+    const justBefore = sampleAttackPose(strikes[0], journey[1].start - 0.001);
+    expect(Math.abs(anchor.travel - justBefore.travel)).toBeLessThan(0.00005);
     expect(journey[2].start).toBeGreaterThanOrEqual(
       journey[1].start + journey[1].duration,
     );
     expect(journey[2].path.at(-1)).toEqual({ x: 3, y: 6 });
+  });
+  it("lands a lethal naval advance before firing its destination stomp", () => {
+    const before = battlefield();
+    const ship = addUnit(before, 0, "juggernaut", 3, 3);
+    ship.carried = { type: "giant", maxHp: 40, veteran: false, kills: 0 };
+    before.tiles[3 * before.options.size + 3].terrain = "shallow";
+    const target = addUnit(before, 1, "warrior", 4, 3);
+    target.hp = 1;
+    const adjacent = addUnit(before, 1, "warrior", 5, 3);
+    const command = { type: "ATTACK", unitId: ship.id, targetId: target.id } as const;
+    const hit = applyAction(before, command);
+    expect(hit.ok).toBe(true);
+    rememberCombatEvents(hit.state, hit.state.events, observeMoves(before, hit.state, command));
+    const { strikes, journeys } = planEncounter(before, hit.state);
+    const [contact, stomp] = strikes;
+    const advance = journeys.get(ship.id)?.[0];
+    expect(advance).toMatchObject({ advanceAfter: contact.id, start: strikeAdvanceAt(contact) });
+    expect(stomp.targetId).toBe(adjacent.id);
+    expect(stomp.impact).toBeGreaterThanOrEqual(advance!.start + advance!.duration);
   });
   it("does not interpolate a visible destination through an unknown route", () => {
     const before = battlefield(),

@@ -13,6 +13,8 @@ assert.equal(manifest.scope, "./");
 assert.equal(manifest.id, "./");
 assert.match(html, /rel="manifest"/);
 assert.match(html, /name="viewport"[^>]*viewport-fit=cover/);
+assert.match(html, /name="viewport"[^>]*maximum-scale=1(?:\.0)?[,\s"]/);
+assert.match(html, /name="viewport"[^>]*user-scalable=no[,\s"]/);
 assert.match(html, /name="apple-mobile-web-app-status-bar-style" content="black"/);
 assert.equal(manifest.name, "西陆秋色 · Autumn in Surgea");
 assert.equal(manifest.short_name, "西陆秋色");

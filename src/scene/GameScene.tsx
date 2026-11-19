@@ -15,7 +15,7 @@ import type { ReactNode, Ref } from "react";
 import { Canvas, events, useFrame, useThree } from "@react-three/fiber";
 import type { ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
-import { factionForOwner, type ModelSetId } from "../nations/registry";
+import { factionForOwner } from "../nations/registry";
 import { getTerrainAssets } from "../nations/models";
 import { colorForOwner, MODEL_SETS } from "./factionModels";
 import { SceneQuality } from "./SceneQuality";
@@ -25,6 +25,9 @@ import { TerritoryBorders } from "./TerritoryBorders";
 import { CityTerritoryOutline } from "./CityTerritoryOutline";
 import { ShippingLanes } from "./ShippingLanes";
 import { TileScenery } from "./TileScenery";
+import { PopulationFlights } from "./PopulationFlights";
+import { populationFlightSeconds } from "./populationFlightMotion";
+import { getPopulationFlights } from "../store/populationPlayback";
 import { CitySiegeScenery } from "./CitySiegeScenery";
 import { siegeStartsAt, visibleCitySieges } from "./citySiege";
 import { buildTileTiers, type StructureChange } from "../store/structurePlayback";
@@ -40,13 +43,17 @@ import type { CombatFrame, Strike } from "./combatMotion";
 import { unitAppearDuration, usePresentedUnits, useUnitMotion } from "./unitMotion";
 import { getMapBadges, MapBadgeButtons, MapBadgePositions } from "./ActionBadges";
 import type { MapBadgesProps, OpenBadge } from "./ActionBadges";
-import { easeInOut, easeOut, getFreshEvents } from "./motion";
+import { clampProgress, easeInOut, easeOut, getFreshEvents } from "./motion";
 import type { PresentedUnit } from "./motion";
-import { BOARD_UNIT_RENDER_ORDER } from "./unitModels";
+import { BOARD_UNIT_RENDER_ORDER, unitHealthAnchor } from "./unitModels";
 import { SelectionHalo, SquareOutline } from "./boardHighlights";
 import { ForeignTerritory, foreignTerritoryBrightness, isForeignTerritory } from "./territoryMaterials";
 import type { PlaybackStep } from "../store/actionPlayback";
-import { cityDetailHeight, drawCityDetails, measureCityDetails, type CityNameplateDetails } from "./cityNameplate";
+import {
+  boardNumberFontSize, cityDetailHeight, drawCityDetails, measureCityDetails,
+  type CityNameplateDetails, type CityNameplateMotion,
+} from "./cityNameplate";
+import { cityMeterMotionMs, labelBounce, labelBounceMs, sampleCityNameplate } from "./labelMotion";
 
 import {
   geometry,
@@ -269,53 +276,63 @@ type LabelKind = "city" | "health" | "feedback";
 const labelOrder: Record<LabelKind, number> = { city: 9, health: 10, feedback: 11 };
 // Board labels are painted at this texture resolution per world-space tile.
 const labelPixelsPerTile = 280;
-const labelFontSize = { city: 34, health: 56 };
+const labelFontSize = { city: 34, health: boardNumberFontSize };
 const ignoreLabelRaycast = () => {};
 
-function createLabel(
+function paintLabel(
+  texture: THREE.CanvasTexture,
   text: string,
   foreground: string,
   kind: LabelKind,
   style: typeof defaultLabelStyle,
   cityDetails?: CityNameplateDetails,
+  cityMotion?: CityNameplateMotion,
 ) {
-  const canvas = document.createElement("canvas");
+  const canvas = texture.image as HTMLCanvasElement;
   const ctx = canvas.getContext("2d")!;
   const size = kind === "feedback" ? style.size * 2 : labelFontSize[kind];
-  const weight = kind === "health" ? 700 : 600;
-  const font = `${weight} ${size}px ${style.font}`;
+  const font = `600 ${size}px ${style.font}`;
   ctx.font = font;
+  // Glyph bounds are relative to the active baseline. Measure with the drawing baseline.
+  ctx.textBaseline = "alphabetic";
   const metrics = ctx.measureText(text);
   const padding = kind === "city" ? 22 : kind === "health" ? 16 : 18;
   const titleWidth = Math.ceil(metrics.width) + padding;
-  const titleHeight = size + (kind === "city" ? 14 : 16);
+  const titleHeight = size + (kind === "city" ? 8 : 16);
   const detailRow = cityDetails && measureCityDetails(ctx, cityDetails, style.font);
-  canvas.width = Math.max(titleWidth, Math.ceil(detailRow?.width ?? 0));
-  canvas.height = titleHeight + (detailRow ? cityDetailHeight : 0);
+  const width = Math.max(titleWidth, Math.ceil(detailRow?.width ?? 0));
+  const height = titleHeight + (detailRow ? cityDetailHeight : 0);
+  if (width !== canvas.width || height !== canvas.height) {
+    // WebGL storage is fixed-size. Only resize for a different label width or row count.
+    texture.dispose();
+    canvas.width = width;
+    canvas.height = height;
+  } else ctx.clearRect(0, 0, width, height);
   if (kind !== "health") {
     ctx.fillStyle = kind === "city"
-      ? detailRow ? "rgba(23, 43, 59, 0.74)" : "rgba(31, 47, 47, 0.38)"
+      ? detailRow ? "#172b3b" : "#1f2f2f"
       : "#f5f0e3f2";
+    ctx.globalAlpha = kind === "city" ? 0.28 : 1;
     ctx.beginPath();
     ctx.roundRect(1, 1, canvas.width - 2, canvas.height - 2, kind === "city" ? 9 : 11);
     ctx.fill();
+    ctx.globalAlpha = 1;
   }
   ctx.font = font;
   ctx.textAlign = "center";
+  ctx.textBaseline = "alphabetic";
   const x = canvas.width / 2;
   const y = (titleHeight + metrics.actualBoundingBoxAscent - metrics.actualBoundingBoxDescent) / 2;
-  if (kind === "health") {
+  if (kind === "health" || kind === "city") {
     ctx.lineJoin = "round";
-    ctx.lineWidth = 10;
-    ctx.strokeStyle = "#182523";
+    ctx.lineWidth = kind === "health" ? 6 : 5;
+    ctx.strokeStyle = kind === "health" ? "#182523" : "#172b3bbb";
     ctx.strokeText(text, x, y);
   }
   ctx.fillStyle = foreground;
   ctx.fillText(text, x, y);
-  if (detailRow) drawCityDetails(ctx, detailRow, titleHeight, canvas.width);
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
+  if (detailRow) drawCityDetails(ctx, detailRow, titleHeight, canvas.width, cityMotion);
+  texture.needsUpdate = true;
 }
 
 function Label({
@@ -326,6 +343,7 @@ function Label({
   opacity = 1,
   materialRef,
   cityDetails,
+  reducedMotion = false,
 }: {
   text: string;
   color: string;
@@ -334,22 +352,81 @@ function Label({
   opacity?: number;
   materialRef?: Ref<THREE.SpriteMaterial>;
   cityDetails?: CityNameplateDetails;
+  reducedMotion?: boolean;
 }) {
   const style = useContext(MapLabelStyle);
   const showDetails = !!cityDetails;
   const { population = 0, units = 0, capacity = 0, income = 0 } = cityDetails ?? {};
-  const texture = useMemo(
-    () => createLabel(text, color, kind, style,
-      showDetails ? { population, units, capacity, income } : undefined),
-    [text, color, kind, style, showDetails, population, units, capacity, income],
-  );
+  const [texture] = useState(() => {
+    const canvasTexture = new THREE.CanvasTexture(document.createElement("canvas"));
+    canvasTexture.colorSpace = THREE.SRGBColorSpace;
+    return canvasTexture;
+  });
   useEffect(() => () => texture.dispose(), [texture]);
+  const sprite = useRef<THREE.Sprite>(null);
+  const clock = usePlaybackClock();
+  const previous = useRef({ text, details: cityDetails });
+  const painted = useRef(cityDetails);
+  const motion = useRef<{
+    since: number;
+    nextPaint: number;
+    city?: { from: CityNameplateDetails; to: CityNameplateDetails };
+  } | null>(null);
   const pixelsPerUnit = kind === "feedback" ? 2 : labelPixelsPerTile;
+  const originY = position[1];
+  function draw(details?: CityNameplateDetails, cityMotion?: CityNameplateMotion) {
+    if (!sprite.current) return;
+    paintLabel(texture, text, color, kind, style, details, cityMotion);
+    painted.current = details;
+    sprite.current.scale.set(texture.image.width / pixelsPerUnit, texture.image.height / pixelsPerUnit, 1);
+  }
+  useLayoutEffect(() => {
+    const next = showDetails ? { population, units, capacity, income } : undefined;
+    const last = previous.current;
+    previous.current = { text, details: next };
+    const from = painted.current;
+    const change = next && last.details &&
+      (population !== last.details.population || units !== last.details.units ||
+        capacity !== last.details.capacity || income !== last.details.income);
+    if (!reducedMotion && from && next && change) {
+      motion.current = { since: clock.time, nextPaint: clock.time, city: { from, to: next } };
+      return;
+    }
+    motion.current = !reducedMotion && kind === "health" && text !== last.text
+      ? { since: clock.time, nextPaint: clock.time }
+      : null;
+    draw(next);
+    if (sprite.current && kind === "health") {
+      sprite.current.position.y = originY;
+      sprite.current.material.opacity = opacity;
+    }
+  }, [texture, style, text, color, kind, showDetails, population, units, capacity, income, reducedMotion, clock, originY, opacity]);
+  useFrame(() => {
+    const active = motion.current;
+    if (!active || !sprite.current) return;
+    const progress = clampProgress((clock.time - active.since) / (active.city ? cityMeterMotionMs : labelBounceMs));
+    const pulse = labelBounce(progress);
+    if (active.city) {
+      if (clock.time < active.nextPaint && progress < 1) return;
+      active.nextPaint = clock.time + 32;
+      const { from, to } = active.city;
+      draw(sampleCityNameplate(from, to, progress), { previous: from, target: to, pulse });
+    } else {
+      sprite.current.scale.set(
+        texture.image.width / pixelsPerUnit * (1 + pulse * 0.16),
+        texture.image.height / pixelsPerUnit * (1 + pulse * 0.26), 1,
+      );
+      sprite.current.position.y = originY + pulse * 0.05;
+      if (text === "0") sprite.current.material.opacity = opacity * (1 - easeInOut((progress - 0.38) / 0.62));
+    }
+    if (progress === 1) motion.current = null;
+  });
   return (
     <sprite
+      ref={sprite}
+      name={`board-label-${kind}`}
       position={position}
       center={kind === "city" ? [0.5, 1] : [0.5, 0.5]}
-      scale={[texture.image.width / pixelsPerUnit, texture.image.height / pixelsPerUnit, 1]}
       renderOrder={labelOrder[kind]}
       raycast={ignoreLabelRaycast}
     >
@@ -546,7 +623,7 @@ const TileView = memo(function TileView({
 }) {
   const explored = knownTiles.has(tile.id);
   const surface = knownTerrainHeight(tile, explored);
-  const cityLabelOffset = city && city.owner !== null && city.level >= 5 ? 0.39 : 0.32;
+  const cityLabelOffset = city && city.owner !== null && city.level >= 5 ? 0.34 : 0.27;
   const cityDetails = useMemo<CityNameplateDetails | undefined>(() => {
     if (city?.owner !== 0 || !showCityNames || !showCityDetails) return;
     return {
@@ -613,8 +690,9 @@ const TileView = memo(function TileView({
               color="#e3decb"
               opacity={visible ? 1 : 0.8}
               cityDetails={cityDetails}
+              reducedMotion={reducedMotion}
               // Keep the plate centered just in front of the city.
-              position={[cityLabelOffset, 0.015, cityLabelOffset]}
+              position={[cityLabelOffset, 0.04, cityLabelOffset]}
             />
           )}
         </group>
@@ -638,7 +716,7 @@ function glCursor(cursor: string) {
 
 // The panel reads the resolved rules immediately. On the board the HP number
 // changes on contact, even when several AI hits arrived in a single snapshot.
-function UnitHealth({ record, reducedMotion, modelSet }: { record: PresentedUnit; reducedMotion: boolean; modelSet: ModelSetId }) {
+function UnitHealth({ record, reducedMotion }: { record: PresentedUnit; reducedMotion: boolean }) {
   const { unit, cue } = record;
   const playback = usePlaybackClock();
   const hits = cue.impacts;
@@ -658,8 +736,8 @@ function UnitHealth({ record, reducedMotion, modelSet }: { record: PresentedUnit
   if (hits?.length && !reducedMotion) {
     const pending = hits.slice(landed);
     if (cue.dying) {
-      if (landed >= hits.length) return null;
-      hp = Math.max(1, (cue.initialHp ?? hp) - hits.slice(0, landed).reduce((sum, hit) => sum + hit.damage, 0));
+      hp = landed >= hits.length ? 0
+        : Math.max(1, (cue.initialHp ?? hp) - hits.slice(0, landed).reduce((sum, hit) => sum + hit.damage, 0));
     } else {
       hp = Math.min(unit.maxHp, hp + pending.reduce((sum, hit) => sum + hit.damage, 0));
     }
@@ -669,7 +747,8 @@ function UnitHealth({ record, reducedMotion, modelSet }: { record: PresentedUnit
       kind="health"
       text={String(hp)}
       color={hp <= unit.maxHp * 0.4 ? "#ffc6ae" : "#fff9e8"}
-      position={[0, MODEL_SETS[modelSet].labelHeight(unit.type), 0]}
+      position={unitHealthAnchor(unit.type)}
+      reducedMotion={reducedMotion}
     />
   );
 }
@@ -729,7 +808,7 @@ function AnimatedUnit({
         />
       </group>
       <group ref={label}>
-        <UnitHealth record={record} reducedMotion={reducedMotion} modelSet={modelSet} />
+        <UnitHealth record={record} reducedMotion={reducedMotion} />
       </group>
       {!cue.dying && unit.owner === 0 && !actionsSpent && (
         <Piece
@@ -818,7 +897,7 @@ function EventEffect({
       label.current.position.y = reducedMotion
         ? 0.82
         : 0.65 + easeOut(progress) * 0.42;
-      const animationScale = reducedMotion ? 1 : 0.86 + arrival * 0.14;
+      const animationScale = reducedMotion ? 1 : 0.86 + arrival * 0.14 + labelBounce(elapsed / 0.36) * 0.22;
       // Transient feedback uses screen pixels inside this animated group.
       if (camera instanceof THREE.OrthographicCamera) {
         const worldPerPixel = (camera.top - camera.bottom) / (camera.zoom * size.height);
@@ -989,10 +1068,12 @@ function Effects({
         player: 0, message: "", strike, issuedAt: combat.issuedAt,
       });
     }
+    const thrownResources = reducedMotion ? null : new Set(getPopulationFlights(game)
+      .filter(gain => gain.source.kind === "resource").map(gain => gain.source.tileId));
     for (const tile of game.tiles) {
       if (!visible.has(tile.id)) continue;
       const feedback = tileFeedbackFor(before.tiles[tile.id], tile);
-      if (feedback)
+      if (feedback && (feedback !== "harvest" || !thrownResources?.has(tile.id)))
         fresh.push({
           id: visualId.current--,
           type: "info",
@@ -1217,10 +1298,11 @@ function World({
       }
       for (const arrival of siegeStarts.values())
         seconds = Math.max(seconds, (arrival - combat.issuedAt) / 1000);
+      if (replay) seconds = Math.max(seconds, populationFlightSeconds(game));
     }
     // A separate pause gives each replayed action a beat, even for an instant change.
     playbackDeadline.current = { id, end: combat.issuedAt + seconds * 1000, pause: replay ? 140 : 0 };
-  }, [combat, playingStep, reducedMotion, replay, siegeStarts]);
+  }, [combat, game, playingStep, reducedMotion, replay, siegeStarts]);
   useFrame(() => {
     const deadline = playbackDeadline.current;
     if (!deadline) return;
@@ -1373,6 +1455,7 @@ function World({
             onFeedbackEnds={onFeedbackEnds}
           />
         )}
+        {!preview && <PopulationFlights game={game} offset={offset} reducedMotion={reducedMotion} />}
       </group>
     </PlaybackContext.Provider>
   );

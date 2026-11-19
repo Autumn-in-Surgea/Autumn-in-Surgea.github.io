@@ -6,6 +6,43 @@ import { initializePwa } from "./pwa/register";
 
 initializePwa();
 
+const root = document.getElementById("root")!;
+
+// Cancel Safari's page gesture and forward trackpad pinch to the existing zoom controls.
+type PinchGesture = Event & { scale: number; clientX?: number; clientY?: number };
+let pinchTarget: Element | null = null;
+let lastPinchScale = 1;
+root.addEventListener("gesturestart", (event) => {
+  event.preventDefault();
+  lastPinchScale = 1;
+  pinchTarget = navigator.maxTouchPoints === 0 && event.target instanceof Element
+    ? event.target.closest(".game-scene canvas, .tech-viewport")
+    : null;
+}, { passive: false });
+root.addEventListener("gesturechange", (event) => {
+  event.preventDefault();
+  const { scale, clientX, clientY } = event as PinchGesture;
+  if (!pinchTarget?.isConnected || !Number.isFinite(scale) || scale <= 0 || scale === lastPinchScale) return;
+  const bounds = pinchTarget.getBoundingClientRect();
+  pinchTarget.dispatchEvent(new WheelEvent("wheel", {
+    cancelable: true,
+    ctrlKey: true,
+    clientX: clientX ?? bounds.x + bounds.width / 2,
+    clientY: clientY ?? bounds.y + bounds.height / 2,
+    deltaY: -200 * Math.log(scale / lastPinchScale),
+  }));
+  lastPinchScale = scale;
+}, { passive: false });
+root.addEventListener("gestureend", (event) => {
+  event.preventDefault();
+  pinchTarget = null;
+}, { passive: false });
+
+// Chromium and Firefox use a modified wheel event for desktop trackpad pinch.
+root.addEventListener("wheel", (event) => {
+  if (event.ctrlKey && !event.defaultPrevented) event.preventDefault();
+}, { passive: false });
+
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { error: string }
@@ -27,7 +64,7 @@ class ErrorBoundary extends React.Component<
     );
   }
 }
-ReactDOM.createRoot(document.getElementById("root")!).render(
+ReactDOM.createRoot(root).render(
   <React.StrictMode>
     <ErrorBoundary>
       <App />

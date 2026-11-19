@@ -12,6 +12,7 @@
     max(18px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left));
   overflow: auto;
   overscroll-behavior: contain;
+  touch-action: pan-x pan-y;
   isolation: isolate;
 }
 

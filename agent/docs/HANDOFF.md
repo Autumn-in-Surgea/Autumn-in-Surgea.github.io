@@ -4,8 +4,8 @@
 
 ## 换设备继续开发
 
-1. 在旧设备查看 `git status --short`，用 `git add -A` 暂存源码、运行资产、锁文件、配置和 `agent/`，核对 `git diff --cached --stat` 后提交并推送。首次提交整款应用时，以完整文件清单为准。若继续已有对局，在旧入口的“设置”中导出存档 JSON，单独复制文件。[项目仓库](https://github.com/Autumn-in-Surgea/Autumn-in-Surgea.github.io)
-2. 在新设备克隆或更新仓库到同一提交，使用 Node.js 22.12 或更新版本，运行 `npm ci` 和 `npm run dev`。Vite 开发地址固定为 `http://127.0.0.1:5173/`。如需继续旧对局，在新设备计划使用的游戏入口中打开“设置”，导入存档。
+1. 在旧设备查看 `git status --short`，用 `git add -A` 暂存源码、运行资产、锁文件、配置和 `agent/`，核对 `git diff --cached --stat` 后提交并推送。首次提交整款应用时，以完整文件清单为准。若继续已有对局，从主菜单进入「对局历史」导出存档 JSON，单独复制文件。[项目仓库](https://github.com/Autumn-in-Surgea/Autumn-in-Surgea.github.io)
+2. 在新设备克隆或更新仓库到同一提交，使用 Node.js 22.12 或更新版本，运行 `npm ci` 和 `npm run dev`。Vite 开发地址固定为 `http://127.0.0.1:5173/`。如需继续旧对局，在新设备计划使用的游戏入口中打开「对局历史」，导入存档。
 3. 本地开发和试玩都用 5173 端口，端口被占用时启动会报错。用 `npm test` 检查规则及生命周期回归，运行 `npm run build` 和 `npm run verify:pwa` 验证静态产物。生产版的 PWA 安装、离线启动和更新在 GitHub Pages 验收。
 
 | 忽略项 | 用途与恢复方法 |
@@ -47,7 +47,7 @@
 
 ## 离线与发布状态
 
-开发与 Pages 共用同一套游戏代码。开发模式使用热更新。安装版从 Pages 下载静态构建，首次缓存完成后可离线运行。存档通过 `localStorage` 保存，键为 `four-shades-of-autumn.save.v2`，按协议、主机和端口隔离。不同设备、浏览器资料及不同地址之间通过已导出的 JSON 搬运对局。
+开发与 Pages 共用同一套游戏代码。开发模式使用热更新。安装版从 Pages 下载静态构建，首次缓存完成后可离线运行。当前存档通过 `localStorage` 保存，键为 `four-shades-of-autumn.save.v2`。最近十次成功开局的设置和种子另存于 `four-shades-of-autumn.match-history.v1`。两者均按协议、主机和端口隔离。不同设备、浏览器资料及不同地址之间通过已导出的 JSON 搬运对局。
 
 推送到 `main` 会触发 `.github/workflows/deploy-pages.yml`，先安装依赖、跑测试、构建和校验缓存，再发布 `dist/`。目标站点为组织的根地址 `https://autumn-in-surgea.github.io/`。仓库 Pages 的发布源使用 GitHub Actions，保留手动发布入口。明细见 [部署指南](DEPLOYMENT.md) 与 [PWA 运维](PWA.md)。
 

@@ -299,6 +299,24 @@ describe("map sizes, topology and configurable generation", () => {
     for (const [resource, rate, expected, tolerance] of rates)
       expect(Math.abs(rate - expected), resource).toBeLessThan(tolerance);
   });
+  it.each(["fair", "free"] as const)("places ruins on about one percent of eligible land in %s maps", (scenario) => {
+    let land = 0;
+    let ruins = 0;
+    for (let i = 0; i < 6; i++) {
+      const { tiles, starts, villages } = generateMap({
+        ...DEFAULT_OPTIONS, scenario, size: 64, aiCount: 1, mapType: "dryland", seed: `ruin-rates-${i}`,
+        mapSettings: { ...DEFAULT_OPTIONS.mapSettings, landRatio: 1 },
+      });
+      const villagesSet = new Set(villages);
+      for (const tile of tiles) {
+        if (tile.terrain === "shallow" || tile.terrain === "deep" || tile.lighthouse ||
+          villagesSet.has(tile.id) || starts.some(id => distance(tile, tiles[id]) <= 1)) continue;
+        land++;
+        if (tile.ruin) ruins++;
+      }
+    }
+    expect(Math.abs(ruins / land - 0.01)).toBeLessThan(0.003);
+  });
   it.each(["fair", "free"] as const)("matches the mountain ore rate in %s maps independently of resource density", (scenario) => {
     const { tiles, starts, villages } = generateMap({
       ...DEFAULT_OPTIONS, scenario, size: 64, mapType: "dryland", seed: "mountain-ore-rate",

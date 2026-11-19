@@ -1,6 +1,6 @@
 import type { GameState, Position, UnitType } from "../game/types";
 import { freshCombatEvents, witnessedMoves, type WitnessedMove } from "../workers/combatEvents";
-import { easeIn, easeInOut, easeOut, isVisibleTransition, movementDuration } from "./motion";
+import { easeInOut, isVisibleTransition, movementDuration } from "./motion";
 
 export type Projectile = "arrow" | "stone" | "bolt" | "shell";
 const missiles: Partial<Record<UnitType, Projectile>> = {
@@ -9,13 +9,23 @@ const missiles: Partial<Record<UnitType, Projectile>> = {
   scout: "bolt",
   bomber: "shell",
 };
-export const strikeWindup = 0.17;
-const contactWindup = 0.15;
-const contactCharge = 0.17;
-const contactRecovery = 0.24;
-const contactHold = 0.034;
-const contactRebound = 0.105;
-const rangedRecovery = 0.27;
+export const strikeWindup = 0.20;
+const contactWindup = 0.20;
+const contactCharge = 0.21;
+const contactRecovery = 0.34;
+const contactHold = 0.036;
+const contactRebound = 0.20;
+const advanceDelay = 0.14;
+const rangedKick = 0.075;
+const rangedRecovery = 0.30;
+const recoilPeak = 0.075;
+const recoilDuration = 0.28;
+const contactHeight = 0.039;
+const contactPitch = -0.07;
+const drawnPitch = 0.16;
+const rangedKickByWeapon: Record<Projectile, number> = {
+  arrow: 0.028, stone: 0.060, bolt: 0.038, shell: 0.10,
+};
 export const collapseDuration = 0.58;
 export const hitFeedbackDuration = 0.46;
 
@@ -73,46 +83,81 @@ export interface TravelLeg {
   duration: number;
   swap?: boolean;
   passing?: number[];
+  /** ID of the visible lethal contact that carries this piece into the next square. */
+  advanceAfter?: number;
 }
 export type CombatFrame = { issuedAt: number; strikes: Strike[]; journeys?: Map<string, TravelLeg[]> };
 
-export const strikeReadyAt = (strike: Strike) =>
-  strike.impact + (strike.lethal ? collapseDuration : hitFeedbackDuration) + 0.12;
+export const strikeAdvanceAt = (strike: Strike) => strike.impact + advanceDelay;
+
+export const strikeReadyAt = (strike: Strike) => Math.max(
+  strikeMotionEndsAt(strike),
+  strike.impact + (strike.lethal ? collapseDuration : recoilDuration),
+) + 0.035;
 
 export function strikeMotionEndsAt(strike: Strike): number {
   return strike.contact ? strike.impact + contactRecovery : strike.launch + rangedRecovery;
 }
 
 export function sampleAttackPose(strike: Strike, elapsed: number) {
+  const raisedHeight = strike.contact ? 0.34 : 0.24;
+  const drawDistance = strike.contact ? 0.16 : 0.072;
   if (elapsed <= strike.launch) {
-    const draw = easeInOut((elapsed - strike.start) / (strike.launch - strike.start));
-    return { travel: -(strike.contact ? 0.16 : 0.072) * draw, pitch: 0.19 * draw, lift: 0.025 * draw };
-  }
-  if (!strike.contact) {
-    const recovery = 1 - easeOut((elapsed - strike.launch) / rangedRecovery);
-    return { travel: -0.072 * recovery, pitch: 0.19 * recovery, lift: 0.025 * recovery };
-  }
-  if (elapsed <= strike.impact) {
-    const charge = easeIn((elapsed - strike.launch) / (strike.impact - strike.launch));
+    const progress = (elapsed - strike.start) / (strike.launch - strike.start);
+    const draw = easeInOut((progress - 0.16) / 0.84);
     return {
-      travel: -0.16 + (strike.contact.travel + 0.16) * charge,
-      pitch: 0.19 - 0.22 * charge,
-      lift: 0.025 + 0.075 * Math.sin(charge * Math.PI),
+      travel: -drawDistance * draw,
+      pitch: drawnPitch * draw,
+      lift: raisedHeight * easeInOut(progress / 0.82),
     };
   }
-  const age = elapsed - strike.impact - contactHold;
-  const rebound = easeInOut(age / contactRebound);
-  const settle = 1 - easeInOut((age - contactRebound) / (contactRecovery - contactHold - contactRebound));
+  if (!strike.contact) {
+    const age = elapsed - strike.launch;
+    const kick = easeInOut(age / rangedKick);
+    const seat = 1 - easeInOut((age - rangedKick) / (rangedRecovery - rangedKick));
+    const strength = strike.projectile ? rangedKickByWeapon[strike.projectile] : rangedKickByWeapon.arrow;
+    return {
+      travel: -(drawDistance + strength * kick) * seat,
+      pitch: (drawnPitch + strength * 1.1 * kick) * seat,
+      lift: (raisedHeight + strength * 0.32 * kick) * seat,
+    };
+  }
+  if (elapsed <= strike.impact) {
+    const progress = (elapsed - strike.launch) / (strike.impact - strike.launch);
+    const charge = easeInOut(progress) ** 1.45;
+    const landing = easeInOut((progress - 0.33) / 0.67);
+    return {
+      travel: -drawDistance + (strike.contact.travel + drawDistance) * charge,
+      pitch: drawnPitch + (contactPitch - drawnPitch) * easeInOut(progress),
+      lift: raisedHeight + (contactHeight - raisedHeight) * landing,
+    };
+  }
+  const age = elapsed - strike.impact;
+  const press = easeInOut(age / contactHold);
+  const pressedPitch = contactPitch - 0.035 * press;
+  const pressedHeight = contactHeight - 0.02 * press;
+  if (strike.lethal) {
+    // Settle momentarily above the point where a visible follow-through takes over.
+    const release = easeInOut((age - contactHold) / (advanceDelay - contactHold));
+    const returnHome = 1 - easeInOut((age - advanceDelay) / (contactRecovery - advanceDelay));
+    return {
+      travel: strike.contact.travel * (1 - 0.55 * release) * returnHome,
+      pitch: (pressedPitch * (1 - release) + 0.06 * release) * returnHome,
+      lift: (pressedHeight * (1 - release) + 0.09 * release) * returnHome,
+    };
+  }
+  const rebound = easeInOut((age - contactHold) / contactRebound);
+  const settle = 1 - easeInOut((age - contactHold - contactRebound) / (contactRecovery - contactHold - contactRebound));
   return {
-    travel: (strike.contact.travel - (strike.contact.travel + 0.055) * rebound) * settle,
-    pitch: (-0.03 + 0.14 * Math.sin(Math.PI * rebound)) * settle,
-    lift: (0.025 + 0.035 * Math.sin(Math.PI * rebound)) * settle,
+    travel: (strike.contact.travel * (1 - rebound) - 0.045 * rebound) * settle,
+    pitch: (pressedPitch * (1 - rebound) + 0.095 * rebound) * settle,
+    lift: (pressedHeight * (1 - rebound) + 0.15 * rebound) * settle,
   };
 }
 
 export function impactRecoil(elapsed: number): number {
-  return easeOut((elapsed - contactHold) / 0.058) *
-    (1 - easeInOut((elapsed - contactHold - 0.058) / 0.15));
+  return easeInOut(elapsed / recoilPeak) *
+    (1 - easeInOut((elapsed - recoilPeak) / (recoilDuration - recoilPeak)));
 }
 export function planEncounter(
   before: GameState,
@@ -124,6 +169,7 @@ export function planEncounter(
   const result: Strike[] = [];
   const ready = new Map<string, number>();
   const volleys = new Map<number, Strike>();
+  const lethalContacts = new Map<string, Strike>();
   if (preceding) {
     const age = (issuedAt - preceding.issuedAt) / 1000;
     for (const strike of preceding.strikes) {
@@ -155,18 +201,28 @@ export function planEncounter(
     moves.filter((move) => !move.path.length).map((move) => move.unitId),
   );
   for (const id of hiddenJourneys) journeys.delete(id);
+  const size = after.options.size;
+  function matchesAdvance(move: WitnessedMove, strike: Strike) {
+    return !move.swapWith && move.path.length === 2 && strike.from &&
+      move.path[0] === strike.from.y * size + strike.from.x &&
+      move.path[1] === strike.at.y * size + strike.at.x;
+  }
   let moveIndex = 0;
-  function scheduleMove(move: WitnessedMove, start: number, swap = false) {
+  function scheduleMove(move: WitnessedMove, readyAt: number, swap = false) {
     if (hiddenJourneys.has(move.unitId) || move.path.length < 2) return;
+    const attack = lethalContacts.get(move.unitId);
+    lethalContacts.delete(move.unitId);
+    const advance = !swap && attack && matchesAdvance(move, attack) ? attack : undefined;
     const path = move.path.map((id) => ({ x: after.tiles[id].x, y: after.tiles[id].y }));
     let distance = 0;
     for (let i = 1; i < path.length; i++)
       distance += Math.hypot(path[i].x - path[i - 1].x, path[i].y - path[i - 1].y);
-    const duration = swap ? 0.38 : movementDuration(distance);
+    const duration = swap ? 0.58 : movementDuration(distance);
+    const start = advance ? strikeAdvanceAt(advance) : readyAt;
     const journey = journeys.get(move.unitId) ?? [];
-    journey.push({ from: path[0], path, start, duration, swap, passing: move.passing });
+    journey.push({ from: path[0], path, start, duration, swap, passing: move.passing, advanceAfter: advance?.id });
     journeys.set(move.unitId, journey);
-    ready.set(move.unitId, start + duration);
+    ready.set(move.unitId, Math.max(readyAt, start + duration));
   }
 
   function scheduleMoves(beforeId: number) {
@@ -196,10 +252,18 @@ export function planEncounter(
       origin = event.from,
       sourceId = event.unitId;
     if (!at || !origin || !sourceId) continue;
+    const pendingMove = moves[moveIndex];
+    const lethalContact = lethalContacts.get(sourceId);
+    // The rules record a giant's stomp before the witnessed move is appended.
+    // A stomp at the advanced destination must wait for that move to land.
+    if (hit.kind === "stomp" && pendingMove?.unitId === sourceId && lethalContact &&
+      lethalContact.at.x === origin.x && lethalContact.at.y === origin.y && matchesAdvance(pendingMove, lethalContact)) {
+      scheduleMoves(pendingMove.id + 0.001);
+    }
     const areaHit = hit.kind === "splash" || hit.kind === "stomp";
     const safeOrigin =
       hit.originVisible &&
-      isVisibleTransition(origin, at, seen, now, after.options.size);
+      isVisibleTransition(origin, at, seen, now, size);
     const from =
       !areaHit && safeOrigin ? { x: origin.x, y: origin.y } : undefined;
     const primary =
@@ -214,7 +278,7 @@ export function planEncounter(
         ? 0.29 + Math.min(3, Math.hypot(at.x - from.x, at.y - from.y)) * 0.075
         : 0.33
       : contact ? contactCharge : 0.055;
-    const windup = contact ? contactWindup : strikeWindup;
+    const windup = hit.kind === "stomp" ? 0 : contact ? contactWindup : strikeWindup;
     const attacker = from && oldUnits.get(sourceId);
     const moved =
       !actorsWithMoves.has(sourceId) &&
@@ -250,8 +314,13 @@ export function planEncounter(
     if (hit.kind === "strike") volleys.set(event.id, strike);
     if (hit.kind === "splash" && hit.volleyId !== undefined && !primary)
       volleys.set(hit.volleyId, strike);
-    if (!areaHit) ready.set(sourceId, strikeReadyAt(strike));
+    if (!areaHit) {
+      ready.set(sourceId, strikeReadyAt(strike));
+      if (strike.lethal && strike.contact) lethalContacts.set(sourceId, strike);
+      else lethalContacts.delete(sourceId);
+    }
     ready.set(hit.targetId, strikeReadyAt(strike));
+    lethalContacts.delete(hit.targetId);
     result.push(strike);
   }
   scheduleMoves(Infinity);

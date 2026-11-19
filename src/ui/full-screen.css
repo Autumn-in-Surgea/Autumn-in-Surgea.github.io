@@ -77,6 +77,7 @@
   min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
+  touch-action: pan-x pan-y;
   scrollbar-width: thin;
   scrollbar-color: var(--line) transparent;
   scroll-padding: 12px;
@@ -219,11 +220,6 @@
   border: 1px solid #b8a37b8c;
   border-radius: 3px;
   background: #e9dec869;
-}
-
-.menu-page .save-actions {
-  margin-top: 12px;
-  gap: 8px;
 }
 
 .menu-page .settings-game {
@@ -457,7 +453,7 @@
 .menu-page .setup-map.editable {
   outline: 2px solid var(--gold);
   outline-offset: 2px;
-  touch-action: manipulation;
+  touch-action: pan-x pan-y;
 }
 
 .menu-page-footer .setup-footer {
@@ -587,6 +583,7 @@
   padding: 3px 4px 3px 9px;
   overflow-y: auto;
   overscroll-behavior: contain;
+  touch-action: pan-y;
   border: 1px solid var(--menu-edge);
   border-radius: 4px;
   color: var(--menu-ink);

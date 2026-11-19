@@ -2,6 +2,8 @@ import { useEffect, useRef } from "react";
 import type { KeyboardEvent, ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { ArrowLeft } from "lucide-react";
+import { AnimatedNumber } from "./AnimatedNumber";
+import { useWindowMotion } from "./interfaceMotion";
 import "./full-screen.css";
 import "./menu-theme.css";
 
@@ -25,9 +27,10 @@ export function Modal({
   footer?: ReactNode;
 }) {
   const ref = useRef<HTMLElement>(null);
+  useWindowMotion(ref, "page");
   useEffect(() => {
     const previous = document.activeElement;
-    ref.current?.focus();
+    ref.current?.focus({ preventScroll: true });
     return () => {
       if (previous instanceof HTMLElement && previous.isConnected) previous.focus({ preventScroll: true });
     };
@@ -60,6 +63,7 @@ export function Modal({
     <section
       className={`menu-page${wide ? " menu-page-wide" : ""}`}
       data-menu-surface={menuSurface ? "" : undefined}
+      data-window-motion=""
       ref={ref}
       role="dialog"
       aria-modal="true"
@@ -111,7 +115,7 @@ export function Cost({ value }: { value: number }) {
   return (
     <span className="cost">
       <ResourceIcon size={12} />
-      {value}
+      <AnimatedNumber value={value} />
     </span>
   );
 }

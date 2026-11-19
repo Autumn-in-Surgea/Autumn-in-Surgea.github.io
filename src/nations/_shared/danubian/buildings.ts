@@ -165,6 +165,20 @@ function timberWorks(m: Miniature, roof: string, tier: Tier, mill: boolean) {
   }
 }
 
+function mineOre(m: Miniature) {
+  for (const [x,z,h] of [[0.106,0.182,0.083],[0.157,0.130,0.062],[0.184,0.199,0.054]]) {
+    m.part("crown",foundation,x,ground+h/2,z,h*1.21,h,h);
+    m.part("gem","#b8a16b",x+0.004,ground+h*0.73,z+0.004,h*0.69,h*0.68,h*0.60);
+  }
+}
+
+export function mineOreSculpture() {
+  const m = new Miniature();
+  mineOre(m);
+  const [footprint, height] = enlargement.mine!;
+  return m.finish().translate(0, -ground, 0).scale(footprint, height, footprint);
+}
+
 function mine(m: Miniature, roof: string, tier: Tier) {
   // An exposed face of bedrock carries the adit, with its spoil apron reaching
   // the ground at irregular heights around the track.
@@ -190,10 +204,7 @@ function mine(m: Miniature, roof: string, tier: Tier) {
   for (const z of [0.114,0.164,0.214,0.264,0.314]) m.box(timber,-0.054,ground+0.006,z,0.136,0.012,0.022);
   m.beam("#c1a564",[-0.279,0.132,-0.027],[-0.216,0.177,0.067],0.012);
   m.beam("#d5b86f",[-0.216,0.177,0.067],[-0.167,0.207,0.089],0.010);
-  for (const [x,z,h] of [[0.106,0.182,0.083],[0.157,0.130,0.062],[0.184,0.199,0.054]]) {
-    m.part("crown",foundation,x,ground+h/2,z,h*1.21,h,h);
-    m.part("gem","#b8a16b",x+0.004,ground+h*0.73,z+0.004,h*0.69,h*0.68,h*0.60);
-  }
+  mineOre(m);
   const h = 0.168 + tier * 0.113;
   for (const side of [-1, 1]) {
     m.beam(dark, [0.165 + side * 0.071, ground+0.014, -0.16], [0.165 + side * 0.044, h, -0.121], 0.034);

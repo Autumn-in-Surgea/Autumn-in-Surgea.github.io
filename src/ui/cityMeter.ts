@@ -12,7 +12,7 @@ export function cityMeter(population: number, units: number, capacity: number) {
   return {
     cells: Array.from({ length: slots }, (_, index) => ({
       fill: Math.max(0, Math.min(1, population - index)),
-      unit: Number(index < units),
+      unit: Math.max(0, Math.min(1, units - index)),
     })),
     deficit: Math.min(0, population),
   };

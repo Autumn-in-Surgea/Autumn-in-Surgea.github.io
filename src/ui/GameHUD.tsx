@@ -4,6 +4,7 @@ import { ArrowUp, BookOpen, Building2, Check, Handshake, Settings2, Trophy, User
 import { getActiveUpkeep, getIncome, getScore, getSpendableStars } from "../game";
 import type { Action, GameState } from "../game/types";
 import { useGameStore } from "../store/gameStore";
+import { AnimatedNumber } from "./AnimatedNumber";
 import { ResourceIcon } from "./Common";
 import { HudAction, SelectionControls } from "./SelectionControls";
 import "../styles/game-hud.css";
@@ -76,8 +77,8 @@ export function GameHUD({
   const starsLabel = `可支配 ${spendable} 星，净收入 ${netLabel}`;
   const stars = <>
     <ResourceIcon size={18} />
-    <strong data-wide-count={spendable >= 10000}>{spendable}</strong>
-    <span className="hud-yield" data-negative={netIncome < 0}>{netLabel}</span>
+    <strong data-wide-count={spendable >= 10000}><AnimatedNumber value={spendable} /></strong>
+    <span className="hud-yield" data-negative={netIncome < 0}><AnimatedNumber value={netIncome} prefix={netIncome >= 0 ? "+" : undefined} /></span>
   </>;
 
   return (
@@ -87,7 +88,7 @@ export function GameHUD({
           <div className="hud-stat hud-round" aria-label={`第 ${game.round} 回合`}>
             <span>回合</span>
             <div className="hud-round-value">
-              <strong>{game.round}</strong>
+              <strong><AnimatedNumber value={game.round} /></strong>
               {game.options.mode === "score" && <span>/{game.options.maxRounds}</span>}
             </div>
           </div>
@@ -97,13 +98,13 @@ export function GameHUD({
               onClick={onStars}>{stars}</button>
           ) : <div className="hud-stat hud-stars" aria-label={starsLabel}>{stars}</div>}
           <div className="hud-stat" aria-label={`${cities} 座城市`}>
-            <Building2 size={17} aria-hidden="true" /><strong data-wide-count={cities >= 100}>{cities}</strong>
+            <Building2 size={17} aria-hidden="true" /><strong data-wide-count={cities >= 100}><AnimatedNumber value={cities} /></strong>
           </div>
           <div className="hud-stat" aria-label={`${units} 个单位`}>
-            <UsersRound size={17} aria-hidden="true" /><strong data-wide-count={units >= 100}>{units}</strong>
+            <UsersRound size={17} aria-hidden="true" /><strong data-wide-count={units >= 100}><AnimatedNumber value={units} /></strong>
           </div>
           <div className="hud-stat" aria-label={`分数 ${score}`}>
-            <Trophy size={17} aria-hidden="true" /><strong data-wide-count={score >= 10000}>{score}</strong>
+            <Trophy size={17} aria-hidden="true" /><strong data-wide-count={score >= 10000}><AnimatedNumber value={score} /></strong>
           </div>
         </div>
       </header>

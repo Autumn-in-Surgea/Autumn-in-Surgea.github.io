@@ -21,7 +21,7 @@ it("uses only untoned faction enamel across land-piece pedestals", () => {
   }
 });
 
-it("keeps health labels above the helmets and equipment of the taller pieces", () => {
+it("keeps action badge heights above the helmets and equipment of the taller pieces", () => {
   for (const type of landPieces) {
     const { body, enamel } = danubianModels.unit(type);
     body.computeBoundingBox();

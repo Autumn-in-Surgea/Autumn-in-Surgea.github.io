@@ -1,0 +1,155 @@
+.app :is(button, summary):not(:disabled):active {
+  scale: .973;
+}
+
+.interface-button-flash,
+.interface-turn-ripple,
+.interface-window-exit,
+.interface-window-exit * {
+  pointer-events: none !important;
+}
+
+.interface-button-flash {
+  position: fixed;
+  z-index: 58;
+  border: 1px solid #f4d493a8;
+  border-radius: 4px;
+  background: radial-gradient(circle at var(--press-x) var(--press-y), #fff4c8b0, #efc66c58 28%, transparent 82%);
+  box-shadow: 0 0 13px #edbe5e58, inset 0 0 9px #f8e6a340;
+  animation: interface-press-flash 370ms cubic-bezier(.16,.65,.32,1) both;
+}
+
+@keyframes interface-press-flash {
+  0% { opacity: .78; scale: .96; }
+  33% { opacity: .54; scale: 1.026; }
+  100% { opacity: 0; scale: 1.065; }
+}
+
+.interface-turn-ripple {
+  position: fixed;
+  z-index: 48;
+  width: var(--wave-diameter);
+  height: var(--wave-diameter);
+  translate: -50% -50%;
+  border-radius: 50%;
+  background-color: light-dark(#805329, #caa773);
+  animation: interface-turn-ink 900ms cubic-bezier(.4, 0, .2, 1) both;
+}
+
+@keyframes interface-turn-ink {
+  from { scale: var(--wave-start); opacity: .29; }
+  14% { scale: var(--wave-near); opacity: .28; }
+  78% { scale: 1; opacity: .08; }
+  to { scale: 1; opacity: 0; }
+}
+
+.menu-page[data-window-motion] {
+  transform-origin: 50% 75%;
+  animation: interface-page-enter 330ms cubic-bezier(.16,.76,.25,1);
+}
+
+.menu-page[data-window-motion] > .menu-page-header {
+  position: relative;
+}
+
+.menu-page[data-window-motion] > .menu-page-header::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(116deg, transparent 19%, #ffe7a742 50%, transparent 78%) no-repeat;
+  background-size: 54% 100%;
+  animation: interface-page-sheen 520ms ease-out both;
+}
+
+@keyframes interface-page-enter {
+  0% { opacity: 0; translate: 0 14px; scale: .986; }
+  63% { opacity: 1; translate: 0 -1px; scale: 1.001; }
+  100% { opacity: 1; translate: 0; scale: 1; }
+}
+
+@keyframes interface-page-sheen {
+  from { opacity: 0; background-position-x: -100%; }
+  25% { opacity: 1; }
+  to { opacity: 0; background-position-x: 190%; }
+}
+
+dialog[data-window-motion][open] {
+  animation: interface-dialog-enter 270ms cubic-bezier(.16,.76,.24,1);
+}
+
+dialog[data-window-motion][open]::backdrop {
+  animation: interface-backdrop-enter 220ms ease-out both;
+}
+
+@keyframes interface-dialog-enter {
+  0% { opacity: 0; translate: 0 10px; scale: .955; }
+  60% { opacity: 1; translate: 0 -2px; scale: 1.013; }
+  100% { opacity: 1; translate: 0; scale: 1; }
+}
+
+@keyframes interface-backdrop-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.interface-window-exit {
+  position: fixed;
+  z-index: 49;
+  inset: 0;
+  animation: interface-window-fade 205ms cubic-bezier(.24,.2,.36,1) both;
+}
+
+.interface-window-exit[data-surface="notice"] {
+  z-index: 55;
+  background: #101f32a6;
+}
+
+.interface-window-exit[data-surface="trait"] {
+  z-index: 55;
+  background: #070e1736;
+}
+
+.interface-window-exit > .interface-window-snapshot {
+  animation: interface-window-retreat 205ms cubic-bezier(.23,.50,.30,1) both;
+}
+
+.interface-window-exit > .interface-window-snapshot > .menu-page-header::after {
+  animation: none;
+  content: none;
+}
+
+@keyframes interface-window-fade {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes interface-window-retreat {
+  from { translate: 0; scale: 1; }
+  to { translate: 0 12px; scale: .982; }
+}
+
+.tech-details {
+  animation: interface-panel-reveal 190ms cubic-bezier(.2,.78,.28,1) both;
+}
+
+@keyframes interface-panel-reveal {
+  from { opacity: .4; translate: 0 4px; }
+  to { opacity: 1; translate: 0; }
+}
+
+.reduce-motion :is(button, summary):not(:disabled):active { scale: none; }
+.reduce-motion :is(.menu-page[data-window-motion], dialog[data-window-motion][open], .tech-details, .interface-window-exit,
+  .interface-button-flash, .interface-turn-ripple), .reduce-motion dialog[data-window-motion]::backdrop {
+  animation: none;
+}
+.reduce-motion .menu-page[data-window-motion] > .menu-page-header::after { animation: none; opacity: 0; }
+.reduce-motion :is(.interface-window-exit, .interface-button-flash, .interface-turn-ripple) { visibility: hidden; }
+
+@media (prefers-reduced-motion: reduce) {
+  .app :is(button, summary):not(:disabled):active { scale: none; }
+  :is(.menu-page[data-window-motion], dialog[data-window-motion][open], .tech-details),
+  dialog[data-window-motion][open]::backdrop,
+  .menu-page[data-window-motion] > .menu-page-header::after { animation: none; }
+  .menu-page[data-window-motion] > .menu-page-header::after { content: none; }
+}

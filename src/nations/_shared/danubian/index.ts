@@ -4,7 +4,7 @@ import { danubianBuilding } from "./buildings";
 import { danubianCity } from "./cities";
 import { danubianUnit } from "./units";
 
-// Anchors are model-specific so another armour or sail design can reposition HP labels.
+// Model-specific heights keep action badges above helmets and masts.
 const tallPieceLabels: Partial<Record<UnitType, number>> = {
   warrior: .96, defender: .98, archer: .96, swordsman: .96,
   mindBender: .99, cloak: .95, dagger: .95, rider: 1.02, knight: 1.01, giant: 1.20,

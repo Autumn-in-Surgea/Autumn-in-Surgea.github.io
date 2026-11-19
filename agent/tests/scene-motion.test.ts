@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  carryHeight,
   createMotionPath,
   isVisibleTransition,
   movementDuration,
+  sampleCarriedPath,
   sampleMotionPath,
   sampleMovement,
   turnTowards,
@@ -12,6 +14,30 @@ import type { Strike } from "../../src/scene/combatMotion";
 import { planUnitTurns, unitFacingAt, unitFacingYaw } from "../../src/scene/unitFacing";
 
 describe("unit presentation timing", () => {
+  it("picks the piece up in place and seats it only after arriving on the next square", () => {
+    const path = createMotionPath([[0, 0.08, 0], [1, 0.08, 0]]);
+    const duration = movementDuration(path.total);
+    const at: MotionVector = [0, 0, 0];
+    sampleCarriedPath(path, duration * 0.13, duration, at);
+    expect(at).toEqual([0, 0.08, 0]);
+    expect(carryHeight(0.13, path.total, false)).toBeGreaterThan(0.28);
+    expect(carryHeight(0.42, path.total, false)).toBeGreaterThan(carryHeight(0.19, path.total, false));
+    sampleCarriedPath(path, duration * 0.85, duration, at);
+    expect(at).toEqual([1, 0.08, 0]);
+    expect(carryHeight(0.85, path.total, false)).toBeGreaterThan(0);
+    expect(carryHeight(0.89, path.total, false)).toBeCloseTo(0);
+    expect(carryHeight(0.945, path.total, false)).toBeCloseTo(0.016);
+    expect(carryHeight(1, path.total, false)).toBe(0);
+  });
+
+  it("eases into the lift and out of the settling rebound", () => {
+    const step = 0.001;
+    for (const naval of [false, true]) {
+      expect(carryHeight(step, 1, naval)).toBeLessThan(step / 10);
+      expect(carryHeight(1 - step, 1, naval)).toBeLessThan(step / 10);
+    }
+  });
+
   it("holds the starting square before a delayed melee advance", () => {
     const out: MotionVector = [0, 0, 0];
     sampleMovement([2, 0.1, 2], [3, 0.1, 2], -0.12, 0.3, out);
@@ -34,8 +60,9 @@ describe("unit presentation timing", () => {
     expect(out).toEqual([2, 0.17, 3]);
   });
   it("keeps one-square moves legible and long moves bounded", () => {
-    expect(movementDuration(1)).toBeGreaterThanOrEqual(0.28);
-    expect(movementDuration(6)).toBeLessThanOrEqual(0.55);
+    expect(movementDuration(1)).toBe(0.5);
+    expect(movementDuration(1)).toBeLessThan(movementDuration(6));
+    expect(movementDuration(6)).toBeLessThanOrEqual(0.78);
   });
   it("turns across the short arc at the angle wrap", () => {
     const result = turnTowards(Math.PI - 0.1, -Math.PI + 0.1, 0.5);

@@ -2,6 +2,7 @@ import { useId, useLayoutEffect, useRef } from "react";
 import type { EventNotice as EventContent } from "../game/types";
 import { getNation } from "../nations/registry";
 import { NationEmblem } from "./NationEmblem";
+import { useWindowMotion } from "./interfaceMotion";
 import "./event-notice.css";
 
 export function EventNotice({ notice, onAcknowledge }: {
@@ -14,6 +15,7 @@ export function EventNotice({ notice, onAcknowledge }: {
   const nation = notice.nationId ? getNation(notice.nationId) : undefined;
   const titleId = useId();
   const messageId = useId();
+  useWindowMotion(dialog, "notice");
 
   useLayoutEffect(() => {
     const element = dialog.current!;
@@ -30,6 +32,7 @@ export function EventNotice({ notice, onAcknowledge }: {
     <dialog
       ref={dialog}
       className="event-notice"
+      data-window-motion=""
       aria-modal="true"
       aria-labelledby={titleId}
       aria-describedby={messageId}

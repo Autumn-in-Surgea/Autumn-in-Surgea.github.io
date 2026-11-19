@@ -20,7 +20,7 @@ it("keeps the bomber long while narrowing its full silhouette relative to the ju
 });
 
 it.each(["raft", "dinghy", "pirate", "scout", "rammer", "bomber", "juggernaut"] as const)(
-  "keeps the %s inside the diagonal board footprint and below its HP label",
+  "keeps the %s inside the diagonal board footprint and below its action badge height",
   type => {
     const bounds = measure(type);
     const { x: beam, z: length } = bounds.getSize(new Vector3());

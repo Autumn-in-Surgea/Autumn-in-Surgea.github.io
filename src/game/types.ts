@@ -293,10 +293,23 @@ export type Action =
   | { type: "PEACE" | "BREAK_PEACE" | "EMBASSY"; targetPlayer: number }
   | { type: "SET_OVERSPEND"; enabled: boolean }
   | { type: "END_TURN" | "RESIGN" };
+export type PopulationSource = { tileId: number } & (
+  | { kind: "resource"; resource: Resource }
+  | { kind: "building"; building: BuildingId; built?: boolean }
+  | { kind: "road" | "ruin" | "lighthouse" | "reward" }
+);
+export interface PopulationGain {
+  cityId: string;
+  cityTileId: number;
+  amount: number;
+  source: PopulationSource;
+}
 export interface ActionResult {
   state: GameState;
   ok: boolean;
   error?: string;
+  /** Presentation details for this action, independent of the saved game. */
+  populationGains?: readonly PopulationGain[];
 }
 export interface UnitDefinition {
   id: UnitType;

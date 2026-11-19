@@ -24,7 +24,7 @@ npm run verify:pwa
 
 预缓存包含 HTML、JS、CSS、图标、manifest，及单独输出的 AI Worker。`verify:pwa` 检查构建文件是否全部进入预缓存、缓存键是否冲突、Worker 是否包含、图标尺寸以及子目录所需的相对路径。
 
-安装入口会申请浏览器持久存储，获准与否由浏览器决定。存档与程序缓存分开保存。浏览器或用户清理站点数据仍可能移除离线文件和存档，重要对局可通过“导出存档”备份。
+安装入口会申请浏览器持久存储，获准与否由浏览器决定。存档与程序缓存分开保存。浏览器或用户清理站点数据仍可能移除离线文件和存档，重要对局可在主菜单的「对局历史」通过「导出存档」备份。
 
 ## 更新行为
 
@@ -33,6 +33,8 @@ npm run verify:pwa
 浏览器页签、iOS 主屏幕、PWA 安装图标和游戏内的「关于」共用 `设定/logo.png` 生成的图标。Android 的可裁切版在深色底上保留安全边距。图案更新时用新版文件名，避免旧图标缓存。已安装的 Chrome 应用会通过应用更新流程确认新图标。[Chrome 应用更新说明](https://developer.chrome.com/blog/improvements-to-web-app-updates)
 
 iOS 主屏幕安装版使用不透明状态栏和深色启动底色。iPhone 和 iPad 的浏览器与安装版均把整个上下操作栏放在系统安全区以内，并在安全区边缘与栏之间额外留出 12–16 CSS 像素。布局识别 iPhone、iPad 和使用桌面 UA 的触控 iPad，安装模式通过 `navigator.standalone` 或独立显示模式识别。[Apple 状态栏配置](https://developer.apple.com/library/archive/documentation/AppleApplications/Reference/SafariHTMLRef/Articles/MetaTags.html) · [WebKit 安全区说明](https://webkit.org/blog/7929/designing-websites-for-iphone-x/)
+
+手机屏幕和桌面触控板的捏合手势均锁定页面缩放。棋盘与科技树处理各自的缩放，菜单仍可滚动。浏览器菜单和键盘提供的显式页面缩放保持可用。
 
 ## 实机验收流程
 

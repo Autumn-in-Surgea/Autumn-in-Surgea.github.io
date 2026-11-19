@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { applyAction, createGame, getUnitsWithAvailableActions, tileAt } from "../game";
-import type { Action, EventNotice, GameOptions, GameState } from "../game/types";
+import type { Action, EventNotice, GameOptions, GameState, PopulationGain } from "../game/types";
 import { getNation } from "../nations/registry";
 import { deserializeGame, serializeGame } from "./save";
 import { aiWorker } from "../workers/aiClient";
@@ -8,7 +8,10 @@ import { freshCombatEvents, rememberCombatEvents } from "../workers/combatEvents
 import { observeMoves } from "../workers/visibleMove";
 import { observedActionTile, type PlaybackStep } from "./actionPlayback";
 import { planStructurePlayback } from "./structurePlayback";
+import { recordPopulationFlights } from "./populationPlayback";
+import { addMatchHistory, persistMatchHistory, readMatchHistory, type MatchHistoryEntry } from "./matchHistory";
 export { deserializeGame, serializeGame } from "./save";
+export type { MatchHistoryEntry } from "./matchHistory";
 
 const SAVE_KEY = "four-shades-of-autumn.save.v2";
 const SETTINGS_KEY = "four-shades-of-autumn.settings.v1";
@@ -45,13 +48,14 @@ function readSettings(): Settings {
     return defaultSettings;
   }
 }
-export function hasSavedGame(): boolean {
+function getSavedGame(): string | null {
   try {
-    return !!localStorage.getItem(SAVE_KEY);
+    return localStorage.getItem(SAVE_KEY);
   } catch {
-    return false;
+    return null;
   }
 }
+export const hasSavedGame = () => !!getSavedGame();
 function persist(game: GameState, notices: readonly EventNotice[]) {
   try {
     localStorage.setItem(SAVE_KEY, serializeGame(game, notices));
@@ -90,6 +94,7 @@ interface Store {
   resetKey: number;
   sessionId: number;
   settings: Settings;
+  matchHistory: readonly MatchHistoryEntry[];
   start: (options: GameOptions) => void;
   select: (tileId: number | null, unitId?: string | null) => void;
   command: (action: Action) => boolean;
@@ -97,7 +102,7 @@ interface Store {
   save: () => boolean;
   exportSave: () => string | null;
   load: () => void;
-  importSave: (text: string) => void;
+  importSave: (text: string) => boolean;
   menu: () => void;
   resume: () => void;
   setNotice: (text: string) => void;
@@ -110,6 +115,7 @@ export const useGameStore = create<Store>((set, get) => {
   let pendingPlayback: { id: number; resolve: () => void } | null = null;
   let eventWaiter: (() => void) | null = null;
   let notices: EventNotice[] = [];
+  let historyPersisted = true;
 
   function cancel(preserveNotices = false) {
     generation++;
@@ -131,17 +137,20 @@ export const useGameStore = create<Store>((set, get) => {
     before: GameState,
     next: GameState,
     action: Action,
+    populationGains: readonly PopulationGain[] | undefined,
     selection?: Pick<Store, "selectedTile" | "selectedUnit">,
   ) {
     const moves = observeMoves(before, next, action);
     const combat = freshCombatEvents(before, next);
     if (moves.length || combat.length)
       rememberCombatEvents(next, combat, moves);
+    const flights = recordPopulationFlights(before, next, populationGains);
     const count = notices.length;
     collectNotices(next, before.events.at(-1)?.id ?? 0);
     const structurePlan = playbackClients ? planStructurePlayback(before, next) : null;
     const focusTile = observedActionTile(before, next, action, combat) ??
       moves.find(move => move.path.length > 0)?.path[0] ??
+      flights[0]?.source.tileId ??
       structurePlan?.structures.keys().next().value ?? null;
     const visible = focusTile !== null || notices.length !== count ||
       (before.currentPlayer === 0 && action.type !== "END_TURN") ||
@@ -211,8 +220,13 @@ export const useGameStore = create<Store>((set, get) => {
     resetKey: 0,
     sessionId: 0,
     settings: readSettings(),
+    matchHistory: readMatchHistory() ?? [],
     start: (options) => {
       const game = createGame(options);
+      // Pick up starts in other tabs unless a storage failure left this tab with unsaved entries.
+      const previousHistory = (historyPersisted ? readMatchHistory() : undefined) ?? get().matchHistory;
+      const matchHistory = addMatchHistory(game.options, previousHistory);
+      historyPersisted = persistMatchHistory(matchHistory);
       cancel();
       const nation = getNation(game.players[0].civilization);
       if (nation) notices.push({ ...nation.notices.opening, nationId: nation.id });
@@ -220,6 +234,7 @@ export const useGameStore = create<Store>((set, get) => {
       const saved = persist(game, notices);
       set({
         game,
+        matchHistory,
         screen: "game",
         selectedTile: null,
         selectedUnit: null,
@@ -254,7 +269,7 @@ export const useGameStore = create<Store>((set, get) => {
       const selectionSpent = usedSelectedUnit &&
         (!unit || !getUnitsWithAvailableActions(next, [unit]).has(unit.id));
       const clearSelection = selectionSpent || action.type === "END_TURN";
-      publish(game, next, action, {
+      publish(game, next, action, result.populationGains, {
         selectedUnit: clearSelection ? null : unit?.id ?? null,
         selectedTile: clearSelection ? null : unit ? tileAt(next, unit).id : selectedTile,
       });
@@ -286,7 +301,7 @@ export const useGameStore = create<Store>((set, get) => {
                 throw new Error("AI 计划越过了当前回合。");
               const result = applyAction(before, action);
               if (!result.ok) throw new Error(result.error || "AI 行动重放失败。");
-              const finished = publish(before, result.state, action);
+              const finished = publish(before, result.state, action, result.populationGains);
               before = result.state;
               if (finished) {
                 await finished;
@@ -319,14 +334,17 @@ export const useGameStore = create<Store>((set, get) => {
     },
     save: () => {
       const game = get().game;
-      if (!game) return true;
+      if (!game) {
+        if (hasSavedGame()) set({ notice: "对局已保存到此浏览器。" });
+        return true;
+      }
       const saved = persist(game, notices);
       set({ notice: saved ? "对局已保存到此浏览器。" : "无法写入本地存储，请导出存档。" });
       return saved;
     },
     exportSave: () => {
       const { game } = get();
-      return game ? serializeGame(game, notices) : null;
+      return game ? serializeGame(game, notices) : getSavedGame();
     },
     load: () => {
       try {
@@ -362,10 +380,12 @@ export const useGameStore = create<Store>((set, get) => {
         });
         if (game.currentPlayer !== 0 && game.status === "playing")
           get().advanceAI();
+        return true;
       } catch (error) {
         set({
           notice: error instanceof Error ? error.message : "存档读取失败。",
         });
+        return false;
       }
     },
     menu: () => {

@@ -6,9 +6,6 @@ import {
   Volume2,
   Activity,
   HelpCircle,
-  Download,
-  Upload,
-  Save,
   Home,
   ScanLine,
   Building2,
@@ -28,6 +25,7 @@ import {
 } from "../game";
 import type { Action, GameState, TechDefinition } from "../game/types";
 import { useGameStore } from "../store/gameStore";
+import { AnimatedNumber } from "./AnimatedNumber";
 import { Modal, Cost, ResourceIcon } from "./Common";
 import { TechTreeViewport } from "./TechTreeViewport";
 import { scenarioLabels } from "./Menu";
@@ -51,11 +49,11 @@ export function StarBudgetPanel({ game, busy, onClose, onCommand }: {
   return (
     <Modal title="星星" onClose={onClose} menuSurface>
       <dl className="star-budget">
-        <div className="setting-row"><dt>星星余额</dt><dd>{player.resources}</dd></div>
-        <div className="setting-row"><dt>每回合收入</dt><dd>+{income}</dd></div>
-        <div className="setting-row"><dt>下次维护费</dt><dd>−{upkeep}</dd></div>
-        <div className="setting-row"><dt>净收入</dt><dd>{netIncome < 0 ? `−${-netIncome}` : `+${netIncome}`}</dd></div>
-        <div className="setting-row"><dt><strong>可支配星星</strong></dt><dd><strong>{spendable}</strong></dd></div>
+        <div className="setting-row"><dt>星星余额</dt><dd><AnimatedNumber value={player.resources} /></dd></div>
+        <div className="setting-row"><dt>每回合收入</dt><dd><AnimatedNumber value={income} prefix="+" /></dd></div>
+        <div className="setting-row"><dt>下次维护费</dt><dd><AnimatedNumber value={-upkeep} prefix={upkeep ? undefined : "−"} /></dd></div>
+        <div className="setting-row"><dt>净收入</dt><dd><AnimatedNumber value={netIncome} prefix={netIncome >= 0 ? "+" : undefined} /></dd></div>
+        <div className="setting-row"><dt><strong>可支配星星</strong></dt><dd><strong><AnimatedNumber value={spendable} /></strong></dd></div>
       </dl>
       <button type="button" className="setting-row" role="switch" aria-checked={overspending}
         aria-labelledby="overspend-label" aria-describedby="overspend-help"
@@ -129,10 +127,10 @@ export function TechPanel({
       <TechTreeViewport balance={<>
         <span className="resource-pill">
           <ResourceIcon />
-          {getSpendableStars(game, 0)}
+          <AnimatedNumber value={getSpendableStars(game, 0)} />
         </span>
         <span>
-          {player.technologies.length} / {TECHNOLOGIES.length}
+          <AnimatedNumber value={player.technologies.length} /> / {TECHNOLOGIES.length}
         </span>
       </>}>
         <svg
@@ -317,22 +315,8 @@ export function DiplomacyPanel({
 }
 
 export function SettingsPanel({ onClose }: { onClose: () => void }) {
-  const { game, screen, settings, updateSettings, save, exportSave, menu, importSave, busy, playbackStep, eventNotice, resetCamera } =
+  const { game, screen, settings, updateSettings, save, menu, busy, playbackStep, eventNotice, resetCamera } =
     useGameStore();
-  const file = useRef<HTMLInputElement>(null);
-  const exportFile = () => {
-    if (!game) return;
-    const raw = exportSave();
-    if (!raw) return;
-    const url = URL.createObjectURL(
-      new Blob([raw], { type: "application/json" }),
-    );
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `game-${game.options.seed}-turn${game.round}.json`;
-    link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  };
   return (
     <Modal title="设置" onClose={onClose} menuSurface>
       <div className="settings-body">
@@ -387,45 +371,6 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
             <option value="panel">选择面板</option>
           </select>
         </label>
-        {game && (
-          <div className="save-actions">
-            <button
-              className="secondary"
-              onClick={() => {
-                save();
-                onClose();
-              }}
-            >
-              <Save size={16} />
-              保存
-            </button>
-            <button className="secondary" onClick={exportFile}>
-              <Download size={16} />
-              导出存档
-            </button>
-          </div>
-        )}
-        <input
-          type="file"
-          accept=".json,application/json"
-          hidden
-          ref={file}
-          onChange={async (e) => {
-            const selected = e.target.files?.[0];
-            if (selected) {
-              if (selected.size > 8_000_000) {
-                useGameStore.getState().setNotice("存档不能超过 8 MB。");
-                return;
-              }
-              importSave(await selected.text());
-              onClose();
-            }
-          }}
-        />
-        <button className="text-action" onClick={() => file.current?.click()}>
-          <Upload size={16} />
-          导入存档
-        </button>
         {game && (
           <>
             <div className="settings-game">
@@ -488,15 +433,15 @@ export function ResultsPanel({
         </p>
         <div className="result-stats">
           <div>
-            <strong>{game.round}</strong>
+            <strong><AnimatedNumber value={game.round} /></strong>
             <span>回合</span>
           </div>
           <div>
-            <strong>{getScore(game, 0)}</strong>
+            <strong><AnimatedNumber value={getScore(game, 0)} /></strong>
             <span>分数</span>
           </div>
           <div>
-            <strong>{game.players[0].stats.kills}</strong>
+            <strong><AnimatedNumber value={game.players[0].stats.kills} /></strong>
             <span>击败单位</span>
           </div>
         </div>
@@ -505,13 +450,13 @@ export function ResultsPanel({
             .sort((a, b) => getScore(game, b.id) - getScore(game, a.id))
             .map((p, i) => (
               <div key={p.id}>
-                <span>{i + 1}</span>
+                <span><AnimatedNumber value={i + 1} /></span>
                 <i style={{ background: p.color }} />
                 <strong>
                   {p.name}
                   {p.id === 0 ? " · 你" : ""}
                 </strong>
-                <span>{getScore(game, p.id)}</span>
+                <span><AnimatedNumber value={getScore(game, p.id)} /></span>
               </div>
             ))}
         </div>

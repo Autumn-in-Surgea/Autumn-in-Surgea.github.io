@@ -25,6 +25,7 @@ const clamp = (n: number, min: number, max: number) =>
 const smooth = (n: number) => n * n * (3 - 2 * n);
 const resourceChanceScale = 0.9;
 const mountainOreChance = 0.7;
+const landRuinChance = 0.01;
 /** Continuous seeded value noise; four octaves produce broad coasts and smaller details. */
 export function valueNoise(x: number, y: number, seed: number): number {
   const xi = Math.floor(x),
@@ -405,7 +406,7 @@ export function generateMap(options: GameOptions): GeneratedMap {
         if (r < starfishChance) t.resource = "starfish";
         break;
     }
-    if (!isWater(t) && resourceRand() < 0.018 && !towns.includes(t.id)) {
+    if (!isWater(t) && resourceRand() < landRuinChance && !towns.includes(t.id)) {
       t.ruin = true;
       t.resource = null;
     }

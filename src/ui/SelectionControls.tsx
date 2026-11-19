@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from "react";
+import { useContext, useLayoutEffect, useRef, type CSSProperties, type ReactNode } from "react";
 import {
   ArrowLeftRight, Award, Axe, BrainCircuit, Compass, Crosshair, Eye, Flag, Hammer, Heart,
   RotateCcw, Route, Shield, Sprout, Swords, Trash2, Trees, Users, Waves, Zap,
@@ -15,6 +15,7 @@ import {
 } from "../game";
 import type { Action, City, GameState, Resource, Reward, Terrain, Tile, Unit, UnitType } from "../game";
 import { getNation } from "../nations/registry";
+import { AnimatedNumber, AnimatedNumbersInText, NumberMotionDisabled, allowsNumberMotion } from "./AnimatedNumber";
 import { Cost } from "./Common";
 import { NationEmblem } from "./NationEmblem";
 import { UnitTraits } from "./UnitTraits";
@@ -52,7 +53,7 @@ export function HudAction({
         </span>
       )}
       <span className="hud-action-label">{label}</span>
-      {secondaryText && <span className="hud-action-secondary">{secondaryText}</span>}
+      {secondaryText && <span className="hud-action-secondary"><AnimatedNumbersInText text={secondaryText} /></span>}
     </button>
   );
 }
@@ -275,7 +276,7 @@ function Details({ rows }: { rows: ReadonlyArray<readonly [string, ReactNode]> }
   return (
     <dl className="selection-detail-grid">
       {rows.map(([label, value]) => (
-        <div key={label}><dt>{label}</dt><dd>{value}</dd></div>
+        <div key={label}><dt>{label}</dt><dd>{typeof value === "number" ? <AnimatedNumber value={value} /> : value}</dd></div>
       ))}
     </dl>
   );
@@ -285,8 +286,68 @@ function CityMeter({ game, city }: { game: GameState; city: City }) {
   const units = getCityUnitCount(game, city);
   const capacity = populationNeeded(city);
   const { cells, deficit } = cityMeter(city.population, units, capacity);
+  const meter = useRef<HTMLSpanElement>(null);
+  const previous = useRef({ population: city.population, units, capacity });
+  const disabled = useContext(NumberMotionDisabled);
+  useLayoutEffect(() => {
+    const current = { population: city.population, units, capacity };
+    const before = previous.current;
+    previous.current = current;
+    const node = meter.current;
+    if (disabled || !node || !allowsNumberMotion(node)) return;
+    if (current.population === before.population && units === before.units && capacity === before.capacity) return;
+    const from = cityMeter(before.population, before.units, before.capacity).cells;
+    const to = cityMeter(current.population, units, capacity).cells;
+    const animations: Animation[] = [];
+    const oldPopulation = Math.max(0, Math.min(before.population, from.length));
+    const oldOccupancy = Math.min(before.units, from.length);
+    const fillEdge = current.population >= before.population ? oldPopulation : oldPopulation - 1;
+    const dotEdge = units >= before.units ? oldOccupancy : oldOccupancy - 1;
+    const options = (distance: number): KeyframeAnimationOptions => ({
+      delay: Math.min(96, distance * 22), duration: 365, easing: "cubic-bezier(.24,.76,.34,1)", fill: "backwards",
+    });
+    for (let index = 0; index < to.length; index++) {
+      const slot = node.children.item(index);
+      const oldFill = from[index]?.fill ?? 0;
+      const oldUnit = from[index]?.unit ?? 0;
+      const { fill, unit } = to[index];
+      if (!slot) continue;
+      if (oldFill !== fill) {
+        const fillNode = slot.querySelector<HTMLElement>(".selection-city-fill")!;
+        const gained = fill > oldFill;
+        animations.push(fillNode.animate([
+          { transform: `scaleX(${oldFill})`, filter: "brightness(1)" },
+          { transform: `scale(${gained ? fill : oldFill * .48 + fill * .52}, ${gained ? 1.24 : .65})`,
+            filter: "brightness(1.65)", offset: .56 },
+          { transform: `scale(${gained ? fill * .88 : fill}, .92)`, filter: "brightness(1.16)", offset: .8 },
+          { transform: `scaleX(${fill})`, filter: "brightness(1)" },
+        ], options(Math.abs(index - fillEdge))));
+      }
+      if (oldUnit !== unit) {
+        const dotNode = slot.querySelector<HTMLElement>(".selection-city-dot")!;
+        animations.push(dotNode.animate([
+          { transform: `scale(${oldUnit})`, opacity: oldUnit },
+          { transform: `scale(${unit ? 1.40 : .55})`, opacity: unit ? 1 : .72, offset: .56 },
+          { transform: `scale(${unit ? .89 : .14})`, opacity: unit ? 1 : .28, offset: .81 },
+          { transform: `scale(${unit})`, opacity: unit },
+        ], options(Math.abs(index - dotEdge))));
+      }
+      if (!from[index]) {
+        animations.push(slot.animate([{ opacity: .45 }, { opacity: 1 }], options(0)));
+      }
+    }
+    if (Math.min(0, current.population) !== Math.min(0, before.population)) {
+      animations.push(node.animate([
+        { filter: "brightness(1)" },
+        { filter: "brightness(1.45)", offset: .52 },
+        { filter: "brightness(1)" },
+      ], options(0)));
+    }
+    return () => animations.forEach(animation => animation.cancel());
+  }, [capacity, city.population, disabled, units]);
   return (
     <span
+      ref={meter}
       className="selection-city-meter"
       data-deficit={deficit < 0}
       role="meter"
@@ -306,8 +367,8 @@ function CityMeter({ game, city }: { game: GameState; city: City }) {
     >
       {cells.map(({ fill, unit }, index) => (
         <span className="selection-city-slot" aria-hidden="true" key={index}>
-          {fill > 0 && <span className="selection-city-fill" style={{ width: `${fill * 100}%` }} />}
-          {unit > 0 && <i className="selection-city-dot" />}
+          <span className="selection-city-fill" style={{ "--fill": fill } as CSSProperties} />
+          <i className="selection-city-dot" style={{ "--occupancy": unit } as CSSProperties} />
         </span>
       ))}
     </span>
@@ -319,13 +380,14 @@ function CombatSide({ unit, incoming, enemy = false }: {
   incoming: number;
   enemy?: boolean;
 }) {
-  const health = `${unit.hp} → ${Math.max(0, unit.hp - incoming)}`;
   return (
     <dl className="hud-combat-side" data-enemy={enemy}>
       <dt><span>{enemy ? "目标" : "我方"}</span> {UNITS[unit.type].name}</dt>
       <dd>
-        <strong><span className="hud-combat-health-label">生命 </span>{health}</strong>
-        <span>{enemy ? "预计伤害" : "预计反击"} <b>{incoming}</b></span>
+        <strong><span className="hud-combat-health-label">生命 </span>
+          <AnimatedNumber value={unit.hp} /> → <AnimatedNumber value={Math.max(0, unit.hp - incoming)} />
+        </strong>
+        <span>{enemy ? "预计伤害" : "预计反击"} <b><AnimatedNumber value={incoming} /></b></span>
       </dd>
     </dl>
   );
@@ -399,7 +461,7 @@ export function SelectionControls({
     : unitVisible?.owner === 0 && unitVisible.upkeep === "reactivation"
       ? "本回合未激活将解散" : undefined;
   const refit = unitVisible?.owner === 0 ? unitVisible.navalTraining : undefined;
-  const refitStatus = refit ? `改装${UNITS[refit.unitType].name} · 剩余 ${refit.readyRound - game.round} 回合` : undefined;
+  const refitStatus = refit ? <>改装{UNITS[refit.unitType].name} · 剩余 <AnimatedNumber value={refit.readyRound - game.round} /> 回合</> : undefined;
   const actionStatus = swapping ? "再点友军确认换位" : upkeepStatus ?? refitStatus;
 
   return (
@@ -461,7 +523,7 @@ function selectionDetails(
       ? [...def.skills, "independent" as const] : def.skills;
     const promotion = unit.veteran ? ["兵阶", "老兵"] as const
       : def.skills.includes("static") ? undefined
-        : ["晋升", `${Math.min(unit.kills, VETERAN_KILLS_REQUIRED)}/${VETERAN_KILLS_REQUIRED} 击杀`] as const;
+        : ["晋升", <><AnimatedNumber value={Math.min(unit.kills, VETERAN_KILLS_REQUIRED)} />/{VETERAN_KILLS_REQUIRED} 击杀</>] as const;
     const upkeep = unit.owner === 0 ? getUnitUpkeep(game, unit) : 0;
     return (
       <Details rows={[
@@ -471,7 +533,7 @@ function selectionDetails(
         ["防御", def.defense],
         ["移动", getMovement(game, unit)],
         ["射程", def.range],
-        ...(upkeep ? [["维护费", unit.upkeep ? "0 星" : `${upkeep} 星 / 回合`] as const] : []),
+        ...(upkeep ? [["维护费", <AnimatedNumber value={unit.upkeep ? 0 : upkeep} suffix={unit.upkeep ? " 星" : " 星 / 回合"} />] as const] : []),
       ]} />
     );
   }
@@ -479,9 +541,9 @@ function selectionDetails(
     const owned = city.owner === 0;
     const training = owned ? city.training : undefined;
     const remaining = training ? training.readyRound - game.round : 0;
-    const trainingStatus = training && `${UNITS[training.unitType].name} · ${
-      canEditTraining(game, city) ? `计划 ${remaining} 回合` : remaining > 0 ? `剩余 ${remaining} 回合` : "等待交付"
-    }`;
+    const trainingStatus = training && <>{UNITS[training.unitType].name} · {remaining > 0
+      ? <>{canEditTraining(game, city) ? "计划" : "剩余"} <AnimatedNumber value={remaining} /> 回合</>
+      : "等待交付"}</>;
     return (
       <>
         <Details rows={[
@@ -489,11 +551,11 @@ function selectionDetails(
           ["等级", city.level],
           ...(showCityStats && owned ? [
             ["人口和单位", <CityMeter game={game} city={city} />] as const,
-            ["收入", `+${getCityIncome(game, city.id)} 星`] as const,
+            ["收入", <AnimatedNumber value={getCityIncome(game, city.id)} prefix="+" suffix=" 星" />] as const,
           ] : []),
         ]} />
         {owned && city.pendingRewardLevels.length > 0 && (
-          <span className="hud-selection-description">待选等级 {city.pendingRewardLevels[0]} 奖励</span>
+          <span className="hud-selection-description">待选等级 <AnimatedNumber value={city.pendingRewardLevels[0]} /> 奖励</span>
         )}
       </>
     );

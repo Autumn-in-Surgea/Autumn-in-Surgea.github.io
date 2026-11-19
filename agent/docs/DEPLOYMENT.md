@@ -28,7 +28,7 @@ npm run verify:pwa
 
 浏览器按协议、主机名、端口区分来源。开发地址 `http://127.0.0.1:5173/`、旧本地安装版和 `https://autumn-in-surgea.github.io/` 各有独立的存档。`localhost` 与 `127.0.0.1` 也是不同来源。不同地址、浏览器、浏览器资料或设备之间用导出的 JSON 搬运对局。[浏览器同源与存储规则](https://developer.mozilla.org/en-US/docs/Web/Security/Defenses/Same-origin_policy)
 
-在旧入口的“设置”中导出存档，再打开新入口并导入。如果新入口已有要保留的对局，先导出那份存档。此前从本地安装的用户可以从 Pages 地址安装新版，再导入旧对局。
+在旧入口的主菜单进入「对局历史」导出存档，再从新入口的同一菜单导入。如果新入口已有要保留的对局，先导出那份存档。此前从本地安装的用户可以从 Pages 地址安装新版，再导入旧对局。
 
 ## GitHub Pages 发布准备
 

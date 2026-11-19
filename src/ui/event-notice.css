@@ -15,10 +15,6 @@
   box-shadow: 0 16px 52px #14282b66;
 }
 
-.event-notice[open] {
-  animation: event-notice-in 180ms var(--motion-enter) 14ms both;
-}
-
 .event-notice::backdrop {
   background: #101f32a6;
 }
@@ -54,6 +50,7 @@
   min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
+  touch-action: pan-y;
   padding-block: 12px;
   font-size: clamp(15px, 3vw, 17px);
   white-space: pre-line;
@@ -73,10 +70,3 @@
   border: 1px solid;
   box-shadow: inset 0 0 0 2px #e4cea050;
 }
-
-@keyframes event-notice-in {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.reduce-motion .event-notice[open] { animation: none; }

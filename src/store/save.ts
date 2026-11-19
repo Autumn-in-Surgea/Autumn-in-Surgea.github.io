@@ -7,7 +7,7 @@ import {
   UNITS,
 } from "../game/data/config";
 import { getUnitUpkeep } from "../game/rules/engine";
-import type { EventNotice, GameState, NavalUpgradeType, UnitType } from "../game/types";
+import type { EventNotice, GameOptions, GameState, NavalUpgradeType, UnitType } from "../game/types";
 import { DEFAULT_TERRAIN_VARIANT, getNation } from "../nations/registry";
 
 export const MAX_SAVE_BYTES = 8_000_000;
@@ -91,30 +91,10 @@ export function serializeGame(game: GameState, pendingNotices: readonly EventNot
   });
 }
 
-/** Full structural/reference validation at the external JSON boundary; v1 is intentionally incompatible. */
-export function deserializeGame(raw: string): GameState {
-  check(
-    typeof raw === "string" &&
-      raw.length <= MAX_SAVE_BYTES &&
-      new TextEncoder().encode(raw).byteLength <= MAX_SAVE_BYTES,
-    "文件大小",
-  );
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    throw new Error("存档不是有效的 JSON 文件。");
-  }
-  const envelope = record(parsed, "文件");
-  if (envelope.format === "autumn-v1")
-    throw new Error("这是旧版规则存档，无法用于当前标准规则；请开始新对局。");
-  check(envelope.format === "autumn-v2", "格式");
-  const game = record(envelope.game, "对局"),
-    options = record(game.options, "开局设置");
-  check(game.version === 2, "版本");
+export function validateGameOptions(value: unknown): asserts value is GameOptions {
+  const options = record(value, "开局设置");
   check(count(options.size, 12) && options.size <= 64, "地图大小");
-  const size = options.size,
-    tileCount = size * size;
+  const size = options.size;
   check(count(options.aiCount, 1) && options.aiCount <= 10, "对手数量");
   check(
     text(options.civilization) && civilizationIds.has(options.civilization),
@@ -191,6 +171,31 @@ export function deserializeGame(raw: string): GameState {
       "自定义出生点重复",
     );
   }
+}
+
+/** Full structural/reference validation at the external JSON boundary; v1 is intentionally incompatible. */
+export function deserializeGame(raw: string): GameState {
+  check(
+    typeof raw === "string" &&
+      raw.length <= MAX_SAVE_BYTES &&
+      new TextEncoder().encode(raw).byteLength <= MAX_SAVE_BYTES,
+    "文件大小",
+  );
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error("存档不是有效的 JSON 文件。");
+  }
+  const envelope = record(parsed, "文件");
+  if (envelope.format === "autumn-v1")
+    throw new Error("这是旧版规则存档，无法用于当前标准规则；请开始新对局。");
+  check(envelope.format === "autumn-v2", "格式");
+  const game = record(envelope.game, "对局");
+  check(game.version === 2, "版本");
+  validateGameOptions(game.options);
+  const { options } = game;
+  const size = options.size, tileCount = size * size;
   check(
     count(game.round, 1) &&
       count(game.nextId, 1) &&

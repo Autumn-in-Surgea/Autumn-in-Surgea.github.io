@@ -7,8 +7,14 @@ export interface CityNameplateDetails {
   income: number;
 }
 
-export const cityDetailHeight = 84;
-const incomeFontSize = 37;
+export interface CityNameplateMotion {
+  previous: CityNameplateDetails;
+  target: CityNameplateDetails;
+  pulse: number;
+}
+
+export const cityDetailHeight = 67;
+export const boardNumberFontSize = 31;
 const padding = 10;
 
 export function measureCityDetails(ctx: CanvasRenderingContext2D, details: CityNameplateDetails, font: string) {
@@ -16,7 +22,7 @@ export function measureCityDetails(ctx: CanvasRenderingContext2D, details: CityN
   const incomeText = `+${income}`;
   const meter = cityMeter(population, units, capacity);
   const meterWidth = Math.min(204, Math.max(142, capacity * 17.5));
-  const detailFont = `600 ${incomeFontSize}px ${font}`;
+  const detailFont = `600 ${boardNumberFontSize}px ${font}`;
   ctx.font = detailFont;
   const width = Math.max(meterWidth, ctx.measureText(incomeText).width) + padding * 2;
   return { incomeText, meterWidth, detailFont, meter, width };
@@ -27,16 +33,22 @@ export function drawCityDetails(
   row: ReturnType<typeof measureCityDetails>,
   titleHeight: number,
   width: number,
+  motion?: CityNameplateMotion,
 ) {
-  const centerY = titleHeight + 19;
+  const centerY = titleHeight + 17;
+  const incomeBounce = motion && motion.previous.income !== motion.target.income ? motion.pulse : 0;
+  ctx.save();
   ctx.font = row.detailFont;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillStyle = "#ecd9a2";
-  ctx.fillText(row.incomeText, width / 2, titleHeight + 60);
+  ctx.translate(width / 2, titleHeight + 49 - incomeBounce * 4);
+  ctx.scale(1 + incomeBounce * 0.09, 1 + incomeBounce * 0.13);
+  ctx.fillText(row.incomeText, 0, 0);
+  ctx.restore();
 
   const barLeft = (width - row.meterWidth) / 2;
-  const height = 29;
+  const height = 24;
   const top = centerY - height / 2;
   const { cells, deficit } = row.meter;
   const stride = row.meterWidth / cells.length;
@@ -51,13 +63,30 @@ export function drawCityDetails(
     ctx.fillStyle = cityMeterColors.empty;
     ctx.fillRect(x, top, cellWidth, height);
     if (fill) {
+      const changing = motion && (motion.previous.population !== motion.target.population ||
+        motion.previous.capacity !== motion.target.capacity) &&
+        (motion.previous.capacity !== motion.target.capacity ||
+          index >= Math.min(motion.previous.population, motion.target.population) &&
+          index < Math.max(motion.previous.population, motion.target.population));
+      const lift = changing ? motion.pulse * 3 : 0;
       ctx.fillStyle = cityMeterColors.population;
-      ctx.fillRect(x, top, cellWidth * fill, height);
+      ctx.fillRect(x, top - lift, cellWidth * fill, height + lift);
+      if (motion && lift > 0) {
+        const gain = motion.target.capacity > motion.previous.capacity || motion.target.population > motion.previous.population;
+        ctx.save();
+        ctx.globalAlpha = motion.pulse * 0.75;
+        ctx.fillStyle = gain ? "#ffe7a3" : cityMeterColors.deficit;
+        ctx.fillRect(x, top - lift, cellWidth * fill, height + lift);
+        ctx.restore();
+      }
     }
     if (unit) {
-      const radius = Math.min(9, cellWidth * 0.31);
+      const changing = motion && index >= Math.min(motion.previous.units, motion.target.units) &&
+        index < Math.max(motion.previous.units, motion.target.units);
+      const bounce = changing ? motion.pulse : 0;
+      const radius = Math.min(9, cellWidth * 0.31) * Math.sqrt(unit) * (1 + bounce * 0.2);
       ctx.beginPath();
-      ctx.arc(x + cellWidth / 2, centerY, radius, 0, Math.PI * 2);
+      ctx.arc(x + cellWidth / 2, centerY - bounce * 3, radius, 0, Math.PI * 2);
       ctx.strokeStyle = cityMeterColors.track;
       ctx.lineWidth = Math.min(3.6, radius * 0.65);
       ctx.fillStyle = cityMeterColors.units;
@@ -66,7 +95,10 @@ export function drawCityDetails(
     }
   }
   if (deficit) {
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, -deficit);
     ctx.fillStyle = cityMeterColors.deficit;
     ctx.fillRect(barLeft, top + height + 3, row.meterWidth, 2);
+    ctx.restore();
   }
 }

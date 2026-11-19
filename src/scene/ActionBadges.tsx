@@ -60,7 +60,7 @@ export function getMapBadges(game: GameState): MapBadge[] {
     const tile = game.tiles[tileId];
     const garrisonShift = tile.cityId ? 0.24 : 0;
     const { modelSet } = factionForOwner(game.players, unit.owner);
-    // Leave the health label clear, including when the unit stands in front of a city.
+    // Keep action badges above the carving, including units garrisoning a tall city.
     return [
       unit.x - offset + garrisonShift,
       terrainHeight(tile) + Math.max(MODEL_SETS[modelSet].labelHeight(unit.type) + 0.34, highRises.has(tileId) ? 1.69 : 0),

@@ -3,6 +3,7 @@ import { useDeferredValue, useLayoutEffect, useMemo, useRef, useState } from "re
 import {
   ArrowRight,
   Play,
+  History,
   Settings2,
   Info,
   Shuffle,
@@ -21,6 +22,7 @@ import { generateMap } from "../game/map/generate";
 import { STORY_NATIONS, STORY_SIZE } from "../game/map/story";
 import type { GameOptions, MapSettings, Tile } from "../game/types";
 import { hasSavedGame, useGameStore } from "../store/gameStore";
+import { AnimatedNumber, useNumberMotion } from "./AnimatedNumber";
 import { Modal } from "./Common";
 import { PwaControls } from "../pwa/PwaControls";
 import "../styles/title-screen.css";
@@ -40,9 +42,11 @@ export const scenarioLabels = {
 const randomSeed = () => Math.random().toString(36).slice(2, 10);
 
 export function MainMenu({
+  onHistory,
   onSettings,
   onAbout,
 }: {
+  onHistory: () => void;
   onSettings: () => void;
   onAbout: () => void;
 }) {
@@ -70,6 +74,10 @@ export function MainMenu({
             >
               <Play aria-hidden="true" size={21} />
               <span>继续游戏</span>
+            </button>
+            <button onClick={onHistory}>
+              <History aria-hidden="true" size={21} />
+              <span>对局历史</span>
             </button>
             <button onClick={onSettings}>
               <Settings2 aria-hidden="true" size={21} />
@@ -103,6 +111,12 @@ function NewGame({ onClose }: { onClose: () => void }) {
   const [randomMapSize, setRandomMapSize] = useState(DEFAULT_OPTIONS.size);
   const [error, setError] = useState("");
   const [spawnIndex, setSpawnIndex] = useState(0);
+  const sizeControl = useNumberMotion<HTMLSelectElement>(options.size);
+  const countControl = useNumberMotion<HTMLSelectElement>(options.aiCount);
+  const chosenSpawn = options.mapSettings.customSpawns[spawnIndex];
+  const spawnControl = useNumberMotion<HTMLSelectElement>(
+    chosenSpawn ? chosenSpawn.y * options.size + chosenSpawn.x + 1 : -spawnIndex,
+  );
   const story = options.scenario === "story",
     free = options.scenario === "free";
   const quickMode = options.quickMode !== false;
@@ -241,8 +255,8 @@ function NewGame({ onClose }: { onClose: () => void }) {
                 <dd>{nation.opening.technologies.map(id => TECHNOLOGIES.find(tech => tech.id === id)?.name ?? id).join("、") || "无"}</dd>
               </div>
               <div><dt>单位</dt><dd>{UNITS[nation.opening.unit].name}</dd></div>
-              <div><dt>首都</dt><dd>{nation.capital} · {nation.opening.cityLevel} 级</dd></div>
-              <div><dt>星星</dt><dd>{nation.opening.stars}</dd></div>
+              <div><dt>首都</dt><dd>{nation.capital} · <AnimatedNumber value={nation.opening.cityLevel} /> 级</dd></div>
+              <div><dt>星星</dt><dd><AnimatedNumber value={nation.opening.stars} /></dd></div>
             </dl>
           </section>
         )}
@@ -250,6 +264,8 @@ function NewGame({ onClose }: { onClose: () => void }) {
           <label>
             <span>地图大小</span>
             <select
+              ref={sizeControl}
+              className="number-motion-control"
               aria-label="地图大小"
               disabled={story}
               value={options.size}
@@ -309,6 +325,8 @@ function NewGame({ onClose }: { onClose: () => void }) {
           <label>
             <span>AI 对手</span>
             <select
+              ref={countControl}
+              className="number-motion-control"
               aria-label="AI 对手"
               disabled={story}
               value={options.aiCount}
@@ -465,9 +483,10 @@ function NewGame({ onClose }: { onClose: () => void }) {
                       <span>
                         {label}
                         <b>
-                          {key === "noiseScale"
-                            ? options.mapSettings[key]
-                            : `${Math.round(options.mapSettings[key] * 1000) / 10}%`}
+                          <AnimatedNumber
+                            value={key === "noiseScale" ? options.mapSettings[key] : Math.round(options.mapSettings[key] * 1000) / 10}
+                            suffix={key === "noiseScale" ? undefined : "%"}
+                          />
                         </b>
                       </span>
                       <input
@@ -508,6 +527,8 @@ function NewGame({ onClose }: { onClose: () => void }) {
                       <label>
                         设置出生点
                         <select
+                          ref={spawnControl}
+                          className="number-motion-control"
                           aria-label="选择出生玩家"
                           value={spawnIndex}
                           onChange={(e) => setSpawnIndex(Number(e.target.value))}
@@ -533,9 +554,8 @@ function NewGame({ onClose }: { onClose: () => void }) {
                     onSelect={setSpawn}
                   />
                   <span className="setup-map-label">
-                    {displayedOptions.scenario === "story"
-                      ? `固定地图 · ${displayedOptions.size} × ${displayedOptions.size}`
-                      : `${mapLabels[displayedOptions.mapType]} · ${displayedOptions.size} × ${displayedOptions.size}`}
+                    {displayedOptions.scenario === "story" ? "固定地图" : mapLabels[displayedOptions.mapType]} ·{" "}
+                    <AnimatedNumber value={displayedOptions.size} /> × <AnimatedNumber value={displayedOptions.size} />
                   </span>
                 </div>
               )}

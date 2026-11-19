@@ -1,0 +1,23 @@
+.animated-number {
+  display: inline-block;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.reduce-motion .animated-number {
+  transform: none !important;
+  opacity: 1 !important;
+  text-shadow: none !important;
+}
+.reduce-motion :is(.animated-number, .number-motion-control) {
+  transition-property: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animated-number {
+    transform: none !important;
+    opacity: 1 !important;
+    text-shadow: none !important;
+  }
+  .animated-number, .number-motion-control { transition-property: none !important; }
+}

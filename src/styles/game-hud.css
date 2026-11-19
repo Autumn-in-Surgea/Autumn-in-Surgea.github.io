@@ -80,7 +80,7 @@
   flex: none;
 }
 .hud-round-value { display: flex; align-items: baseline; gap: 3px; }
-.hud-round span, .hud-yield { font-size: clamp(13px, 2.35cqi, 17px); }
+.hud-round > span, .hud-round-value > span, .hud-yield { font-size: clamp(13px, 2.35cqi, 17px); }
 .hud-yield {
   display: inline-flex;
   flex: none;
@@ -102,7 +102,7 @@ button.hud-stars:hover, button.hud-stars:focus-visible { background: light-dark(
 }
 .hud-command-inner {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 1.36fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: clamp(3px, 1vw, 8px);
   width: var(--hud-content-width);
   block-size: 100%;
@@ -311,7 +311,7 @@ button.hud-stars:hover, button.hud-stars:focus-visible { background: light-dark(
   .hud-stat > :is(svg, span) { grid-row: 1; }
   .hud-stat:not(:has(> span)) > svg,
   .hud-round > span { grid-column: 1 / -1; }
-  .hud-round span, .hud-yield { font-size: clamp(12px, 3.1cqi, 15px); }
+  .hud-round > span, .hud-round-value > span, .hud-yield { font-size: clamp(12px, 3.1cqi, 15px); }
 }
 
 @media (max-width: 420px) {

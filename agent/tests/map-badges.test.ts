@@ -2,8 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Matrix4, OrthographicCamera, Vector3 } from "three";
 import { getMapBadges, projectMapBadge } from "../../src/scene/ActionBadges";
 import { terrainHeight } from "../../src/scene/terrainElevation";
-import { MODEL_SETS } from "../../src/scene/factionModels";
-import { factionForOwner } from "../../src/nations/registry";
+import { unitHealthAnchor } from "../../src/scene/unitModels";
 import { applyAction } from "../../src/game";
 import { deserializeGame, serializeGame } from "../../src/store/save";
 import { addCity, addUnit, battlefield } from "./helpers";
@@ -99,7 +98,6 @@ describe("map action badges", () => {
       const unit = addUnit(game, 0, type, city.x, city.y);
       unit.capturedTurn = game.round - 1;
       const badge = getMapBadges(game)[0];
-      const { modelSet } = factionForOwner(game.players, unit.owner);
       const rendered = new Set([badge.tileId]);
       const size = { width: 980, height: 720 };
       const camera = new OrthographicCamera(-490, 490, 360, -360, 0.1, 240);
@@ -119,10 +117,11 @@ describe("map action badges", () => {
         expect(projectMapBadge(badge, rendered, matrix, size, screen)).toBe(
           true,
         );
+        const [healthX, healthY, healthZ] = unitHealthAnchor(type);
         const health = new Vector3(
-          x,
-          terrainHeight(game.tiles[badge.tileId]) + 0.08 + MODEL_SETS[modelSet].labelHeight(type),
-          z,
+          x + healthX,
+          terrainHeight(game.tiles[badge.tileId]) + 0.08 + healthY,
+          z + healthZ,
         ).project(camera);
         const healthLabelTop =
           ((1 - health.y) * size.height) / 2 - (0.34 * 0.7 * zoom) / 2;

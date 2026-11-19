@@ -16,7 +16,9 @@ import GameScene from "./scene/GameScene";
 import type { BadgeAction } from "./scene/ActionBadges";
 import { useGameStore } from "./store/gameStore";
 import { MainMenu, About } from "./ui/Menu";
+import { MatchHistoryPanel } from "./ui/MatchHistoryPanel";
 import { GameHUD } from "./ui/GameHUD";
+import { NumberMotionDisabled } from "./ui/AnimatedNumber";
 import { EventNotice } from "./ui/EventNotice";
 import {
   ResultsPanel,
@@ -26,8 +28,9 @@ import {
   DiplomacyPanel,
 } from "./ui/Panels";
 import { playSound } from "./ui/sound";
+import { playInterfaceClick } from "./ui/interfaceMotion";
 
-type Panel = "tech" | "diplomacy" | "settings" | "stars" | "about" | null;
+type Panel = "tech" | "diplomacy" | "settings" | "stars" | "about" | "history" | null;
 type TargetOrder = {
   action: Extract<Action, { type: "ATTACK" | "CONVERT" | "MOVE" }>;
   targetId: string;
@@ -241,7 +244,7 @@ export default function App() {
         !(e.target as HTMLElement)?.closest("button")
       ) {
         e.preventDefault();
-        perform({ type: "END_TURN" });
+        document.querySelector<HTMLButtonElement>(".hud-end-turn")?.click();
       }
     };
     window.addEventListener("keydown", key);
@@ -251,11 +254,12 @@ export default function App() {
     ? `${sessionId}-${game.options.seed}-${game.round}-${game.winner}`
     : "";
   const onResultReady = useCallback(() => setPresentedResult(resultKey), [resultKey]);
-  return (
+  const content = (
     <div
       className={`app ${screen === "menu" ? "is-menu" : "is-playing"} ${reducedMotion ? "reduce-motion" : ""}`}
       data-menu-theme={settings.menuTheme}
       onContextMenu={suppressTouchContextMenu}
+      onClickCapture={playInterfaceClick}
     >
       {screen === "game" && game && (
         <div className="game-scene">
@@ -283,6 +287,7 @@ export default function App() {
       )}
       {screen === "menu" ? (
         <MainMenu
+          onHistory={() => setPanel("history")}
           onSettings={() => setPanel("settings")}
           onAbout={() => setPanel("about")}
         />
@@ -305,6 +310,7 @@ export default function App() {
         )
       )}
       {panel === "settings" && <SettingsPanel onClose={() => setPanel(null)} />}{" "}
+      {screen === "menu" && panel === "history" && <MatchHistoryPanel onClose={() => setPanel(null)} />}{" "}
       {panel === "about" && <About onClose={() => setPanel(null)} />}{" "}
       {panel === "stars" && game && (
         <StarBudgetPanel game={game} busy={busy} onClose={() => setPanel(null)} onCommand={perform} />
@@ -340,7 +346,7 @@ export default function App() {
           onAcknowledge={acknowledgeEvent}
         />
       )}
-      {screen === "menu" && notice && (
+      {screen === "menu" && panel !== "history" && notice && (
         <div className="toast" role="status">
           <span>{notice}</span>
           <button onClick={() => setNotice("")} aria-label="关闭通知">
@@ -350,4 +356,5 @@ export default function App() {
       )}
     </div>
   );
+  return <NumberMotionDisabled value={reducedMotion}>{content}</NumberMotionDisabled>;
 }

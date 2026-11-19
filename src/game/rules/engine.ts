@@ -29,6 +29,8 @@ import type {
   MonumentId,
   NavalUpgradeType,
   Player,
+  PopulationGain,
+  PopulationSource,
   Position,
   Reward,
   Tile,
@@ -345,6 +347,15 @@ function addPopulation(s: GameState, c: City, amount: number): void {
     });
   }
 }
+type AwardPopulation = (city: City, amount: number, source: PopulationSource) => void;
+
+function populationAward(s: GameState, gains?: PopulationGain[]): AwardPopulation {
+  return (city, amount, source) => {
+    if (amount > 0 && city.owner !== null)
+      gains?.push({ cityId: city.id, cityTileId: tileAt(s, city).id, amount, source });
+    addPopulation(s, city, amount);
+  };
+}
 function reveal(
   s: GameState,
   set: Set<number>,
@@ -380,7 +391,7 @@ export function updateVisibility(s: GameState): void {
     p.stats.explored = p.explored.length;
   }
 }
-function discover(s: GameState, before: GameState): void {
+function discover(s: GameState, before: GameState, award = populationAward(s)): void {
   for (const p of s.players) {
     const capital = s.cities.find(
       (c) => c.owner === p.id && c.capitalOf === p.id,
@@ -389,7 +400,7 @@ function discover(s: GameState, before: GameState): void {
       const previous = new Set(before.players[p.id]?.explored ?? []);
       for (const id of p.explored)
         if (s.tiles[id].lighthouse && !previous.has(id))
-          addPopulation(s, capital, 1);
+          award(capital, 1, { kind: "lighthouse", tileId: id });
     }
     for (const other of s.players) {
       if (
@@ -1323,7 +1334,7 @@ export function validateAction(s: GameState, a: Action): string | null {
 }
 export const canApplyAction = (s: GameState, a: Action): boolean =>
   validateAction(s, a) === null;
-function updateConnections(s: GameState): void {
+function updateConnections(s: GameState, award: AwardPopulation, source?: PopulationSource): void {
   for (const p of s.players) {
     const capital = s.cities.find(
       (c) => c.owner === p.id && c.capitalOf === p.id,
@@ -1367,8 +1378,9 @@ function updateConnections(s: GameState): void {
     )) {
       const connected = network.has(tileAt(s, c).id);
       if (connected !== c.connected) {
-        addPopulation(s, c, connected ? 1 : -1);
-        addPopulation(s, capital, connected ? 1 : -1);
+        const amount = connected ? 1 : -1;
+        award(c, amount, source ?? { kind: "road", tileId: tileAt(s, capital).id });
+        award(capital, amount, source ?? { kind: "road", tileId: tileAt(s, c).id });
       }
       c.connected = connected;
       c.connectionRewarded = connected;
@@ -1674,12 +1686,18 @@ function spawnGiant(s: GameState, c: City): void {
 function updateAdjacentPopulation(
   s: GameState,
   before: Map<number, number>,
+  award: AwardPopulation,
+  builtAt?: number,
 ): void {
   for (const [id, old] of before) {
     const t = s.tiles[id],
       delta = buildingPopulation(s, t) - old,
       c = cityOfTile(s, id);
-    if (delta && c?.owner !== null && c) addPopulation(s, c, delta);
+    if (!delta || !c || c.owner === null) continue;
+    if (t.building) award(c, delta, {
+      kind: "building", building: t.building, tileId: id, ...(id === builtAt ? { built: true } : {}),
+    });
+    else addPopulation(s, c, delta);
   }
 }
 export function applyAction(source: GameState, a: Action): ActionResult {
@@ -1710,6 +1728,8 @@ export function applyAction(source: GameState, a: Action): ActionResult {
   const s = structuredClone(source),
     p = s.players[s.currentPlayer],
     u = "unitId" in a ? s.units.find((u) => u.id === a.unitId)! : null;
+  const populationGains: PopulationGain[] = [];
+  const award = populationAward(s, populationGains);
   switch (a.type) {
     case "MOVE": {
       const mover = u!, to = s.tiles[a.to], from = tileAt(s, mover);
@@ -1881,7 +1901,7 @@ export function applyAction(source: GameState, a: Action): ActionResult {
         if (t.homeCityId === c.id && t.owner === old) t.homeCityId = "";
       for (const id of c.territory) s.tiles[id].owner = p.id;
       claimTerritory(s, c, c.borderExpanded ? 2 : 1);
-      updateAdjacentPopulation(s, productionBefore);
+      updateAdjacentPopulation(s, productionBefore, award);
       exhaust(u!);
       u!.hidden = false;
       u!.capturedTurn = null;
@@ -1969,7 +1989,7 @@ export function applyAction(source: GameState, a: Action): ActionResult {
           message = "遗迹中发现 10 星。";
           break;
         case "population":
-          addPopulation(s, capital!, 3);
+          award(capital!, 3, { kind: "ruin", tileId: t.id });
           message = `${capital!.name}获得 3 人口。`;
           break;
         case "tech": {
@@ -2048,7 +2068,7 @@ export function applyAction(source: GameState, a: Action): ActionResult {
         exhaust(unitAt(s, t)!);
       } else {
         p.resources -= 2;
-        addPopulation(s, cityOfTile(s, t.id)!, 1);
+        award(cityOfTile(s, t.id)!, 1, { kind: "resource", resource: t.resource!, tileId: t.id });
       }
       t.resource = null;
       break;
@@ -2069,7 +2089,7 @@ export function applyAction(source: GameState, a: Action): ActionResult {
         t.building = null;
         delete t.builtTurn;
       }
-      updateAdjacentPopulation(s, before);
+      updateAdjacentPopulation(s, before, award, a.type === "BUILD" ? t.id : undefined);
       break;
     }
     case "CLEAR_FOREST": {
@@ -2101,7 +2121,7 @@ export function applyAction(source: GameState, a: Action): ActionResult {
       if (a.reward === "income") c.incomeBonus++;
       if (a.reward === "resources") p.resources += 5;
       if (a.reward === "defense") c.defenseBonus = 1;
-      if (a.reward === "population") addPopulation(s, c, 3);
+      if (a.reward === "population") award(c, 3, { kind: "reward", tileId: tileAt(s, c).id });
       if (a.reward === "territory") {
         c.borderExpanded = true;
         claimTerritory(s, c, 2);
@@ -2184,11 +2204,16 @@ export function applyAction(source: GameState, a: Action): ActionResult {
       if (s.status === "playing") nextTurn(s);
       break;
   }
-  updateConnections(s);
+  const connectionSource: PopulationSource | undefined =
+    a.type === "ROAD" ? { kind: "road", tileId: a.tileId } :
+    a.type === "BUILD" && (a.building === "bridge" || a.building === "port")
+      ? { kind: "building", building: a.building, tileId: a.tileId, built: true }
+      : undefined;
+  updateConnections(s, award, connectionSource);
   updateVisibility(s);
-  discover(s, source);
+  discover(s, source, award);
   checkVictory(s);
-  return { state: s, ok: true };
+  return populationGains.length ? { state: s, ok: true, populationGains } : { state: s, ok: true };
 }
 
 function* unitSpecialActions(

@@ -4,7 +4,7 @@ import * as THREE from "three";
 import type { GameState, Position } from "../game/types";
 import { Piece, terrainHeight } from "./models";
 import { clampProgress, easeInOut, easeOut } from "./motion";
-import { incomingOffset } from "./combatMotion";
+import { incomingOffset, sampleAttackPose } from "./combatMotion";
 import { usePlaybackClock } from "./playbackClock";
 import type { Projectile, Strike } from "./combatMotion";
 
@@ -113,7 +113,18 @@ export function ShotEffect({
     return point;
   }, [game.tiles, strike, offset]);
   const start = useMemo(() => {
-    if (strike.from) return tilePoint(game, strike.from, offset);
+    if (strike.from) {
+      const origin = tilePoint(game, strike.from, offset);
+      if (strike.projectile) {
+        const pose = sampleAttackPose(strike, strike.launch);
+        const dx = strike.at.x - strike.from.x, dz = strike.at.y - strike.from.y;
+        const distance = Math.hypot(dx, dz) || 1;
+        origin.x += dx * pose.travel / distance;
+        origin.z += dz * pose.travel / distance;
+        origin.y += pose.lift;
+      }
+      return origin;
+    }
     const [x, z] = incomingOffset(strike.id);
     // Even a garrison offset from tile center keeps the entire incoming leg on its square.
     return new THREE.Vector3(

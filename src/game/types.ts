@@ -28,6 +28,7 @@ export type UnitType =
   | "juggernaut"
   | "dinghy"
   | "pirate";
+export type NavalUpgradeType = "scout" | "rammer" | "bomber";
 export type MonumentId =
   | "altarOfPeace"
   | "emperorTomb"
@@ -129,6 +130,7 @@ export interface Player {
   color: string;
   isAI: boolean;
   resources: number;
+  allowOverspend?: boolean;
   technologies: string[];
   explored: number[];
   visible: number[];
@@ -191,6 +193,12 @@ export interface Unit extends Position {
   upkeep?: "suspended" | "reactivation";
   /** A converted unit's partial turn does not count toward its suspension. */
   upkeepTransferRound?: number;
+  navalTraining?: {
+    unitType: NavalUpgradeType;
+    readyRound: number;
+    orderedRound: number;
+    paidStars: number;
+  };
   hidden: boolean;
   hiddenAtTurnStart: boolean;
   carried?: { type: UnitType; maxHp: number; veteran: boolean; kills: number };
@@ -263,8 +271,9 @@ export type Action =
   | {
       type: "UPGRADE_NAVAL";
       unitId: string;
-      unitType: "scout" | "rammer" | "bomber";
+      unitType: NavalUpgradeType;
     }
+  | { type: "CANCEL_NAVAL_UPGRADE"; unitId: string }
   | { type: "TRAIN"; cityId: string; unitType: UnitType }
   | { type: "CANCEL_TRAINING"; cityId: string }
   | { type: "RESEARCH"; techId: string }
@@ -281,6 +290,7 @@ export type Action =
     }
   | { type: "CITY_REWARD"; cityId: string; reward: Reward }
   | { type: "PEACE" | "BREAK_PEACE" | "EMBASSY"; targetPlayer: number }
+  | { type: "SET_OVERSPEND"; enabled: boolean }
   | { type: "END_TURN" | "RESIGN" };
 export interface ActionResult {
   state: GameState;

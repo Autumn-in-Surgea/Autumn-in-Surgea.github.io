@@ -1,6 +1,9 @@
 import { UNITS } from "../data/config";
 import { distance } from "../map/generate";
-import { applyAction, canApplyAction, getPendingUpgradeCity, getUnitUpkeep, getVisibleResource } from "../rules/engine";
+import {
+  applyAction, canApplyAction, getPendingUpgradeCity, getSpendableStars, getUnitTrainingRounds,
+  getUnitUpkeep, getVisibleResource,
+} from "../rules/engine";
 import type { Action, GameState, Unit } from "../types";
 import { chooseCityReward, chooseEconomic, chooseReactivation, getMaintenanceBudget } from "./economy";
 import { buildThreatMap, incomingDamage, observe } from "./knowledge";
@@ -105,7 +108,7 @@ export function runAiTurnDetailed(input: GameState, maxActions?: number,
       (attack ? attack.score + UNITS[u.type].range * 8 : 0) +
       (u.type === "mindBender" ? 15 : 0);
   };
-  const readyUnits = k.own.filter((unit) => !unit.upkeep);
+  const readyUnits = k.own.filter((unit) => !unit.upkeep && !unit.navalTraining);
   const priorities = new Map(readyUnits.map((u) => [u.id, priority(u)]));
   const unitIds = readyUnits.sort((a, b) => profile.coordinated
     ? priorities.get(b.id)! - priorities.get(a.id)! || a.id.localeCompare(b.id)
@@ -149,11 +152,15 @@ export function runAiTurnDetailed(input: GameState, maxActions?: number,
       const { available, recurringRoom } = getMaintenanceBudget(s, k);
       const previousUpkeep = getUnitUpkeep(s, u);
       for (const unitType of upgrades) {
+        const rounds = getUnitTrainingRounds(s, unitType);
+        if (s.options.mode === "score" && s.round + rounds > s.options.maxRounds) continue;
         const extraUpkeep = getUnitUpkeep(s, { type: unitType }) - previousUpkeep;
-        if (UNITS[unitType].cost + extraUpkeep > available || extraUpkeep > recurringRoom) continue;
+        const currentExtraUpkeep = rounds === 0 ? extraUpkeep : 0;
+        if (UNITS[unitType].cost + currentExtraUpkeep > available || extraUpkeep > recurringRoom) continue;
         const action = { type: "UPGRADE_NAVAL", unitId, unitType } as const;
         if (canApplyAction(k.view, action) && perform(action)) break;
       }
+      if (k.units.get(unitId)?.navalTraining) continue;
     }
     if (special(unitId)) continue;
     u = k.units.get(unitId);
@@ -194,7 +201,7 @@ export function runAiTurnDetailed(input: GameState, maxActions?: number,
   // The economy allowance scales with the empire and treasury. It shares
   // the global budget, so even huge saved games have a finite upper bound.
   threats = buildThreatMap(s, k, profile.coordinated);
-  const economicLimit = Math.min(512, Math.max(16, k.ownCities.length * 5 + Math.floor(s.players[player].resources / 8)));
+  const economicLimit = Math.min(512, Math.max(16, k.ownCities.length * 5 + Math.floor(getSpendableStars(s, player) / 8)));
   for (let i = 0; i < economicLimit && active(); i++) {
     const action = chooseEconomic(s, k, threats, profile);
     if (!action || !perform(action, "economy")) break;

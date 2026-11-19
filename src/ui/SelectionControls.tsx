@@ -5,8 +5,9 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
-  BUILDINGS, UNITS, canEditTraining, getCityIncome, getCityUnitCount, getMovement, getTrainingOrderCost,
-  getTrainingRefund, getTrainingRounds, getUnitUpkeep,
+  BUILDINGS, NAVAL_UPGRADES, UNITS, canEditNavalUpgrade, canEditTraining, getCityIncome, getCityUnitCount, getMovement,
+  getNavalUpgradeOrderCost, getNavalUpgradeRefund, getTrainingOrderCost, getTrainingRefund,
+  getTrainingRounds, getUnitTrainingRounds, getUnitUpkeep,
   getUpgradeRewards, getVisibleResource, hasTech, isTerritoryResourceHarvestable, isUnitVisible,
   populationNeeded, previewCombat, validateAction,
 } from "../game";
@@ -14,6 +15,7 @@ import type { Action, City, GameState, Resource, Reward, Terrain, Tile, Unit, Un
 import { getNation } from "../nations/registry";
 import { Cost } from "./Common";
 import { NationEmblem } from "./NationEmblem";
+import { UnitTraits } from "./UnitTraits";
 import { cityMeter, cityMeterColors } from "./cityMeter";
 import "./selection-details.css";
 
@@ -68,7 +70,6 @@ const resourceNames: Record<Resource, string> = {
   fish: "鱼",
   starfish: "海星",
 };
-const navalUpgrades = ["scout", "rammer", "bomber"] as const;
 const unitIcons: Record<UnitType, LucideIcon> = {
   warrior: Swords,
   rider: Zap,
@@ -177,6 +178,7 @@ function unitCommands(game: GameState, unit: Unit, tile: Tile, city?: City | nul
       cost: getUnitUpkeep(game, unit), note: "立即恢复行动，回合结束时照常扣除维护费。", variant: "accent",
     }];
   }
+  if (unit.navalTraining) return navalCommands(game, unit);
   const commands: Command[] = [];
   const skills = UNITS[unit.type].skills;
   if (city && city.owner !== 0 && !skills.includes("water") && (city.owner === null || !skills.includes("infiltrate"))) {
@@ -201,18 +203,33 @@ function unitCommands(game: GameState, unit: Unit, tile: Tile, city?: City | nul
   if (hasTech(game.players[0], "freeSpirit")) {
     commands.push({ action: { type: "DISBAND", unitId }, label: "解散", icon: Trash2 });
   }
-  if (unit.type === "raft") {
-    for (const unitType of navalUpgrades) {
-      const def = UNITS[unitType];
-      if (def.tech && !hasTech(game.players[0], def.tech)) continue;
-      commands.push({
-        action: { type: "UPGRADE_NAVAL", unitId, unitType },
-        label: def.name,
-        icon: unitIcons[unitType],
-        cost: def.cost,
-        note: `改装为${def.name}`,
-      });
-    }
+  if (unit.type === "raft") commands.push(...navalCommands(game, unit));
+  return commands;
+}
+
+function orderTiming(rounds: number, cost: number) {
+  return cost < 0 ? `${rounds} 回合 · 返还 ${-cost} 星` : `${rounds} 回合`;
+}
+
+function navalCommands(game: GameState, unit: Unit): Command[] {
+  const pending = unit.navalTraining;
+  if (pending && !canEditNavalUpgrade(game, unit)) return [];
+  const unitId = unit.id;
+  const commands: Command[] = pending ? [{
+    action: { type: "CANCEL_NAVAL_UPGRADE", unitId }, label: "取消改装", icon: RotateCcw,
+    secondaryText: `返还 ${getNavalUpgradeRefund(unit)} 星`,
+  }] : [];
+  for (const unitType of NAVAL_UPGRADES) {
+    const def = UNITS[unitType];
+    if (pending?.unitType === unitType || (def.tech && !hasTech(game.players[0], def.tech))) continue;
+    const cost = getNavalUpgradeOrderCost(game, unit, unitType);
+    commands.push({
+      action: { type: "UPGRADE_NAVAL", unitId, unitType },
+      label: def.name,
+      icon: unitIcons[unitType],
+      cost: cost > 0 ? cost : undefined,
+      secondaryText: game.options.quickMode === false ? orderTiming(getUnitTrainingRounds(game, unitType), cost) : undefined,
+    });
   }
   return commands;
 }
@@ -246,9 +263,7 @@ function cityCommands(game: GameState, city: City) {
       icon: unitIcons[def.id],
       cost: cost > 0 ? cost : undefined,
       note: def.description,
-      secondaryText: training
-        ? cost < 0 ? `返还 ${-cost} 星` : cost === 0 ? "无需补差价" : undefined
-        : rounds ? `${rounds} 回合` : undefined,
+      secondaryText: game.options.quickMode === false ? orderTiming(rounds, cost) : undefined,
     });
   }
   return commands;
@@ -381,7 +396,9 @@ export function SelectionControls({
     ? "欠费停用 · 下回合可激活"
     : unitVisible?.owner === 0 && unitVisible.upkeep === "reactivation"
       ? "本回合未激活将解散" : undefined;
-  const actionStatus = swapping ? "再点友军确认换位" : upkeepStatus;
+  const refit = unitVisible?.owner === 0 ? unitVisible.navalTraining : undefined;
+  const refitStatus = refit ? `改装${UNITS[refit.unitType].name} · 剩余 ${refit.readyRound - game.round} 回合` : undefined;
+  const actionStatus = swapping ? "再点友军确认换位" : upkeepStatus ?? refitStatus;
 
   return (
     <>
@@ -438,20 +455,19 @@ function selectionDetails(
   if (!explored) return <span className="hud-selection-description">派单位探索后可查看地形。</span>;
   if (unit) {
     const def = UNITS[unit.type];
+    const traits = unit.independent && !def.skills.includes("independent")
+      ? [...def.skills, "independent" as const] : def.skills;
     const upkeep = unit.owner === 0 ? getUnitUpkeep(game, unit) : 0;
     return (
-      <>
-        <Details rows={[
-          ["生命", `${unit.hp} / ${unit.maxHp}`],
-          ...(upkeep ? [["维护费", unit.upkeep ? "0 星" : `${upkeep} 星 / 回合`] as const] : []),
-          ["攻击", def.attack],
-          ["防御", def.defense],
-          ["移动", getMovement(game, unit)],
-          ["射程", def.range],
-          ...(unit.veteran ? [["兵阶", "老兵"] as const] : []),
-        ]} />
-        <span className="hud-selection-description">{def.description}</span>
-      </>
+      <Details rows={[
+        ["特性", <UnitTraits skills={traits} />],
+        ["攻击", def.attack],
+        ["防御", def.defense],
+        ["移动", getMovement(game, unit)],
+        ["射程", def.range],
+        ...(upkeep ? [["维护费", unit.upkeep ? "0 星" : `${upkeep} 星 / 回合`] as const] : []),
+        ...(unit.veteran ? [["兵阶", "老兵"] as const] : []),
+      ]} />
     );
   }
   if (city) {

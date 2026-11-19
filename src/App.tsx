@@ -19,12 +19,13 @@ import { EventNotice } from "./ui/EventNotice";
 import {
   ResultsPanel,
   SettingsPanel,
+  StarBudgetPanel,
   TechPanel,
   DiplomacyPanel,
 } from "./ui/Panels";
 import { playSound } from "./ui/sound";
 
-type Panel = "tech" | "diplomacy" | "settings" | "about" | null;
+type Panel = "tech" | "diplomacy" | "settings" | "stars" | "about" | null;
 type TargetOrder = {
   action: Extract<Action, { type: "ATTACK" | "CONVERT" | "MOVE" }>;
   targetId: string;
@@ -280,6 +281,7 @@ export default function App() {
               onTech={() => setPanel("tech")}
               onDiplomacy={() => setPanel("diplomacy")}
               onSettings={() => setPanel("settings")}
+              onStars={() => setPanel("stars")}
               target={target}
             />
           </>
@@ -287,6 +289,9 @@ export default function App() {
       )}
       {panel === "settings" && <SettingsPanel onClose={() => setPanel(null)} />}{" "}
       {panel === "about" && <About onClose={() => setPanel(null)} />}{" "}
+      {panel === "stars" && game && (
+        <StarBudgetPanel game={game} busy={busy} onClose={() => setPanel(null)} onCommand={perform} />
+      )}{" "}
       {panel === "tech" && game && (
         <TechPanel
           game={game}

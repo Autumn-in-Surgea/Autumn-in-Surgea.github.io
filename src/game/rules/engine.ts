@@ -2,11 +2,11 @@ import {
   BUILDINGS,
   DEFAULT_OPTIONS,
   DEFAULT_MAP_SETTINGS,
+  NAVAL_UPGRADES,
   NEUTRAL_NAMES,
   OPENING_PROFILES,
   opponentLimit,
   PLAYER_COLORS,
-  SLOW_TRAINING_ROUNDS,
   TECHNOLOGIES,
   UNITS,
 } from "../data/config";
@@ -26,6 +26,7 @@ import type {
   GameOptions,
   GameState,
   MonumentId,
+  NavalUpgradeType,
   Player,
   Position,
   Reward,
@@ -58,11 +59,25 @@ export const getTrainingCost = (
   _id: number,
   type: UnitType,
 ): number => UNITS[type].cost;
+
+const techTiers = new Map(TECHNOLOGIES.map(({ id, tier }) => [id, tier]));
+type SpeedRules = { options: Pick<GameOptions, "quickMode"> };
+
+function unitProductionTier(type: UnitType): number {
+  const unit = UNITS[type];
+  return unit.tech && (unit.trainable || NAVAL_UPGRADES.some((navy) => navy === type))
+    ? techTiers.get(unit.tech) ?? 0 : 0;
+}
+
+export function getUnitTrainingRounds(s: SpeedRules, type: UnitType): number {
+  return s.options.quickMode === false ? unitProductionTier(type) : 0;
+}
+
 export const getTrainingRounds = (
   s: GameState,
   _city: City,
-  _type: UnitType,
-): number => s.options.quickMode === false ? SLOW_TRAINING_ROUNDS : 0;
+  type: UnitType,
+): number => getUnitTrainingRounds(s, type);
 
 export function canEditTraining(s: GameState, city: City): boolean {
   const order = city.training;
@@ -82,22 +97,46 @@ export function getTrainingOrderCost(s: GameState, city: City, type: UnitType): 
   return getTrainingCost(s, city.owner ?? s.currentPlayer, type) - refund;
 }
 
-const techTiers = new Map(TECHNOLOGIES.map(({ id, tier }) => [id, tier]));
+export function canEditNavalUpgrade(s: GameState, unit: Unit): boolean {
+  return s.options.quickMode === false && s.status === "playing" && unit.owner === s.currentPlayer &&
+    unit.navalTraining?.orderedRound === s.round;
+}
+
+export function getNavalUpgradeRefund(unit: Unit): number {
+  return unit.navalTraining?.paidStars ?? 0;
+}
+
+export function getNavalUpgradeOrderCost(s: GameState, unit: Unit, type: NavalUpgradeType): number {
+  return UNITS[type].cost - (canEditNavalUpgrade(s, unit) ? getNavalUpgradeRefund(unit) : 0);
+}
 
 export function getUnitUpkeep(
-  s: { options: Pick<GameOptions, "quickMode"> },
+  s: SpeedRules,
   unit: Pick<Unit, "type">,
 ): number {
   if (s.options.quickMode !== false) return 0;
-  if (unit.type === "giant" || unit.type === "juggernaut") return 3;
-  const tech = unit.type === "dagger" || unit.type === "pirate" ? "diplomacy" : UNITS[unit.type].tech;
-  return tech ? techTiers.get(tech) ?? 0 : 0;
+  return unit.type === "warrior" ? 1 : unitProductionTier(unit.type);
 }
 
 export function getActiveUpkeep(s: GameState, playerId: number): number {
   if (s.options.quickMode !== false) return 0;
   return s.units.reduce((total, unit) =>
     unit.owner === playerId && !unit.upkeep ? total + getUnitUpkeep(s, unit) : total, 0);
+}
+
+export function getSpendableStars(s: GameState, playerId: number): number {
+  const player = s.players[playerId];
+  if (!player) return 0;
+  return player.allowOverspend ? player.resources : Math.max(0, player.resources - getActiveUpkeep(s, playerId));
+}
+
+function cashRestriction(s: GameState, player: Player, cost: number, addedUpkeep = 0): string | null {
+  if (cost <= 0 && addedUpkeep <= 0) return null;
+  if (player.resources < cost) return "星星不足。";
+  if (s.options.quickMode === false && !player.allowOverspend &&
+    player.resources - cost < getActiveUpkeep(s, player.id) + addedUpkeep)
+    return "可支配星星不足，需预留维护费。";
+  return null;
 }
 
 export const getEmbassyCost = (_s: GameState, _id: number): number => 5;
@@ -393,7 +432,7 @@ function freshUnit(
     homeCityId,
     capturedTurn:
       tileAt(s, at).cityId && cityAt(s, at)?.owner !== owner ? s.round : null,
-    escapeUsed: false,
+    escapeUsed: !ready,
     hidden: false,
     hiddenAtTurnStart: false,
     ...(type === "pirate"
@@ -659,7 +698,7 @@ function movementIndex(s: GameState, player: Player) {
 }
 
 export function hasMovementAllowance(unit: Unit): boolean {
-  return !unit.upkeep && (
+  return !unit.upkeep && !unit.navalTraining && (
     (!unit.moved && !unit.attacked) ||
     (unit.attacked && skill(unit, "escape") && !unit.escapeUsed)
   );
@@ -792,6 +831,7 @@ export function getAttackTargets(s: GameState, id: string): Unit[] {
     !u ||
     u.owner !== s.currentPlayer ||
     u.upkeep ||
+    u.navalTraining ||
     u.attacked ||
     (u.moved && !skill(u, "dash")) ||
     UNITS[u.type].attack === 0 ||
@@ -961,12 +1001,16 @@ function canPlaceBuilding(
   return true;
 }
 
-export function canBuild(s: GameState, tileId: number, id: BuildingId): boolean {
+function buildRestriction(s: GameState, tileId: number, id: BuildingId): string | null {
   const p = s.players[s.currentPlayer];
   const cost = BUILDINGS[id]?.cost;
-  return cost !== undefined && p.resources >= cost &&
-    canPlaceBuilding(s, s.tiles[tileId], id, p);
+  if (cost === undefined || !canPlaceBuilding(s, s.tiles[tileId], id, p))
+    return "不符合建筑地形、相邻建筑、科技或任务要求。";
+  return cashRestriction(s, p, cost);
 }
+
+export const canBuild = (s: GameState, tileId: number, id: BuildingId): boolean =>
+  buildRestriction(s, tileId, id) === null;
 
 const harvestRequirements = "采集需要对应科技、2 星与己方领土。";
 
@@ -978,6 +1022,7 @@ function harvestRestriction(s: GameState, tile: Tile | undefined, player: Player
     return hasTech(player, "navigation") &&
       unit?.owner === player.id &&
       !unit.upkeep &&
+      !unit.navalTraining &&
       skill(unit, "water") &&
       !unit.moved &&
       !unit.attacked
@@ -1022,9 +1067,12 @@ export function validateAction(s: GameState, a: Action): string | null {
     if (a.type === "REACTIVATE") {
       const fee = getUnitUpkeep(s, u);
       if (u.upkeep !== "reactivation" || fee === 0) return "该单位当前无法重新激活。";
-      return p.resources >= fee ? null : "星星不足。";
+      return cashRestriction(s, p, fee, fee);
     }
     if (u.upkeep) return "单位因欠费已停用。";
+    if (a.type === "CANCEL_NAVAL_UPGRADE")
+      return canEditNavalUpgrade(s, u) ? null : "只有本回合的改装计划可以取消。";
+    if (u.navalTraining && a.type !== "UPGRADE_NAVAL") return "舰船正在改装。";
     if (a.type === "MOVE")
       return Number.isInteger(a.to) &&
         s.tiles[a.to] &&
@@ -1091,16 +1139,15 @@ export function validateAction(s: GameState, a: Action): string | null {
         : "无法渗透：需相邻敌城、可用行动，城市不能已被渗透或围攻。";
     }
     if (a.type === "UPGRADE_NAVAL") {
-      const def = UNITS[a.unitType],
-        t = tileAt(s, u);
-      return u.type === "raft" &&
-        def &&
-        ["scout", "rammer", "bomber"].includes(a.unitType) &&
-        hasTech(p, def.tech!) &&
-        p.resources >= def.cost &&
-        (t.owner === p.id || (t.owner !== null && isAtPeace(s, p.id, t.owner)))
-        ? null
-        : "木筏需位于己方或盟友领土，并拥有对应科技与星星。";
+      const def = UNITS[a.unitType], t = tileAt(s, u);
+      if (u.type !== "raft" || !NAVAL_UPGRADES.includes(a.unitType) || !def.tech || !hasTech(p, def.tech) ||
+        (t.owner !== p.id && (t.owner === null || !isAtPeace(s, p.id, t.owner)))) {
+        return "木筏需位于己方或盟友领土，并拥有对应科技。";
+      }
+      if (u.navalTraining && (!canEditNavalUpgrade(s, u) || u.navalTraining.unitType === a.unitType)) {
+        return "该改装计划不能更改。";
+      }
+      return cashRestriction(s, p, getNavalUpgradeOrderCost(s, u, a.unitType));
     }
     if (a.type === "CAPTURE") {
       const c = cityAt(s, u);
@@ -1130,9 +1177,12 @@ export function validateAction(s: GameState, a: Action): string | null {
         if (c.training.unitType === a.unitType) return "训练计划已包含该兵种。";
       }
       if (d.tech && !hasTech(p, d.tech)) return "需要对应科技。";
-      if (p.resources < getTrainingOrderCost(s, c, a.unitType)) return "星星不足。";
+      const rounds = getTrainingRounds(s, c, a.unitType);
+      const restriction = cashRestriction(s, p, getTrainingOrderCost(s, c, a.unitType),
+        rounds === 0 ? getUnitUpkeep(s, { type: a.unitType }) : 0);
+      if (restriction) return restriction;
       const occupant = unitAt(s, c);
-      if (occupant && (getTrainingRounds(s, c, a.unitType) === 0 || occupant.owner !== p.id))
+      if (occupant && (rounds === 0 || occupant.owner !== p.id))
         return "请先腾出城市中心。";
       return getCityUnitCount(s, c) < getCityCapacity(c)
         ? null
@@ -1151,35 +1201,30 @@ export function validateAction(s: GameState, a: Action): string | null {
         TECHNOLOGIES.some(
           (child) => child.prerequisites.includes(t.id) && hasTech(p, child.id),
         );
-      return connected && p.resources >= getTechCost(s, p.id, t.id)
-        ? null
-        : "缺少相邻前置科技或星星不足。";
+      return connected ? cashRestriction(s, p, getTechCost(s, p.id, t.id)) : "缺少相邻前置科技。";
     }
     case "BUILD":
-      return canBuild(s, a.tileId, a.building)
-        ? null
-        : "不符合建筑地形、相邻建筑、科技、任务或费用要求。";
+      return buildRestriction(s, a.tileId, a.building);
     case "ROAD": {
       const t = s.tiles[a.tileId],
         occupant = t && unitAt(s, t);
       return t &&
         p.visible.includes(t.id) &&
         hasTech(p, "roads") &&
-        p.resources >= 3 &&
         !t.road &&
         !t.cityId &&
         !isWater(t) &&
         t.terrain !== "mountain" &&
         (t.owner === null || t.owner === p.id) &&
         (!occupant || occupant.owner === p.id)
-        ? null
-        : "道路需要 3 星、道路科技及平原或森林。";
+        ? cashRestriction(s, p, 3)
+        : "道路需要道路科技及平原或森林。";
     }
     case "HARVEST": {
       const tile = s.tiles[a.tileId];
       const restriction = harvestRestriction(s, tile, p);
-      if (restriction || tile.resource === "starfish" || p.resources >= 2) return restriction;
-      return harvestRequirements;
+      if (restriction || tile.resource === "starfish") return restriction;
+      return cashRestriction(s, p, 2);
     }
     case "CLEAR_FOREST":
     case "BURN_FOREST":
@@ -1207,16 +1252,14 @@ export function validateAction(s: GameState, a: Action): string | null {
           : "需要林业及森林。";
       if (a.type === "BURN_FOREST")
         return t.terrain === "forest" &&
-          hasTech(p, "construction") &&
-          p.resources >= 3
-          ? null
-          : "需要建筑科技、森林与 3 星。";
+          hasTech(p, "construction")
+          ? cashRestriction(s, p, 3)
+          : "需要建筑科技与森林。";
       return t.terrain === "plain" &&
         !t.resource &&
-        hasTech(p, "spiritualism") &&
-        p.resources >= 5
-        ? null
-        : "需要唯灵论、空平原与 5 星。";
+        hasTech(p, "spiritualism")
+        ? cashRestriction(s, p, 5)
+        : "需要唯灵论与空平原。";
     }
     case "CITY_REWARD": {
       const c = s.cities.find((c) => c.id === a.cityId);
@@ -1244,12 +1287,13 @@ export function validateAction(s: GameState, a: Action): string | null {
       if (a.type === "BREAK_PEACE")
         return isAtPeace(s, p.id, other.id) ? null : "当前没有和平协议。";
       return hasTech(p, "diplomacy") &&
-        p.resources >= getEmbassyCost(s, p.id) &&
         !p.embassies.includes(other.id) &&
         s.cities.some((c) => c.owner === other.id && c.capitalOf === other.id)
-        ? null
-        : "大使馆需要外交、5 星，且每势力只能一处。";
+        ? cashRestriction(s, p, getEmbassyCost(s, p.id))
+        : "大使馆需要外交，且每势力只能一处。";
     }
+    case "SET_OVERSPEND":
+      return s.options.quickMode === false && typeof a.enabled === "boolean" ? null : "此对局没有维护费预留。";
     case "END_TURN":
       return getPendingUpgradeCity(s) ? "请先选完城市升级奖励。" : null;
     case "RESIGN":
@@ -1362,6 +1406,10 @@ function nextTurn(s: GameState): void {
   p.stats.resourcesEarned += income;
   for (const u of s.units)
     if (u.owner === next) {
+      if (u.navalTraining && u.navalTraining.readyRound <= s.round) {
+        u.type = u.navalTraining.unitType;
+        delete u.navalTraining;
+      }
       u.moved = false;
       u.attacked = false;
       u.escapeUsed = false;
@@ -1390,7 +1438,7 @@ function exhaust(u: Unit): void {
   u.escapeUsed = true;
 }
 function canRecover(u: Unit): boolean {
-  return !u.upkeep && !u.moved && !u.attacked && u.hp < u.maxHp;
+  return !u.upkeep && !u.navalTraining && !u.moved && !u.attacked && u.hp < u.maxHp;
 }
 function recover(s: GameState, u: Unit): void {
   u.hp = Math.min(u.maxHp, u.hp + (tileAt(s, u).owner === u.owner ? 4 : 2));
@@ -1489,7 +1537,7 @@ function explore(s: GameState, p: Player, start: Position): void {
   }
   p.explored = [...seen].sort((a, b) => a - b);
 }
-function board(_s: GameState, u: Unit, from: Tile, to: Tile): void {
+function board(s: GameState, u: Unit, from: Tile, to: Tile): void {
   if (
     !isWater(from) &&
     isWater(to) &&
@@ -1519,6 +1567,10 @@ function board(_s: GameState, u: Unit, from: Tile, to: Tile): void {
     u.kills = carried.kills;
     delete u.carried;
     u.attacked = true;
+  }
+  if (u.upkeep && !getUnitUpkeep(s, u)) {
+    delete u.upkeep;
+    delete u.upkeepTransferRound;
   }
 }
 function moveUnit(s: GameState, unit: Unit, from: Tile, to: Tile): UnitType {
@@ -1750,6 +1802,7 @@ export function applyAction(source: GameState, a: Action): ActionResult {
       );
       t.owner = p.id;
       if (t.upkeep === "suspended") t.upkeepTransferRound = s.round;
+      delete t.navalTraining;
       t.homeCityId = u!.homeCityId;
       t.independent = false;
       t.capturedTurn =
@@ -1833,6 +1886,7 @@ export function applyAction(source: GameState, a: Action): ActionResult {
           paidStars: getTrainingCost(s, p.id, a.unitType),
         };
       } else {
+        delete c.training;
         s.units.push(freshUnit(s, p.id, a.unitType, c, c.id));
       }
       break;
@@ -1843,9 +1897,24 @@ export function applyAction(source: GameState, a: Action): ActionResult {
       delete city.training;
       break;
     }
-    case "UPGRADE_NAVAL":
-      p.resources -= UNITS[a.unitType].cost;
-      u!.type = a.unitType;
+    case "UPGRADE_NAVAL": {
+      const ship = u!;
+      const rounds = getUnitTrainingRounds(s, a.unitType);
+      p.resources -= getNavalUpgradeOrderCost(s, ship, a.unitType);
+      if (rounds > 0) {
+        ship.navalTraining = {
+          unitType: a.unitType, readyRound: s.round + rounds, orderedRound: s.round,
+          paidStars: UNITS[a.unitType].cost,
+        };
+      } else {
+        ship.type = a.unitType;
+        exhaust(ship);
+      }
+      break;
+    }
+    case "CANCEL_NAVAL_UPGRADE":
+      p.resources += getNavalUpgradeRefund(u!);
+      delete u!.navalTraining;
       break;
     case "EXAMINE": {
       const t = tileAt(s, u!);
@@ -2075,6 +2144,9 @@ export function applyAction(source: GameState, a: Action): ActionResult {
       p.resources -= getEmbassyCost(s, p.id);
       p.embassies.push(a.targetPlayer);
       break;
+    case "SET_OVERSPEND":
+      p.allowOverspend = a.enabled;
+      return { state: s, ok: true };
     case "END_TURN":
       finishTurn(s, p);
       break;
@@ -2110,6 +2182,11 @@ function* unitSpecialActions(
     if (unit.upkeep === "reactivation") yield { type: "REACTIVATE", unitId };
     return;
   }
+  if (unit.type === "raft" && (!unit.navalTraining || canEditNavalUpgrade(s, unit))) {
+    if (unit.navalTraining) yield { type: "CANCEL_NAVAL_UPGRADE", unitId };
+    for (const unitType of NAVAL_UPGRADES) yield { type: "UPGRADE_NAVAL", unitId, unitType };
+  }
+  if (unit.navalTraining) return;
   for (const type of [
     "CAPTURE",
     "HEAL",
@@ -2119,9 +2196,6 @@ function* unitSpecialActions(
     "EXAMINE",
   ] as const)
     yield { type, unitId };
-  if (unit.type === "raft")
-    for (const unitType of ["scout", "rammer", "bomber"] as const)
-      yield { type: "UPGRADE_NAVAL", unitId, unitType };
   if (skill(unit, "convert"))
     for (const target of s.units)
       if (target.owner !== unit.owner && distance(target, unit) <= 1)
@@ -2190,8 +2264,9 @@ export function getAvailableActions(
       offer({ type: "CITY_REWARD", cityId: c.id, reward });
   }
   for (const t of TECHNOLOGIES) offer({ type: "RESEARCH", techId: t.id });
+  const spendable = getSpendableStars(s, id);
   const buildable = Object.values(BUILDINGS).filter(
-    (b) => (!b.tech || hasTech(p, b.tech)) && b.cost <= p.resources,
+    (b) => (!b.tech || hasTech(p, b.tech)) && b.cost <= spendable,
   );
   for (const tileId of p.visible) {
     const t = s.tiles[tileId];

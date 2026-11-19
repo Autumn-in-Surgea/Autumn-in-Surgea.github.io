@@ -126,7 +126,6 @@ describe("version-two snapshot validation", () => {
   it.each([
     [false, "archer", "unknown"],
     [false, "archer", null],
-    [false, "warrior", "suspended"],
     [true, "archer", "suspended"],
     [undefined, "archer", "reactivation"],
   ] as const)("rejects invalid upkeep in a v2 snapshot (%s, %s, %s)", (quickMode, type, upkeep) => {
@@ -134,6 +133,20 @@ describe("version-two snapshot validation", () => {
     snapshot.game.options.quickMode = quickMode;
     Object.assign(snapshot.game.units[0], { type, upkeep });
     expect(() => deserializeGame(JSON.stringify(snapshot))).toThrow(/部队维护状态/);
+  });
+  it("preserves unpaid warriors and releases exempt units from former upkeep in old saves", () => {
+    const game = battlefield();
+    game.options.quickMode = false;
+    const warrior = addUnit(game, 0, "warrior", 3, 3);
+    const giant = addUnit(game, 0, "giant", 4, 4);
+    warrior.upkeep = "suspended";
+    giant.upkeep = "suspended";
+    giant.upkeepTransferRound = game.round;
+    const restored = deserializeGame(serializeGame(game));
+    expect(restored.units.find(unit => unit.id === warrior.id)?.upkeep).toBe("suspended");
+    const restoredGiant = restored.units.find(unit => unit.id === giant.id)!;
+    expect(restoredGiant.upkeep).toBeUndefined();
+    expect(restoredGiant.upkeepTransferRound).toBeUndefined();
   });
   it("migrates missing terrain variants to the imperial pack regardless of tile owner", () => {
     const game = newGame({ civilization: "rina" });

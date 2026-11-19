@@ -30,9 +30,12 @@ export function observedActionTile(
     if (seen.has(id) || visible.has(id)) return id;
   }
   if (action.type === "END_TURN" && before.options.quickMode === false) {
-    const existing = new Set(before.units.map((unit) => unit.id));
-    const recruit = after.units.find((unit) => !existing.has(unit.id) && isUnitVisible(after, unit, 0));
-    if (recruit) return tileAt(after, recruit).id;
+    const existing = new Map(before.units.map((unit) => [unit.id, unit]));
+    const arrival = after.units.find((unit) => {
+      const previous = existing.get(unit.id);
+      return (!previous || previous.navalTraining?.unitType === unit.type) && isUnitVisible(after, unit, 0);
+    });
+    if (arrival) return tileAt(after, arrival).id;
   }
   if (action.type === "CONVERT") {
     const target = before.units.find((unit) => unit.id === action.targetId);

@@ -17,6 +17,9 @@ import {
 } from "lucide-react";
 import {
   TECHNOLOGIES,
+  getActiveUpkeep,
+  getIncome,
+  getSpendableStars,
   getTechCost,
   getScore,
   validateAction,
@@ -30,6 +33,41 @@ import { scenarioLabels } from "./Menu";
 import { getNation } from "../nations/registry";
 import { NationEmblem } from "./NationEmblem";
 import { PwaControls } from "../pwa/PwaControls";
+
+export function StarBudgetPanel({ game, busy, onClose, onCommand }: {
+  game: GameState;
+  busy: boolean;
+  onClose: () => void;
+  onCommand: (action: Action) => void;
+}) {
+  const player = game.players[0];
+  const income = getIncome(game, 0);
+  const upkeep = getActiveUpkeep(game, 0);
+  const spendable = getSpendableStars(game, 0);
+  const overspending = !!player.allowOverspend;
+  const toggle: Action = { type: "SET_OVERSPEND", enabled: !overspending };
+  const netIncome = income - upkeep;
+  return (
+    <Modal title="星星" onClose={onClose} menuSurface>
+      <dl className="star-budget">
+        <div className="setting-row"><dt>星星余额</dt><dd>{player.resources}</dd></div>
+        <div className="setting-row"><dt>每回合收入</dt><dd>+{income}</dd></div>
+        <div className="setting-row"><dt>下次维护费</dt><dd>−{upkeep}</dd></div>
+        <div className="setting-row"><dt>净收入</dt><dd>{netIncome < 0 ? `−${-netIncome}` : `+${netIncome}`}</dd></div>
+        <div className="setting-row"><dt><strong>可支配星星</strong></dt><dd><strong>{spendable}</strong></dd></div>
+      </dl>
+      <button type="button" className="setting-row" role="switch" aria-checked={overspending}
+        aria-labelledby="overspend-label" aria-describedby="overspend-help"
+        disabled={busy || game.currentPlayer !== 0 || !!validateAction(game, toggle)}
+        onClick={() => onCommand(toggle)}>
+        <Gem size={20} aria-hidden="true" />
+        <span><strong id="overspend-label">超支</strong></span>
+        <small id="overspend-help">允许动用维护费</small>
+        <i className={`toggle ${overspending ? "on" : ""}`} aria-hidden="true" />
+      </button>
+    </Modal>
+  );
+}
 
 export function TechPanel({
   game,
@@ -67,11 +105,11 @@ export function TechPanel({
     }
   });
   return (
-    <Modal title="科技树" onClose={onClose} wide>
+    <Modal title="科技树" onClose={onClose} wide menuSurface>
       <TechTreeViewport balance={<>
         <span className="resource-pill">
           <ResourceIcon />
-          {player.resources}
+          {getSpendableStars(game, 0)}
         </span>
         <span>
           {player.technologies.length} / {TECHNOLOGIES.length}
@@ -190,7 +228,7 @@ export function DiplomacyPanel({
     );
   };
   return (
-    <Modal title="外交" onClose={onClose}>
+    <Modal title="外交" onClose={onClose} menuSurface>
       <div className="diplomacy-body">
         {others.length ? (
           others.map((p) => {
@@ -413,6 +451,7 @@ export function ResultsPanel({
     <Modal
       title={win ? "胜利" : game.winner === null ? "对局结束" : "失败"}
       onClose={onClose}
+      menuSurface
     >
       <div className="results-content">
         <p>

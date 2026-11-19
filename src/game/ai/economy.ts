@@ -2,24 +2,27 @@ import { BUILDINGS, TECHNOLOGIES, UNITS } from "../data/config";
 import { distance, isWater, neighbors } from "../map/generate";
 import {
   canApplyAction, getActiveUpkeep, getBuildingLevel, getEmbassyCost, getIncome, getPendingUpgradeCity,
-  getTechCost, getTrainingCost, getTrainingRounds, getUnitUpkeep, getUpgradeRewards, getVisibleResource,
+  getSpendableStars, getTechCost, getTrainingCost, getTrainingRounds, getUnitUpkeep, getUpgradeRewards,
+  getVisibleResource,
 } from "../rules/engine";
 import type { Action, BuildingId, City, GameState, Resource, UnitType } from "../types";
 import { getArmyTarget, type AiProfile } from "./profiles";
 import type { Knowledge, ThreatMap } from "./knowledge";
 
 export function getMaintenanceBudget(s: GameState, k: Knowledge) {
-  const treasury = s.players[k.player].resources;
-  if (s.options.quickMode !== false) return { available: treasury, recurringRoom: Infinity };
+  const available = getSpendableStars(k.view, k.player);
+  if (s.options.quickMode !== false) return { available, recurringRoom: Infinity };
   const active = getActiveUpkeep(k.view, k.player);
   const queued = k.ownCities.reduce((total, city) => total +
     (city.training ? getUnitUpkeep(s, { type: city.training.unitType }) : 0), 0);
-  return { available: treasury - active, recurringRoom: getIncome(k.view, k.player) - active - queued };
+  const refits = k.own.reduce((total, unit) => total +
+    (unit.navalTraining ? getUnitUpkeep(s, { type: unit.navalTraining.unitType }) - getUnitUpkeep(s, unit) : 0), 0);
+  return { available, recurringRoom: getIncome(k.view, k.player) - active - queued - refits };
 }
 
 export function chooseReactivation(s: GameState, k: Knowledge, profile: AiProfile): Action | undefined {
   if (s.options.quickMode !== false || !k.own.some((unit) => unit.upkeep === "reactivation")) return;
-  const available = s.players[k.player].resources - getActiveUpkeep(k.view, k.player);
+  const available = getSpendableStars(k.view, k.player);
   let best: Action | undefined, bestScore = -Infinity;
   for (const unit of k.own) {
     if (unit.upkeep !== "reactivation") continue;

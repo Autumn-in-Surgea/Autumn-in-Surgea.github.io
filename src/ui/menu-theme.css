@@ -1,5 +1,4 @@
-/* Only the title screen, setup, About and Settings inherit this scheme. */
-.app[data-menu-theme] :is(.menu-shell, .menu-page[data-menu-surface]) {
+.app[data-menu-theme] {
   --menu-ink: light-dark(#22394f, #efe8d6);
   --menu-muted: light-dark(#5e625d, #b5c3cf);
   --menu-brass: light-dark(#836a3c, #dfc184);
@@ -10,11 +9,13 @@
   --menu-inset: light-dark(#fffaed9c, #bcd2e029);
   --menu-button: linear-gradient(light-dark(#fdf8ec, #334b62), light-dark(#ece2ca, #213549));
   --menu-selected: linear-gradient(150deg, light-dark(#3d5a78, #536e88), light-dark(#22394f, #2c465f));
-  color-scheme: light dark;
+  color-scheme: light;
 }
 
-.app[data-menu-theme="light"] :is(.menu-shell, .menu-page[data-menu-surface]) { color-scheme: light; }
-.app[data-menu-theme="dark"] :is(.menu-shell, .menu-page[data-menu-surface]) { color-scheme: dark; }
+.app[data-menu-theme="dark"] { color-scheme: dark; }
+@media (prefers-color-scheme: dark) {
+  .app[data-menu-theme="system"] { color-scheme: dark; }
+}
 
 .menu-shell .menu-actions > button {
   border-color: light-dark(#d4b784, #b2986a);

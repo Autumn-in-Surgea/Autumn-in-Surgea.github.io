@@ -120,25 +120,29 @@ function getGlaze(color: string, brightness: number) {
 export const UnitModel = memo(function UnitModel({
   type,
   color,
+  playerOwned,
   actionsSpent = false,
   foreignTerritory = false,
   getGeometry,
 }: {
   type: UnitType;
   color: string;
+  playerOwned: boolean;
   actionsSpent?: boolean;
   foreignTerritory?: boolean;
   getGeometry: (type: UnitType) => UnitGeometry;
 }) {
   const geometry = getGeometry(type);
+  const spent = playerOwned && actionsSpent;
+  const onForeignGround = playerOwned && foreignTerritory;
   // Use the stronger of the two darkening treatments on a spent unit in foreign territory.
-  const body = actionsSpent ? spentMaterial : foreignTerritory ? foreignMaterial : foregroundMaterial;
-  const brightness = actionsSpent ? spentBrightness : foreignTerritory ? foreignTerritoryBrightness : 1;
+  const body = spent ? spentMaterial : onForeignGround ? foreignMaterial : foregroundMaterial;
+  const brightness = spent ? spentBrightness : onForeignGround ? foreignTerritoryBrightness : 1;
   return (
     <group dispose={null}>
       <mesh {...foregroundProps} geometry={geometry.body} material={body} castShadow receiveShadow />
       <mesh {...foregroundProps} geometry={geometry.enamel} material={getGlaze(color, brightness)} castShadow receiveShadow />
-      {!actionsSpent && <mesh {...outlineProps} name="unit-outline-glow" geometry={outlineGeometry(geometry)} />}
+      {playerOwned && !spent && <mesh {...outlineProps} name="unit-outline-glow" geometry={outlineGeometry(geometry)} />}
     </group>
   );
 });

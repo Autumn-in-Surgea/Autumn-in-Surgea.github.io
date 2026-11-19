@@ -1,8 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { applyAction, previewCombat } from "../../src/game";
+import { applyAction, getTerrainDefense, previewCombat } from "../../src/game";
 import { addUnit, battlefield } from "./helpers";
 
 describe("standard combat reference positions", () => {
+  it("fortifies swordsmen in their own cities and applies city walls", () => {
+    const game = battlefield();
+    const city = game.cities[0];
+    const swordsman = addUnit(game, 0, "swordsman", city.x, city.y);
+    expect(getTerrainDefense(game, swordsman)).toBe(1.5);
+    city.defenseBonus = 1;
+    expect(getTerrainDefense(game, swordsman)).toBe(4);
+    swordsman.x++;
+    expect(getTerrainDefense(game, swordsman)).toBe(1);
+  });
+
   it("rounds an exact 3.5 hit up for a wounded warrior against a wounded defender", () => {
     const game = battlefield();
     const attacker = addUnit(game, 0, "warrior", 3, 3);

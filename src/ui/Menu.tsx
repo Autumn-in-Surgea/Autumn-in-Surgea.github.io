@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { GAME_EDITION, GAME_ICON_192, GAME_NAME_EN, GAME_NAME_ZH } from "../branding";
 import {
-  DEFAULT_OPTIONS, MAP_SIZE_CHOICES, OPENING_PROFILES, SLOW_TRAINING_ROUNDS,
+  DEFAULT_OPTIONS, MAP_SIZE_CHOICES, OPENING_PROFILES,
   TECHNOLOGIES, UNITS, opponentLimit,
 } from "../game";
 import { NATIONS } from "../nations/registry";
@@ -393,7 +393,7 @@ function NewGame({ onClose }: { onClose: () => void }) {
           >
             <Zap size={20} aria-hidden="true" />
             <span><strong id="quick-mode-label">快速模式</strong></span>
-            <small id="quick-mode-duration">{quickMode ? "即时训练" : `训练 ${SLOW_TRAINING_ROUNDS} 回合 · 扣维护费`}</small>
+            <small id="quick-mode-duration">{quickMode ? "即时训练" : "分级训练 · 扣维护费"}</small>
             <i className={`toggle ${quickMode ? "on" : ""}`} aria-hidden="true" />
           </button>
         </fieldset>

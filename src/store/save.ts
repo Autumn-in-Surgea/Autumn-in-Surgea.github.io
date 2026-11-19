@@ -1,12 +1,13 @@
 import {
   BUILDINGS,
   CIVILIZATIONS,
+  NAVAL_UPGRADES,
   OPENING_PROFILES,
   TECHNOLOGIES,
   UNITS,
 } from "../game/data/config";
 import { getUnitUpkeep } from "../game/rules/engine";
-import type { EventNotice, GameState, UnitType } from "../game/types";
+import type { EventNotice, GameState, NavalUpgradeType, UnitType } from "../game/types";
 import { DEFAULT_TERRAIN_VARIANT, getNation } from "../nations/registry";
 
 export const MAX_SAVE_BYTES = 8_000_000;
@@ -237,6 +238,8 @@ export function deserializeGame(raw: string): GameState {
     check(
       booleans(player, ["isAI", "eliminated"]) &&
         count(player.resources) &&
+        (player.allowOverspend === undefined ||
+          (typeof player.allowOverspend === "boolean" && (options.quickMode === false || !player.allowOverspend))) &&
         count(player.score) &&
         count(player.bonusScore),
       "文明状态",
@@ -490,10 +493,14 @@ export function deserializeGame(raw: string): GameState {
     );
     check(
       unit.upkeep === undefined ||
-        (oneOf(unit.upkeep, ["suspended", "reactivation"]) && options.quickMode === false &&
-          getUnitUpkeep({ options: { quickMode: false } }, { type: unit.type as UnitType }) > 0),
+        (oneOf(unit.upkeep, ["suspended", "reactivation"]) && options.quickMode === false),
       "部队维护状态",
     );
+    // Earlier slow-mode saves could suspend special units that now have no upkeep.
+    if (unit.upkeep && !getUnitUpkeep({ options: { quickMode: false } }, { type: unit.type as UnitType })) {
+      delete unit.upkeep;
+      delete unit.upkeepTransferRound;
+    }
     check(
       unit.upkeepTransferRound === undefined ||
         (unit.upkeep === "suspended" && count(unit.upkeepTransferRound, 1) && unit.upkeepTransferRound <= round),
@@ -529,6 +536,17 @@ export function deserializeGame(raw: string): GameState {
       );
     }
     const tileId = (unit.y as number) * size + (unit.x as number);
+    if (unit.navalTraining !== undefined) {
+      const order = record(unit.navalTraining, "舰船改装");
+      check(
+        options.quickMode === false && unit.type === "raft" &&
+          oneOf(order.unitType, NAVAL_UPGRADES) && count(order.orderedRound, 1) && order.orderedRound <= round &&
+          count(order.readyRound, 2) && order.readyRound > order.orderedRound &&
+          order.readyRound <= order.orderedRound + 3 && count(order.paidStars) &&
+          order.paidStars <= UNITS[order.unitType as NavalUpgradeType].cost,
+        "舰船改装",
+      );
+    }
     check(!occupied.has(tileId), "部队占位");
     const generatedId = /^unit-(\d+)$/.exec(unit.id);
     check(!generatedId || Number(generatedId[1]) < game.nextId, "部队序号");

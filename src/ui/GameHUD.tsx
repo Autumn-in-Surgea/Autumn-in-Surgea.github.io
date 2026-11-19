@@ -1,7 +1,7 @@
 import { useLayoutEffect, useMemo, useRef } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { ArrowUp, BookOpen, Building2, Check, Handshake, Settings2, Trophy, UsersRound, X } from "lucide-react";
-import { getActiveUpkeep, getIncome, getScore } from "../game";
+import { getActiveUpkeep, getIncome, getScore, getSpendableStars } from "../game";
 import type { Action, GameState } from "../game/types";
 import { useGameStore } from "../store/gameStore";
 import { ResourceIcon } from "./Common";
@@ -16,12 +16,13 @@ interface Props {
   onTech: () => void;
   onDiplomacy: () => void;
   onSettings: () => void;
+  onStars: () => void;
   target: string | null;
 }
 
 export function GameHUD({
   selectionRequest, upgradePending, game, onCommand, onTech, onDiplomacy,
-  onSettings, target,
+  onSettings, onStars, target,
 }: Props) {
   const {
     selectedTile, selectedUnit, busy, playbackStep, eventNotice, aiError,
@@ -59,9 +60,9 @@ export function GameHUD({
   }, [currentSelection]);
   const selection = currentSelection ?? lastSelection.current;
   const active = currentSelection !== null;
-  const { income, upkeep, cities, units, score } = useMemo(() => ({
-    income: getIncome(game, 0),
-    upkeep: getActiveUpkeep(game, 0),
+  const { netIncome, spendable, cities, units, score } = useMemo(() => ({
+    netIncome: getIncome(game, 0) - getActiveUpkeep(game, 0),
+    spendable: getSpendableStars(game, 0),
     cities: game.cities.filter(city => city.owner === 0).length,
     units: game.units.filter(unit => unit.owner === 0).length,
     score: getScore(game, 0),
@@ -71,6 +72,13 @@ export function GameHUD({
   const hint = showHints && !active && !notice && !aiError;
   const feedback = aiError || notice || (hint ? "点击单位，再点击高亮地块移动。" : "");
   const turnHint = busy ? "等待对手" : playbackStep ? "正在播放行动" : upgradePending ? "选择升级奖励" : undefined;
+  const netLabel = netIncome < 0 ? `−${-netIncome}` : `+${netIncome}`;
+  const starsLabel = `可支配 ${spendable} 星，净收入 ${netLabel}`;
+  const stars = <>
+    <ResourceIcon size={18} />
+    <strong data-wide-count={spendable >= 10000}>{spendable}</strong>
+    <span className="hud-yield" data-negative={netIncome < 0}>{netLabel}</span>
+  </>;
 
   return (
     <>
@@ -83,14 +91,11 @@ export function GameHUD({
               {game.options.mode === "score" && <span>/{game.options.maxRounds}</span>}
             </div>
           </div>
-          <div className="hud-stat hud-stars" aria-label={`${game.players[0].resources} 星星，每回合收入 ${income}${upkeep ? `，回合结束维护费 ${upkeep}` : ""}`}>
-            <ResourceIcon size={18} />
-            <strong data-wide-count={game.players[0].resources >= 10000}>{game.players[0].resources}</strong>
-            <span className="hud-yield">
-              <span>+{income}</span>
-              {upkeep > 0 && <span className="hud-upkeep" title={`回合结束维护费 ${upkeep} 星`}>−{upkeep}</span>}
-            </span>
-          </div>
+          {game.options.quickMode === false ? (
+            <button className="hud-stat hud-stars" type="button" aria-haspopup="dialog"
+              aria-label={`星星明细，${starsLabel}`} title="星星明细" data-overspend={!!game.players[0].allowOverspend}
+              onClick={onStars}>{stars}</button>
+          ) : <div className="hud-stat hud-stars" aria-label={starsLabel}>{stars}</div>}
           <div className="hud-stat" aria-label={`${cities} 座城市`}>
             <Building2 size={17} aria-hidden="true" /><strong data-wide-count={cities >= 100}>{cities}</strong>
           </div>

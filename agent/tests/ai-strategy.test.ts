@@ -164,6 +164,25 @@ describe('naval logistics and economic prerequisites', () => {
     expect(upgrade.actions.some(action => action.type === 'UPGRADE_NAVAL' && action.unitType === 'scout')).toBe(true);
     replay(state, upgrade);
   });
+  it('funds a slow refit and budgets its future upkeep before scheduling a second one', () => {
+    const state = tactical();
+    state.options.quickMode = false;
+    state.players[0].resources = 10;
+    state.players[0].technologies = ['fishing', 'sailing'];
+    for (const [x, y] of [[2,1], [2,2]]) {
+      const tile = state.tiles[y * 12 + x];
+      tile.terrain = 'shallow'; tile.building = 'port';
+      const raft = addUnit(state, 0, 'raft', x, y);
+      raft.carried = { type: 'warrior', maxHp: 10, veteran: false, kills: 0 };
+    }
+    const result = runAiTurnDetailed(state);
+    const orders = result.actions.filter(action => action.type === 'UPGRADE_NAVAL');
+    expect(orders).toHaveLength(1);
+    expect(result.state.units.find(unit => unit.id === orders[0].unitId)).toMatchObject({
+      type: 'raft', navalTraining: { unitType: 'scout', readyRound: 3 },
+    });
+    replay(state, result);
+  });
   it('deliberately embarks at a port to approach a known city beyond an ocean barrier', () => {
     const state = tactical(); state.players[0].technologies = ['fishing', 'sailing'];
     for (let y = 0; y < 12; y++) for (const x of [5,6,7]) state.tiles[y * 12 + x].terrain = x === 6 ? 'deep' : 'shallow';
@@ -254,7 +273,7 @@ describe('slow-mode maintenance decisions', () => {
   it('spends excess stars on growth without sacrificing the current upkeep bill', () => {
     const state = tactical();
     state.options.quickMode = false;
-    state.players[0].resources = 4;
+    state.players[0].resources = 5;
     state.players[0].technologies.push('organization');
     const active = addUnit(state, 0, 'archer', 4, 4);
     addUnit(state, 0, 'warrior', 6, 4);
@@ -267,14 +286,20 @@ describe('slow-mode maintenance decisions', () => {
     replay(state, result);
   });
 
-  it('queues a free-upkeep warrior if recurring income is already committed', () => {
+  it('recruits a warrior immediately only when recurring income has room for its upkeep', () => {
     const state = tactical();
     state.options.quickMode = false;
     state.players[0].resources = 10;
+    state.players[0].technologies = ['climbing', 'archery'];
     addUnit(state, 0, 'archer', 4, 4);
+    const committed = runAiTurnDetailed(state);
+    expect(committed.actions.some(action => action.type === 'TRAIN')).toBe(false);
+    replay(state, committed);
+
+    state.cities[0].incomeBonus = 1;
     const result = runAiTurnDetailed(state);
     expect(result.actions).toContainEqual({ type: 'TRAIN', cityId: state.cities[0].id, unitType: 'warrior' });
-    expect(result.state.cities[0].training?.unitType).toBe('warrior');
+    expect(result.state.units).toContainEqual(expect.objectContaining({ owner: 0, type: 'warrior', moved: true, attacked: true }));
     replay(state, result);
   });
 

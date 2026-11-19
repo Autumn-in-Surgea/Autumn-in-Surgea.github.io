@@ -2,6 +2,7 @@ import type {
   BuildingDefinition,
   BuildingId,
   GameOptions,
+  NavalUpgradeType,
   TechDefinition,
   UnitDefinition,
   UnitSkill,
@@ -41,7 +42,7 @@ export const DEFAULT_OPTIONS: GameOptions = {
   startingProfiles: [],
   mapSettings: DEFAULT_MAP_SETTINGS,
 };
-export const SLOW_TRAINING_ROUNDS = 2;
+export const NAVAL_UPGRADES: readonly NavalUpgradeType[] = ["scout", "rammer", "bomber"];
 export const PLAYER_COLORS = [
   "#4f9185",
   "#b55d59",
@@ -147,8 +148,8 @@ export const UNITS: Record<UnitType, UnitDefinition> = {
     1,
     1,
     "smithery",
-    ["dash"],
-    "均衡的重型步兵，没有驻防技能。",
+    ["dash", "fortify"],
+    "可移动后攻击，驻守己方城市时获得防御加成。",
   ),
   catapult: unit(
     "catapult",

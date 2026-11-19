@@ -2,45 +2,33 @@
 
 这是《西陆秋色》0.1 的本地开发、安装和 GitHub Pages 发布说明。
 
-## 四个入口的区别
+## 本地开发与生产验收
 
 | 入口 | 加载什么 | 什么时候变成新版 | 断网使用 |
 | --- | --- | --- | --- |
-| 开发网页 `http://127.0.0.1:5173/` | 当前源码，支持热更新 | 保存代码后由 Vite 更新 | 需本机开发服务器运行；没有 PWA 离线缓存 |
-| 生产预览 `http://127.0.0.1:5174/` | 最近一次构建的 `dist/` | 重新构建后，通过更新提示载入 | 完成缓存后可离线启动 |
-| 从本地地址安装的 PWA | 安装来源地址的生产版本和缓存 | 同一来源地址重新提供新版，应用检测并提示更新 | 缓存完成且未被清理时可用，无需保持本地服务器运行 |
+| 开发网页 `http://127.0.0.1:5173/` | 当前源码，支持热更新 | 保存代码后由 Vite 更新 | 需要本机开发服务器运行 |
+| GitHub Pages 网页 | 通过 CI 发布的静态构建 | 发布完成后，联网取得新版 | 完成缓存后可离线启动 |
 | 从 GitHub Pages 安装的 PWA | Pages 发布的生产版本和缓存 | 发布新版本并联网获取更新 | 缓存完成且未被清理时可用 |
 
-修改源码不会自动改掉已经安装的生产版本。要更新本地安装版本，需要重新构建，并在**原来的协议、主机名、端口和路径**提供新版本，再打开应用，等待“更新并重启”。当前更新流程先保存对局，AI 忙时不允许重启；普通联网检查不会强制刷新正在玩的页面。[Vite PWA 更新说明](https://vite-pwa-org.netlify.app/guide/prompt-for-update)
-
-本地对应命令：
+本地使用以下命令开发和检查构建产物。
 
 ```bash
-# 开发界面
+npm ci
 npm run dev
 
-# 构建、校验并提供生产版本，按顺序执行
+# 发布前检查
+npm test
 npm run build
 npm run verify:pwa
-npm run preview
 ```
 
-这里列出的 `5173`、`5174` 已固定在 npm 脚本中。`--strictPort` 防止端口占用时静默换地址。`vite preview` 用于本机验收，公网发布由静态托管服务提供。[Vite 静态部署说明](https://vite.dev/guide/static-deploy)
+本地试玩固定用 `5173`。`--strictPort` 在端口占用时直接报错，保证开发来源和存档地址稳定。正式安装、断网读档、AI 和版本更新都在 Pages 站点验收。发布新版后，已安装应用联网时会检查更新。AI 空闲时点击“更新并重启”，应用先保存对局，再载入新版。[Vite 静态部署说明](https://vite.dev/guide/static-deploy) · [Vite PWA 更新说明](https://vite-pwa-org.netlify.app/guide/prompt-for-update)
 
 ## 存档与已安装应用
 
-浏览器按协议、主机名、端口区分来源。下面这些来源相互独立：
+浏览器按协议、主机名、端口区分来源。开发地址 `http://127.0.0.1:5173/`、旧本地安装版和 `https://autumn-in-surgea.github.io/` 各有独立的存档。`localhost` 与 `127.0.0.1` 也是不同来源。不同地址、浏览器、浏览器资料或设备之间用导出的 JSON 搬运对局。[浏览器同源与存储规则](https://developer.mozilla.org/en-US/docs/Web/Security/Defenses/Same-origin_policy)
 
-- `http://127.0.0.1:5173`
-- `http://127.0.0.1:5174`
-- `http://localhost:5174`
-- `https://autumn-in-surgea.github.io`
-
-因此开发网页、本地生产版和 Pages 版的存档不会自动迁移；`localhost` 与 `127.0.0.1` 即使访问同一台电脑也不共用存档。不同浏览器、浏览器资料或设备之间也没有云同步。[浏览器同源与存储规则](https://developer.mozilla.org/en-US/docs/Web/Security/Defenses/Same-origin_policy)
-
-迁移方法：在旧入口的“设置”中导出存档 → 打开新入口 → “设置”中导入存档。若新入口已有要保留的对局，先导出其备份，再主动导入。不要为迁移清空旧应用的数据。
-
-本地安装的 PWA 不会自动改成 GitHub Pages 应用。Pages 发布后应从 Pages 地址另行安装，再导入需要继续的存档。手机上的 `localhost` / `127.0.0.1` 指手机自己，不能用它访问电脑上的预览服务。
+在旧入口的“设置”中导出存档，再打开新入口并导入。如果新入口已有要保留的对局，先导出那份存档。此前从本地安装的用户可以从 Pages 地址安装新版，再导入旧对局。
 
 ## GitHub Pages 发布准备
 
@@ -71,6 +59,6 @@ Pages 负责通过 HTTPS 分发静态文件。游戏 AI 继续在玩家设备的
 
 更新应保持站点地址和应用标识稳定。后续增加路径路由、改域名或改仓库名时，需要重新检查资源路径、应用身份和存档迁移。不要通过改 `id`、清理所有站点数据或强制刷新来掩盖缓存问题。
 
-PWA 文档建议页面、manifest 和 Service Worker 避免长期不可变缓存；Pages 的实际响应头由托管平台决定，上线后须检查更新行为，不能只根据本地预览判断更新已生效。[Vite PWA 部署要求](https://vite-pwa-org.netlify.app/deployment/)
+PWA 文档建议页面、manifest 和 Service Worker 使用可重新验证的缓存。Pages 的实际响应头由托管平台决定，部署完成后以正式站点的更新行为为准。[Vite PWA 部署要求](https://vite-pwa-org.netlify.app/deployment/)
 
 更详细的离线流程见 [PWA.md](PWA.md)，已执行和待执行的测试分别记录在 [VERIFICATION.md](VERIFICATION.md)。

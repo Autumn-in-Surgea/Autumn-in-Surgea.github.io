@@ -698,6 +698,7 @@ function AnimatedUnit({
           getGeometry={MODEL_SETS[modelSet].unit}
           type={unit.type}
           color={color}
+          playerOwned={unit.owner === 0}
           actionsSpent={actionsSpent}
           foreignTerritory={isForeignTerritory(tile.owner)}
         />

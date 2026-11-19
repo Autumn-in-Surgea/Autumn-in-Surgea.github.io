@@ -35,7 +35,7 @@ describe("unit upkeep", () => {
   it("uses the unit's unlock tier, charging nothing in quick mode and old saves", () => {
     const game = upkeepBattlefield();
     const fees: Record<UnitType, number> = {
-      warrior: 0,
+      warrior: 1,
       rider: 1,
       defender: 2,
       archer: 2,
@@ -44,15 +44,15 @@ describe("unit upkeep", () => {
       knight: 3,
       mindBender: 3,
       cloak: 3,
-      dagger: 3,
-      giant: 3,
-      raft: 1,
+      dagger: 0,
+      giant: 0,
+      raft: 0,
       scout: 2,
       rammer: 2,
       bomber: 3,
-      juggernaut: 3,
-      dinghy: 3,
-      pirate: 3,
+      juggernaut: 0,
+      dinghy: 0,
+      pirate: 0,
     };
     for (const type of Object.keys(fees) as UnitType[]) {
       expect(getUnitUpkeep(game, { type }), type).toBe(fees[type]);
@@ -70,7 +70,7 @@ describe("unit upkeep", () => {
   it("pays affordable fees in numeric recruitment order regardless of roster order", () => {
     const game = upkeepBattlefield();
     game.nextId = 8;
-    const giant = addUnit(game, 0, "giant", 3, 3);
+    const knight = addUnit(game, 0, "knight", 3, 3);
     const archer = addUnit(game, 0, "archer", 4, 4);
     const rider = addUnit(game, 0, "rider", 5, 5);
     const warrior = addUnit(game, 0, "warrior", 6, 6);
@@ -78,14 +78,14 @@ describe("unit upkeep", () => {
     game.units.reverse();
     game.players[0].resources = 2;
     game.players[1].resources = 1;
-    expect(getActiveUpkeep(game, 0)).toBe(6);
+    expect(getActiveUpkeep(game, 0)).toBe(7);
 
     const next = apply(game, END);
     expect(next.players[0].resources).toBe(0);
     expect(next.players[1].resources).toBe(1);
     expect(next.units.filter((unit) => unit.upkeep === "suspended").map((unit) => unit.id))
-      .toEqual([rider.id, giant.id]);
-    for (const unit of [archer, warrior, opponent]) {
+      .toEqual([warrior.id, rider.id, knight.id]);
+    for (const unit of [archer, opponent]) {
       expect(next.units.find((candidate) => candidate.id === unit.id)?.upkeep).toBeUndefined();
     }
     expect(getActiveUpkeep(next, 0)).toBe(2);
@@ -213,7 +213,7 @@ describe("unit upkeep", () => {
     const converted = apply(afterAttack, { type: "CONVERT", unitId: converter.id, targetId: enemy.id });
     expect(converted.units.find((unit) => unit.id === enemy.id)).toMatchObject({ owner: 0, upkeep: "suspended" });
     expect(applyAction(converted, { type: "REACTIVATE", unitId: enemy.id }).ok).toBe(false);
-    expect(getActiveUpkeep(converted, 0)).toBe(3);
+    expect(getActiveUpkeep(converted, 0)).toBe(4);
   });
 
   it("holds a converted troop inactive until it finishes a full turn with its new owner", () => {

@@ -19,7 +19,7 @@ import { addUnit, battlefield, newGame } from "./helpers";
 // Independent reference values: https://wiki.polytopia.com/wiki/technology, /population, /market.
 describe("standard economy and city reward levels", () => {
   it("starts with five stars, capital income two, and pays subsequent turn income once", () => {
-    const game = newGame();
+    const game = newGame({ quickMode: true });
     expect(game.players[0].resources).toBe(5);
     expect(getIncome(game, 0)).toBe(2);
     const opponent = applyAction(game, { type: "END_TURN" }).state;

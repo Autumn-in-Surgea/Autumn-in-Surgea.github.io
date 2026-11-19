@@ -117,6 +117,7 @@ describe("maintenance reserve", () => {
     bad.game.players[0].allowOverspend = "true";
     expect(() => deserializeGame(JSON.stringify(bad))).toThrow();
     const quick = battlefield();
+    quick.options.quickMode = true;
     addUnit(quick, 0, "warrior", 3, 3);
     expect(getSpendableStars(quick, 0)).toBe(quick.players[0].resources);
     expect(validateAction(quick, { type: "SET_OVERSPEND", enabled: true })).not.toBeNull();

@@ -39,10 +39,15 @@ function train(game: GameState, unitType: UnitType = "archer"): Action {
 }
 
 describe("training speed rules", () => {
-  it("trains immediately by default in every scenario and interprets old saves the same way", () => {
-    for (const scenario of ["fair", "story", "free"] as const)
-      expect(newGame({ scenario }).options.quickMode).toBe(true);
-    expect(DEFAULT_OPTIONS.quickMode).toBe(true);
+  it("defaults to tiered training in every scenario and honors explicit quick mode", () => {
+    expect(DEFAULT_OPTIONS.quickMode).toBe(false);
+    for (const scenario of ["fair", "story", "free"] as const) {
+      expect(newGame({ scenario }).options.quickMode).toBe(false);
+      expect(newGame({ scenario, quickMode: true }).options.quickMode).toBe(true);
+    }
+  });
+
+  it("still trains immediately in saves created before the quick mode setting", () => {
     const game = battlefield();
     delete game.options.quickMode;
     const loaded = deserializeGame(serializeGame(game));

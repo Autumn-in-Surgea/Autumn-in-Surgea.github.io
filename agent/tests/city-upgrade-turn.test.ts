@@ -73,7 +73,7 @@ describe("mandatory city upgrade choices", () => {
     game.options.difficulty = difficulty;
     const player = game.players[1], capital = game.cities[1];
     player.technologies = ["organization"];
-    player.resources = 2;
+    player.resources = 3; // Covers the harvest and the garrison's maintenance reserve.
     player.unlockedMonuments = [];
     capital.population = 1;
     const fruit = game.tiles[capital.territory.find((id) => !game.tiles[id].cityId)!];

@@ -37,7 +37,7 @@ export const DEFAULT_OPTIONS: GameOptions = {
   seed: "2026",
   mode: "conquest",
   maxRounds: 30,
-  quickMode: true,
+  quickMode: false,
   factionNames: [],
   startingProfiles: [],
   mapSettings: DEFAULT_MAP_SETTINGS,

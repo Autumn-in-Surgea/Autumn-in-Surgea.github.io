@@ -192,6 +192,7 @@ describe("real development, transport and support actions", () => {
   });
   it("boards a port, upgrades the raft and disembarks preserving the original unit", () => {
     let game = battlefield();
+    game.options.quickMode = true;
     const tileId = at(2, 1);
     game.tiles[tileId].terrain = "shallow";
     game = act(game, { type: "BUILD", tileId, building: "port" });
